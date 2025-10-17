@@ -240,5 +240,120 @@ def get_ai_rating(ticker):
     return jsonify(rating)
 
 
+@app.route('/api/chart/<ticker>')
+def get_chart_data(ticker):
+    """Get historical price data for chart"""
+    period = request.args.get('period', '1mo')
+    from ai_analytics import StockAnalytics
+    analytics = StockAnalytics()
+    price_data = analytics.get_stock_price_data(ticker, period)
+
+    if not price_data or not price_data.get('close'):
+        return jsonify({'error': 'No data available'}), 404
+
+    # Filter out None values and prepare data
+    timestamps = price_data.get('timestamps', [])
+    closes = price_data.get('close', [])
+    opens = price_data.get('open', [])
+    highs = price_data.get('high', [])
+    lows = price_data.get('low', [])
+    volumes = price_data.get('volume', [])
+
+    # Create clean data points
+    data_points = []
+    for i in range(len(timestamps)):
+        if closes[i] is not None:
+            data_points.append({
+                'timestamp': timestamps[i],
+                'date': datetime.fromtimestamp(timestamps[i]).strftime('%Y-%m-%d'),
+                'open': opens[i],
+                'high': highs[i],
+                'low': lows[i],
+                'close': closes[i],
+                'volume': volumes[i]
+            })
+
+    if not data_points:
+        return jsonify({'error': 'No valid data points'}), 404
+
+    # Calculate price change
+    first_price = data_points[0]['close']
+    last_price = data_points[-1]['close']
+    price_change = last_price - first_price
+    price_change_percent = (price_change / first_price) * 100 if first_price else 0
+
+    # Determine currency
+    is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
+    currency_symbol = '₹' if is_indian else '$'
+
+    return jsonify({
+        'ticker': ticker,
+        'period': period,
+        'data': data_points,
+        'currency_symbol': currency_symbol,
+        'stats': {
+            'current_price': last_price,
+            'open_price': first_price,
+            'high_price': max([p['high'] for p in data_points if p['high']]),
+            'low_price': min([p['low'] for p in data_points if p['low']]),
+            'price_change': price_change,
+            'price_change_percent': price_change_percent,
+            'total_volume': sum([p['volume'] for p in data_points if p['volume']])
+        }
+    })
+
+
+# AI Provider Settings Endpoints
+@app.route('/api/settings/ai-providers', methods=['GET'])
+def get_ai_providers_endpoint():
+    """Get all configured AI providers"""
+    from settings_manager import get_all_ai_providers
+    providers = get_all_ai_providers()
+    return jsonify(providers)
+
+
+@app.route('/api/settings/ai-provider', methods=['POST'])
+def add_ai_provider_endpoint():
+    """Add or update AI provider"""
+    data = request.json
+    from settings_manager import add_ai_provider
+    success = add_ai_provider(
+        data['provider'],
+        data['api_key'],
+        data.get('model'),
+        set_active=True
+    )
+    return jsonify({'success': success})
+
+
+@app.route('/api/settings/ai-provider/<int:provider_id>/activate', methods=['POST'])
+def activate_ai_provider_endpoint(provider_id):
+    """Activate an AI provider"""
+    from settings_manager import set_active_provider
+    success = set_active_provider(provider_id)
+    return jsonify({'success': success})
+
+
+@app.route('/api/settings/ai-provider/<int:provider_id>', methods=['DELETE'])
+def delete_ai_provider_endpoint(provider_id):
+    """Delete an AI provider"""
+    from settings_manager import delete_ai_provider
+    success = delete_ai_provider(provider_id)
+    return jsonify({'success': success})
+
+
+@app.route('/api/settings/test-ai', methods=['POST'])
+def test_ai_provider_endpoint():
+    """Test AI provider connection"""
+    data = request.json
+    from ai_providers import test_provider_connection
+    result = test_provider_connection(
+        data['provider'],
+        data['api_key'],
+        data.get('model')
+    )
+    return jsonify(result)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

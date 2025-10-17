@@ -360,6 +360,9 @@ class StockAnalytics:
         # Currency already determined earlier
         currency = 'INR' if is_indian else 'USD'
 
+        # Generate AI summary
+        summary_text, ai_powered = self._generate_summary(rating, final_score, technical_signals, sentiment_signals)
+
         return {
             'ticker': ticker,
             'rating': rating,
@@ -377,13 +380,46 @@ class StockAnalytics:
             'sentiment': sentiment,
             'technical_signals': technical_signals,
             'sentiment_signals': sentiment_signals,
-            'analysis_summary': self._generate_summary(rating, final_score, technical_signals, sentiment_signals),
+            'analysis_summary': summary_text,
+            'ai_powered': ai_powered,
             'timestamp': datetime.now().isoformat()
         }
 
     def _generate_summary(self, rating: str, score: float, technical_signals: List[str],
-                         sentiment_signals: List[str]) -> str:
-        """Generate AI summary of the analysis"""
+                         sentiment_signals: List[str]) -> tuple:
+        """Generate AI summary of the analysis. Returns (summary_text, is_ai_powered)"""
+        # Try to use real AI if configured
+        try:
+            from settings_manager import get_active_ai_provider
+            from ai_providers import AIProviderFactory
+
+            provider_config = get_active_ai_provider()
+
+            if provider_config:
+                logger.info(f"Using AI provider: {provider_config['provider_name']} - {provider_config['model']}")
+
+                # Create AI provider
+                provider = AIProviderFactory.create_provider(
+                    provider_config['provider_name'],
+                    provider_config['api_key'],
+                    provider_config['model']
+                )
+
+                if provider:
+                    # Create detailed prompt for AI
+                    prompt = self._create_ai_prompt(rating, score, technical_signals, sentiment_signals)
+
+                    # Get AI analysis (with timeout protection)
+                    ai_summary = provider.generate_analysis(prompt, max_tokens=300)
+
+                    # Return AI summary if successful
+                    if ai_summary and not ai_summary.startswith('Error:'):
+                        logger.info("AI analysis generated successfully")
+                        return (ai_summary, True)
+        except Exception as e:
+            logger.error(f"Error generating AI summary: {e}")
+
+        # Fallback to basic summary if AI is not available
         summaries = {
             'STRONG_BUY': f"Strong bullish signals detected (Score: {score:.1f}/100). Technical indicators and news sentiment are highly positive. Consider buying.",
             'BUY': f"Bullish indicators present (Score: {score:.1f}/100). Both technical analysis and sentiment lean positive. Good buying opportunity.",
@@ -392,7 +428,29 @@ class StockAnalytics:
             'STRONG_SELL': f"Strong bearish signals (Score: {score:.1f}/100). Multiple negative indicators present. Consider exiting position."
         }
 
-        return summaries.get(rating, f"Score: {score:.1f}/100")
+        return (summaries.get(rating, f"Score: {score:.1f}/100"), False)
+
+    def _create_ai_prompt(self, rating: str, score: float, technical_signals: List[str],
+                         sentiment_signals: List[str]) -> str:
+        """Create a detailed prompt for AI analysis"""
+        prompt = f"""Analyze this stock based on the following data:
+
+RATING: {rating} (Score: {score:.1f}/100)
+
+TECHNICAL SIGNALS:
+{chr(10).join('- ' + signal for signal in technical_signals[:5])}
+
+SENTIMENT SIGNALS:
+{chr(10).join('- ' + signal for signal in sentiment_signals[:5])}
+
+Provide a concise 2-3 sentence analysis focusing on:
+1. Key insights from the data
+2. Main risk factors or opportunities
+3. Clear recommendation
+
+Be direct and actionable. Avoid disclaimers."""
+
+        return prompt
 
     def get_all_ratings(self) -> List[Dict]:
         """Get AI ratings for all active stocks"""

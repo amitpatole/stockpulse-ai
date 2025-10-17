@@ -62,3 +62,8 @@ Thumbs.db
 
 # Old/backup documentation
 README_ENHANCED.md
+
+# Test scripts (for development only, not for production)
+test_*.py
+list_*.py
+check_*.py

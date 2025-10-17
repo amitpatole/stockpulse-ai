@@ -1,5 +1,7 @@
 # 📊 StockPulse AI
 
+**Version 2.0.0** - Real AI Integration Update
+
 **24/7 Stock Market Intelligence with AI-Powered Analysis**
 
 StockPulse AI is a comprehensive stock market monitoring system that tracks news, social media, and market sentiment from 10+ sources in real-time. It features AI-powered technical analysis combining RSI, moving averages, and sentiment scoring to provide actionable BUY/SELL/HOLD ratings.
@@ -23,17 +25,21 @@ StockPulse AI is a comprehensive stock market monitoring system that tracks news
 - **Instant alerts** for positive news with sentiment scoring
 
 ### 🤖 AI-Powered Analysis
+- **Real AI Integration**: Connect OpenAI (ChatGPT), Anthropic (Claude), Google (Gemini), or xAI (Grok)
 - **Technical indicators**: RSI, EMA, MACD, Moving Averages (MA-20, MA-50, MA-200)
 - **Sentiment analysis**: 45+ positive and 50+ negative keywords with engagement weighting
 - **AI ratings**: STRONG_BUY, BUY, HOLD, SELL, STRONG_SELL with confidence scores
 - **Combined scoring**: 60% sentiment + 40% technical analysis
+- **Natural language insights**: When AI is configured, get human-readable analysis and recommendations
 
 ### 📈 Interactive Dashboard
-- **Tabbed interface** for organized navigation
+- **Tabbed interface** for organized navigation (Overview, AI Analysis, Manage Stocks, Settings)
 - **Stock cards** with sentiment indicators and click-to-filter
+- **Interactive price charts** - view historical stock prices with multiple time periods (1D to 5Y)
 - **Dynamic stock management** - add/remove stocks with ticker search
 - **Detailed AI analysis** with technical signals and sentiment breakdown
 - **News & alerts feed** with sentiment labels and source tracking
+- **AI Provider settings** - easily configure and test AI integrations
 
 ### 🎯 Smart Features
 - **Dynamic stock lists** - no code changes needed to add/remove stocks
@@ -204,6 +210,56 @@ POSITIVE_KEYWORDS = ['your', 'keywords', ...]
 NEGATIVE_KEYWORDS = ['your', 'keywords', ...]
 ```
 
+### AI Provider Configuration
+
+⚠️ **SECURITY WARNING - READ CAREFULLY** ⚠️
+
+StockPulse AI supports real AI integration with OpenAI (ChatGPT), Anthropic (Claude), Google (Gemini), and xAI (Grok) for enhanced stock analysis.
+
+**IMPORTANT SECURITY NOTICE:**
+- **API keys are stored in PLAIN TEXT in the local SQLite database**
+- This application is designed for **SELF-HOSTED, PERSONAL USE ONLY**
+- **DO NOT expose this dashboard to the public internet**
+- **DO NOT share your database file** (`stock_news.db`)
+- **YOU are responsible for the security of your API keys**
+- Use only on localhost or secure private networks
+- Consider using API key restrictions/limits on the provider's side
+
+**Setting up AI Providers:**
+
+1. **Go to Settings Tab** in the dashboard (⚙️ Settings)
+
+2. **Get your API key** from one of these providers:
+   - **OpenAI**: https://platform.openai.com/api-keys
+   - **Anthropic**: https://console.anthropic.com/settings/keys
+   - **Google**: https://makersuite.google.com/app/apikey
+   - **xAI (Grok)**: https://console.x.ai
+
+3. **Configure in Dashboard:**
+   - Select your AI provider
+   - Choose the model (e.g., gpt-4, claude-3-5-sonnet, gemini-pro)
+   - Enter your API key
+   - Click "Test Connection" to verify
+   - Click "Save & Activate" to enable
+
+4. **AI Features** (when configured):
+   - Enhanced sentiment analysis with real AI
+   - Natural language stock analysis and recommendations
+   - Intelligent news summarization
+   - Context-aware market insights
+
+**Supported Models:**
+- **OpenAI**: GPT-4o (recommended), GPT-4o Mini, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
+- **Anthropic**: Claude 3.5 Sonnet (recommended), Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Sonnet, Claude 3 Haiku
+- **Google**: Gemini 2.5 Flash (recommended), Gemini 2.5 Pro, Gemini 2.0 Flash, Gemini Flash Latest, Gemini Pro Latest
+- **xAI**: Grok Beta, Grok-2-1212
+
+**Cost Considerations:**
+- AI providers charge per API call
+- Monitor your usage on the provider's dashboard
+- Set up billing alerts to avoid unexpected charges
+- The system works without AI configuration (uses technical analysis only)
+
 ### Reddit Configuration (Optional)
 To enable full Reddit access, get API credentials from https://reddit.com/prefs/apps and update `stock_monitor_enhanced.py`:
 ```python
@@ -292,6 +348,10 @@ StockPulse AI provides REST APIs for integration:
 | `/api/stats` | GET | Statistics for all stocks |
 | `/api/ai/ratings` | GET | AI ratings for all stocks |
 | `/api/ai/rating/<ticker>` | GET | AI rating for specific stock |
+| `/api/chart/<ticker>` | GET | Historical price data for charts |
+| `/api/settings/ai-providers` | GET | List configured AI providers |
+| `/api/settings/ai-provider` | POST | Add/update AI provider |
+| `/api/settings/test-ai` | POST | Test AI provider connection |
 
 **Example API Usage:**
 ```bash

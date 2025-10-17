@@ -822,9 +822,209 @@
                 padding: 12px 15px;
             }
         }
+
+        /* Chart Modal Styles */
+        .chart-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            animation: fadeIn 0.3s ease;
+        }
+
+        .chart-modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chart-modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .chart-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .chart-modal-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-close-btn {
+            background: none;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            color: #6b7280;
+            transition: color 0.2s;
+            line-height: 1;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chart-close-btn:hover {
+            color: #ef4444;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .chart-period-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .chart-period-btn:hover {
+            background: #f0f4ff;
+        }
+
+        .chart-period-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .chart-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .chart-info-box {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .chart-info-label {
+            font-size: 0.85em;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+
+        .chart-info-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .chart-info-value.positive {
+            color: #10b981;
+        }
+
+        .chart-info-value.negative {
+            color: #ef4444;
+        }
+
+        .chart-loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .chart-icon-btn {
+            margin-left: 10px;
+            padding: 5px 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: background 0.2s;
+        }
+
+        .chart-icon-btn:hover {
+            background: #5a67d8;
+        }
     </style>
+    <!-- Chart.js library for stock charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
+    <!-- Chart Modal -->
+    <div id="chartModal" class="chart-modal" onclick="closeChartModal(event)">
+        <div class="chart-modal-content" onclick="event.stopPropagation()">
+            <div class="chart-modal-header">
+                <div class="chart-modal-title">
+                    <span>📈</span>
+                    <span id="chartModalTitle">Stock Chart</span>
+                </div>
+                <button class="chart-close-btn" onclick="closeChartModal()">&times;</button>
+            </div>
+
+            <div class="chart-controls">
+                <button class="chart-period-btn" onclick="loadStockChart(currentChartTicker, '1d')">1D</button>
+                <button class="chart-period-btn" onclick="loadStockChart(currentChartTicker, '5d')">5D</button>
+                <button class="chart-period-btn active" onclick="loadStockChart(currentChartTicker, '1mo')">1M</button>
+                <button class="chart-period-btn" onclick="loadStockChart(currentChartTicker, '3mo')">3M</button>
+                <button class="chart-period-btn" onclick="loadStockChart(currentChartTicker, '6mo')">6M</button>
+                <button class="chart-period-btn" onclick="loadStockChart(currentChartTicker, '1y')">1Y</button>
+                <button class="chart-period-btn" onclick="loadStockChart(currentChartTicker, '5y')">5Y</button>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="stockChart"></canvas>
+            </div>
+
+            <div id="chartInfoContainer" class="chart-info"></div>
+        </div>
+    </div>
+
     <div class="container">
         <h1>📊 StockPulse AI</h1>
 
@@ -874,6 +1074,7 @@
                 <button class="tab-button active" onclick="switchTab('overview')">📊 Overview</button>
                 <button class="tab-button" onclick="switchTab('ai-analysis')">🤖 AI Analysis</button>
                 <button class="tab-button" onclick="switchTab('manage')">📝 Manage Stocks</button>
+                <button class="tab-button" onclick="switchTab('settings')">⚙️ Settings</button>
             </div>
 
             <!-- Overview Tab -->
@@ -943,6 +1144,106 @@
                 <div class="current-stocks">
                     <h3>Currently Monitored Stocks</h3>
                     <div class="stock-list" id="currentStocksList"></div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" class="tab-content">
+                <h2 style="color: #667eea; margin-bottom: 20px;">⚙️ AI Provider Settings</h2>
+
+                <!-- Security Warning -->
+                <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+                    <h3 style="color: #dc2626; margin-bottom: 10px;">⚠️ Security Warning</h3>
+                    <p style="color: #991b1b; margin-bottom: 10px;">
+                        API keys are stored in plain text in the local database. This dashboard is designed for self-hosted,
+                        personal use only. <strong>Do not expose this application to the public internet.</strong>
+                    </p>
+                    <ul style="color: #991b1b; margin-left: 20px;">
+                        <li>Run only on localhost or secure private networks</li>
+                        <li>Do not share your database file</li>
+                        <li>You are responsible for the security of your API keys</li>
+                    </ul>
+                </div>
+
+                <div class="message" id="settingsMessage"></div>
+
+                <!-- Add AI Provider Form -->
+                <div class="manage-stocks-section">
+                    <h3>Add/Update AI Provider</h3>
+                    <div style="margin-top: 15px;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">Provider:</label>
+                            <select id="aiProviderSelect" class="search-box input" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 5px;" onchange="updateModelOptions()">
+                                <option value="">Select AI Provider...</option>
+                                <option value="openai">OpenAI (ChatGPT)</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="google">Google (Gemini)</option>
+                                <option value="grok">xAI (Grok)</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">Model:</label>
+                            <select id="aiModelSelect" class="search-box input" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 5px;">
+                                <option value="">Select model...</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">API Key:</label>
+                            <input
+                                type="password"
+                                id="aiApiKey"
+                                placeholder="Enter your API key..."
+                                style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 5px;"
+                            />
+                            <small style="color: #6b7280;">Your API key will be stored locally and never shared.</small>
+                        </div>
+
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" onclick="testAIProvider()">Test Connection</button>
+                            <button class="btn btn-primary" onclick="saveAIProvider()">Save & Activate</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current AI Providers -->
+                <div class="current-stocks" style="margin-top: 30px;">
+                    <h3>Configured AI Providers</h3>
+                    <div id="aiProvidersList" style="margin-top: 15px;">
+                        <div class="empty-state">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- AI Provider Info -->
+                <div style="margin-top: 30px; padding: 20px; background: #f0f9ff; border-radius: 10px;">
+                    <h3 style="color: #0369a1; margin-bottom: 15px;">📚 Getting API Keys</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                        <div>
+                            <strong style="color: #333;">OpenAI (ChatGPT)</strong>
+                            <p style="margin: 5px 0; font-size: 0.9em; color: #4b5563;">
+                                <a href="https://platform.openai.com/api-keys" target="_blank" style="color: #667eea;">Get API Key →</a>
+                            </p>
+                        </div>
+                        <div>
+                            <strong style="color: #333;">Anthropic (Claude)</strong>
+                            <p style="margin: 5px 0; font-size: 0.9em; color: #4b5563;">
+                                <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color: #667eea;">Get API Key →</a>
+                            </p>
+                        </div>
+                        <div>
+                            <strong style="color: #333;">Google (Gemini)</strong>
+                            <p style="margin: 5px 0; font-size: 0.9em; color: #4b5563;">
+                                <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: #667eea;">Get API Key →</a>
+                            </p>
+                        </div>
+                        <div>
+                            <strong style="color: #333;">xAI (Grok)</strong>
+                            <p style="margin: 5px 0; font-size: 0.9em; color: #4b5563;">
+                                <a href="https://console.x.ai" target="_blank" style="color: #667eea;">Get API Key →</a>
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1160,6 +1461,7 @@
                             <div class="stock-ticker-name">${stock.ticker}</div>
                             <div class="stock-sentiment">${sentimentLabel}</div>
                             ${stockData ? `<div style="font-size: 0.8em; color: #999;">${stockData.total_articles} articles</div>` : '<div style="font-size: 0.8em; color: #999;">No data</div>'}
+                            <button class="chart-icon-btn" onclick="event.stopPropagation(); openChartModal('${stock.ticker}')">📊 Chart</button>
                         </div>
                     `;
                 }).join('');
@@ -1378,7 +1680,10 @@
             container.innerHTML = `
                 <div class="ai-rating-card" style="max-width: 800px; margin: 0 auto;">
                     <div class="ai-rating-header">
-                        <div class="ai-ticker">${rating.ticker}</div>
+                        <div class="ai-ticker">
+                            ${rating.ticker}
+                            <button class="chart-icon-btn" onclick="openChartModal('${rating.ticker}')" style="margin-left: 10px;">📊 View Chart</button>
+                        </div>
                         <div class="ai-rating-badge" style="background-color: ${rating.color};">
                             <span>${rating.emoji}</span>
                             <span>${rating.rating.replace(/_/g, ' ')}</span>
@@ -1407,6 +1712,7 @@
                     </div>
 
                     <div class="ai-summary">
+                        ${rating.ai_powered ? '<span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 3px; font-size: 0.85em; margin-right: 8px;">🤖 AI-Powered</span>' : ''}
                         ${rating.analysis_summary}
                     </div>
 
@@ -1600,6 +1906,11 @@
                     }, 100);
                 }
             }
+
+            // Load AI providers when switching to Settings tab
+            if (tabName === 'settings') {
+                loadAIProviders();
+            }
         }
 
         function updateAll() {
@@ -1628,6 +1939,384 @@
         // Request notification permission
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
+        }
+
+        // Chart variables
+        let currentChart = null;
+        let currentChartTicker = null;
+        let currentChartPeriod = '1mo';
+
+        function openChartModal(ticker) {
+            currentChartTicker = ticker;
+            document.getElementById('chartModal').classList.add('active');
+            document.getElementById('chartModalTitle').textContent = `${ticker} - Stock Chart`;
+            loadStockChart(ticker, currentChartPeriod);
+        }
+
+        function closeChartModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('chartModal').classList.remove('active');
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+        }
+
+        function loadStockChart(ticker, period) {
+            if (!ticker) return;
+
+            currentChartTicker = ticker;
+            currentChartPeriod = period;
+
+            // Update active button
+            document.querySelectorAll('.chart-period-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Show loading
+            const chartContainer = document.getElementById('chartInfoContainer');
+            chartContainer.innerHTML = '<div class="chart-loading">Loading chart data...</div>';
+
+            // Fetch chart data
+            fetch(`/api/chart/${ticker}?period=${period}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Failed to fetch chart data');
+                    return response.json();
+                })
+                .then(data => {
+                    renderChart(data);
+                    renderChartInfo(data);
+                })
+                .catch(error => {
+                    console.error('Error loading chart:', error);
+                    chartContainer.innerHTML = '<div class="chart-loading" style="color: #ef4444;">Error loading chart data</div>';
+                });
+        }
+
+        function renderChart(data) {
+            const canvas = document.getElementById('stockChart');
+            const ctx = canvas.getContext('2d');
+
+            // Destroy existing chart
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            // Prepare data
+            const labels = data.data.map(d => d.date);
+            const prices = data.data.map(d => d.close);
+
+            // Determine color based on price trend
+            const priceChange = data.stats.price_change;
+            const lineColor = priceChange >= 0 ? '#10b981' : '#ef4444';
+            const gradientColor = priceChange >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, gradientColor);
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            // Create chart
+            currentChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${data.ticker} Price (${data.currency_symbol})`,
+                        data: prices,
+                        borderColor: lineColor,
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHoverBackgroundColor: lineColor,
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: {
+                                size: 14
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    return `Price: ${data.currency_symbol}${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                maxTicksLimit: 10,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return data.currency_symbol + value.toFixed(2);
+                                },
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderChartInfo(data) {
+            const container = document.getElementById('chartInfoContainer');
+            const stats = data.stats;
+            const changeClass = stats.price_change >= 0 ? 'positive' : 'negative';
+            const changeSymbol = stats.price_change >= 0 ? '+' : '';
+
+            container.innerHTML = `
+                <div class="chart-info-box">
+                    <div class="chart-info-label">Current Price</div>
+                    <div class="chart-info-value">${data.currency_symbol}${stats.current_price.toFixed(2)}</div>
+                </div>
+                <div class="chart-info-box">
+                    <div class="chart-info-label">Change</div>
+                    <div class="chart-info-value ${changeClass}">
+                        ${changeSymbol}${data.currency_symbol}${stats.price_change.toFixed(2)}
+                        (${changeSymbol}${stats.price_change_percent.toFixed(2)}%)
+                    </div>
+                </div>
+                <div class="chart-info-box">
+                    <div class="chart-info-label">High</div>
+                    <div class="chart-info-value">${data.currency_symbol}${stats.high_price.toFixed(2)}</div>
+                </div>
+                <div class="chart-info-box">
+                    <div class="chart-info-label">Low</div>
+                    <div class="chart-info-value">${data.currency_symbol}${stats.low_price.toFixed(2)}</div>
+                </div>
+                <div class="chart-info-box">
+                    <div class="chart-info-label">Open</div>
+                    <div class="chart-info-value">${data.currency_symbol}${stats.open_price.toFixed(2)}</div>
+                </div>
+                <div class="chart-info-box">
+                    <div class="chart-info-label">Volume</div>
+                    <div class="chart-info-value">${formatVolume(stats.total_volume)}</div>
+                </div>
+            `;
+        }
+
+        function formatVolume(volume) {
+            if (volume >= 1000000000) return (volume / 1000000000).toFixed(2) + 'B';
+            if (volume >= 1000000) return (volume / 1000000).toFixed(2) + 'M';
+            if (volume >= 1000) return (volume / 1000).toFixed(2) + 'K';
+            return volume.toString();
+        }
+
+        // AI Provider Management Functions
+        const aiProviderModels = {
+            'openai': ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+            'anthropic': ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+            'google': ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest'],
+            'grok': ['grok-beta', 'grok-2-1212']
+        };
+
+        function updateModelOptions() {
+            const provider = document.getElementById('aiProviderSelect').value;
+            const modelSelect = document.getElementById('aiModelSelect');
+
+            modelSelect.innerHTML = '<option value="">Select model...</option>';
+
+            if (provider && aiProviderModels[provider]) {
+                aiProviderModels[provider].forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    modelSelect.appendChild(option);
+                });
+                modelSelect.selectedIndex = 1; // Select first model
+            }
+        }
+
+        function showSettingsMessage(text, type = 'success') {
+            const message = document.getElementById('settingsMessage');
+            message.textContent = text;
+            message.className = `message ${type} active`;
+            setTimeout(() => {
+                message.classList.remove('active');
+            }, 5000);
+        }
+
+        function testAIProvider() {
+            const provider = document.getElementById('aiProviderSelect').value;
+            const model = document.getElementById('aiModelSelect').value;
+            const apiKey = document.getElementById('aiApiKey').value;
+
+            if (!provider || !model || !apiKey) {
+                showSettingsMessage('Please fill in all fields', 'error');
+                return;
+            }
+
+            showSettingsMessage('Testing connection...', 'success');
+
+            fetch('/api/settings/test-ai', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ provider, model, api_key: apiKey })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSettingsMessage(`✅ Connection successful! Using ${data.provider}`, 'success');
+                } else {
+                    showSettingsMessage(`❌ Connection failed: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Test error:', error);
+                showSettingsMessage('Error testing connection', 'error');
+            });
+        }
+
+        function saveAIProvider() {
+            const provider = document.getElementById('aiProviderSelect').value;
+            const model = document.getElementById('aiModelSelect').value;
+            const apiKey = document.getElementById('aiApiKey').value;
+
+            if (!provider || !model || !apiKey) {
+                showSettingsMessage('Please fill in all fields', 'error');
+                return;
+            }
+
+            fetch('/api/settings/ai-provider', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ provider, model, api_key: apiKey })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSettingsMessage('✅ AI Provider saved and activated!', 'success');
+                    // Clear form
+                    document.getElementById('aiApiKey').value = '';
+                    // Reload providers list
+                    loadAIProviders();
+                } else {
+                    showSettingsMessage('❌ Failed to save provider', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Save error:', error);
+                showSettingsMessage('Error saving provider', 'error');
+            });
+        }
+
+        function loadAIProviders() {
+            fetch('/api/settings/ai-providers')
+                .then(response => response.json())
+                .then(providers => {
+                    const container = document.getElementById('aiProvidersList');
+
+                    if (providers.length === 0) {
+                        container.innerHTML = '<div class="empty-state">No AI providers configured yet</div>';
+                        return;
+                    }
+
+                    container.innerHTML = '<div class="stock-list">' + providers.map(prov => `
+                        <div class="stock-list-item">
+                            <div>
+                                <div class="ticker">${prov.provider_name.toUpperCase()} ${prov.is_active ? '✅' : ''}</div>
+                                <span class="name">${prov.model}</span>
+                                <span style="font-size: 0.75em; color: #999; display: block;">Added: ${new Date(prov.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                ${!prov.is_active ? `<button class="btn btn-secondary" onclick="activateProvider(${prov.id})" style="padding: 5px 10px; font-size: 0.8em;">Activate</button>` : ''}
+                                <button class="btn btn-danger" onclick="deleteProvider(${prov.id})" style="padding: 5px 10px; font-size: 0.8em;">Delete</button>
+                            </div>
+                        </div>
+                    `).join('') + '</div>';
+                })
+                .catch(error => {
+                    console.error('Load providers error:', error);
+                });
+        }
+
+        function activateProvider(id) {
+            fetch(`/api/settings/ai-provider/${id}/activate`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSettingsMessage('✅ Provider activated!', 'success');
+                    loadAIProviders();
+                } else {
+                    showSettingsMessage('❌ Failed to activate provider', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Activate error:', error);
+                showSettingsMessage('Error activating provider', 'error');
+            });
+        }
+
+        function deleteProvider(id) {
+            if (!confirm('Are you sure you want to delete this AI provider?')) {
+                return;
+            }
+
+            fetch(`/api/settings/ai-provider/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSettingsMessage('✅ Provider deleted', 'success');
+                    loadAIProviders();
+                } else {
+                    showSettingsMessage('❌ Failed to delete provider', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Delete error:', error);
+                showSettingsMessage('Error deleting provider', 'error');
+            });
         }
 
         // Initial load
