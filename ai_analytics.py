@@ -231,11 +231,14 @@ class StockAnalytics:
         price_data = self.get_stock_price_data(ticker)
 
         if not price_data or not price_data.get('close'):
+            is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
             return {
                 'ticker': ticker,
                 'rating': 'INSUFFICIENT_DATA',
                 'score': 0,
                 'confidence': 0,
+                'currency': 'INR' if is_indian else 'USD',
+                'currency_symbol': '₹' if is_indian else '$',
                 'message': 'Not enough data to analyze'
             }
 
@@ -243,11 +246,14 @@ class StockAnalytics:
         closes = [p for p in price_data['close'] if p is not None]
 
         if len(closes) < 14:
+            is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
             return {
                 'ticker': ticker,
                 'rating': 'INSUFFICIENT_DATA',
                 'score': 0,
                 'confidence': 0,
+                'currency': 'INR' if is_indian else 'USD',
+                'currency_symbol': '₹' if is_indian else '$',
                 'message': 'Not enough price data to analyze'
             }
 
@@ -276,15 +282,19 @@ class StockAnalytics:
         else:
             technical_signals.append(f"RSI: {rsi:.1f}")
 
+        # Determine currency based on ticker suffix
+        is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
+        currency_symbol = '₹' if is_indian else '$'
+
         # Moving Average Analysis
         ma_bullish = 0
         for ma_name, ma_data in moving_averages.items():
             if ma_data['signal'] == 'bullish':
                 ma_bullish += 1
                 technical_score += 10
-                technical_signals.append(f"Price above {ma_name.upper()}: ${ma_data['value']:.2f} (Bullish)")
+                technical_signals.append(f"Price above {ma_name.upper()}: {currency_symbol}{ma_data['value']:.2f} (Bullish)")
             else:
-                technical_signals.append(f"Price below {ma_name.upper()}: ${ma_data['value']:.2f} (Bearish)")
+                technical_signals.append(f"Price below {ma_name.upper()}: {currency_symbol}{ma_data['value']:.2f} (Bearish)")
 
         # Sentiment Score (0-100)
         sentiment_score = 50  # Neutral baseline
@@ -347,6 +357,9 @@ class StockAnalytics:
             (len(moving_averages) * 6.67)  # Up to 20 points for MAs
         ))
 
+        # Currency already determined earlier
+        currency = 'INR' if is_indian else 'USD'
+
         return {
             'ticker': ticker,
             'rating': rating,
@@ -357,6 +370,8 @@ class StockAnalytics:
             'technical_score': round(technical_score, 1),
             'sentiment_score': round(sentiment_score, 1),
             'current_price': current_price,
+            'currency': currency,
+            'currency_symbol': currency_symbol,
             'rsi': round(rsi, 2),
             'moving_averages': moving_averages,
             'sentiment': sentiment,

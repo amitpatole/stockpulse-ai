@@ -1385,7 +1385,7 @@
                         </div>
                     </div>
 
-                    <div class="price-display">$${rating.current_price.toFixed(2)}</div>
+                    <div class="price-display">${rating.currency_symbol || '$'}${rating.current_price.toFixed(2)}</div>
 
                     <div class="ai-score-section">
                         <div class="score-box">
@@ -1419,7 +1419,7 @@
                             <div class="indicator-row">
                                 <span class="indicator-label">${key.replace('_', ' ').toUpperCase()}</span>
                                 <span class="indicator-value" style="color: ${data.signal === 'bullish' ? '#10b981' : '#ef4444'};">
-                                    $${data.value.toFixed(2)} ${data.signal === 'bullish' ? '📈' : '📉'}
+                                    ${rating.currency_symbol || '$'}${data.value.toFixed(2)} ${data.signal === 'bullish' ? '📈' : '📉'}
                                 </span>
                             </div>
                         `).join('')}
@@ -1491,7 +1491,7 @@
                             </div>
                         </div>
 
-                        <div class="price-display">$${rating.current_price.toFixed(2)}</div>
+                        <div class="price-display">${rating.currency_symbol || '$'}${rating.current_price.toFixed(2)}</div>
 
                         <div class="ai-score-section">
                             <div class="score-box">
@@ -1525,7 +1525,7 @@
                                 <div class="indicator-row">
                                     <span class="indicator-label">${key.replace('_', ' ').toUpperCase()}</span>
                                     <span class="indicator-value" style="color: ${data.signal === 'bullish' ? '#10b981' : '#ef4444'};">
-                                        $${data.value.toFixed(2)} ${data.signal === 'bullish' ? '📈' : '📉'}
+                                        ${rating.currency_symbol || '$'}${data.value.toFixed(2)} ${data.signal === 'bullish' ? '📈' : '📉'}
                                     </span>
                                 </div>
                             `).join('')}
