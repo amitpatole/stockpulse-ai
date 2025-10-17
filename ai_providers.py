@@ -163,7 +163,7 @@ class GoogleProvider(AIProvider):
 class GrokProvider(AIProvider):
     """xAI (Grok) Provider"""
 
-    def __init__(self, api_key: str, model: str = "grok-beta"):
+    def __init__(self, api_key: str, model: str = "grok-4"):
         super().__init__(api_key)
         self.model = model
         self.base_url = "https://api.x.ai/v1/chat/completions"
@@ -185,14 +185,33 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
+            # Log debug info (API key first 10 chars only for security)
+            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
+            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
+
+            # Log error details if request fails
+            if response.status_code != 200:
+                error_msg = f"HTTP {response.status_code}: {response.text}"
+                logger.error(f"Grok API error: {error_msg}")
+                return f"Error: {error_msg}"
+
             response.raise_for_status()
 
             result = response.json()
             return result['choices'][0]['message']['content'].strip()
 
         except Exception as e:
-            logger.error(f"Grok API error: {e}")
+            error_msg = f"Grok API error: {str(e)}"
+            logger.error(error_msg)
+            # Include detailed error info for debugging
+            if hasattr(e, 'response'):
+                try:
+                    error_detail = e.response.json()
+                    logger.error(f"Grok API response detail: {error_detail}")
+                except Exception as je:
+                    logger.error(f"Could not parse response JSON: {str(je)}")
             return f"Error: {str(e)}"
 
     def get_provider_name(self) -> str:
@@ -252,8 +271,8 @@ class AIProviderFactory:
             {
                 'id': 'grok',
                 'name': 'xAI (Grok)',
-                'models': ['grok-beta', 'grok-2-1212'],
-                'default_model': 'grok-beta'
+                'models': ['grok-4', 'grok-4-vision', 'grok-4-latest', 'grok-2', 'grok-2-vision-1212', 'grok-latest'],
+                'default_model': 'grok-4'
             }
         ]
 

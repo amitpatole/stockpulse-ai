@@ -1,6 +1,6 @@
 # 📊 StockPulse AI
 
-**Version 2.0.0** - Real AI Integration Update
+**Version 2.1.0** - Enhanced AI Features & Chat Integration
 
 **24/7 Stock Market Intelligence with AI-Powered Analysis**
 
@@ -252,7 +252,7 @@ StockPulse AI supports real AI integration with OpenAI (ChatGPT), Anthropic (Cla
 - **OpenAI**: GPT-4o (recommended), GPT-4o Mini, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
 - **Anthropic**: Claude 3.5 Sonnet (recommended), Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Sonnet, Claude 3 Haiku
 - **Google**: Gemini 2.5 Flash (recommended), Gemini 2.5 Pro, Gemini 2.0 Flash, Gemini Flash Latest, Gemini Pro Latest
-- **xAI**: Grok Beta, Grok-2-1212
+- **xAI**: Grok-4 (recommended), Grok-4-Vision, Grok-4-Latest, Grok-2, Grok-2-Vision-1212, Grok-Latest
 
 **Cost Considerations:**
 - AI providers charge per API call
