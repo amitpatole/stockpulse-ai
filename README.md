@@ -296,7 +296,16 @@ python -m pytest
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** - see the [LICENSE](LICENSE) file for details.
+
+**What this means:**
+- ✓ You can use, modify, and distribute this software
+- ✓ Commercial use is allowed (with restrictions below)
+- ✗ You CANNOT sell closed-source versions
+- ✗ You CANNOT remove attribution to the original author
+- ✗ Any modifications MUST be shared under GPL-3.0
+
+**Attribution Required:** All use must credit Amit Patole and link to https://github.com/amitpatole/stockpulse-ai
 
 ## ⚠️ Disclaimer
 
