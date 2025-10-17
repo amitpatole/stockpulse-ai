@@ -32,16 +32,16 @@ def init_stocks_table():
     cursor.execute('SELECT COUNT(*) FROM stocks')
     if cursor.fetchone()[0] == 0:
         default_stocks = [
-            ('GTI', 'Graphjet Technology'),
-            ('APLD', 'Applied Digital'),
-            ('INTC', 'Intel Corporation'),
-            ('USAR', 'USA Rare Earth'),
-            ('CRML', 'Critical Metals'),
-            ('NVTS', 'Navitas Semiconductor'),
-            ('OKLO', 'Oklo Inc'),
-            ('HUT', 'Hut 8 Mining'),
-            ('IBIT', 'iShares Bitcoin Trust'),
-            ('CGC', 'Canopy Growth')
+            ('TSLA', 'Tesla Inc'),
+            ('AAPL', 'Apple Inc'),
+            ('MSFT', 'Microsoft Corporation'),
+            ('NVDA', 'NVIDIA Corporation'),
+            ('GOOGL', 'Alphabet Inc'),
+            ('AMZN', 'Amazon.com Inc'),
+            ('META', 'Meta Platforms Inc'),
+            ('NFLX', 'Netflix Inc'),
+            ('AMD', 'Advanced Micro Devices'),
+            ('COIN', 'Coinbase Global Inc')
         ]
 
         cursor.executemany(

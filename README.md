@@ -56,7 +56,7 @@ pip install -r requirements.txt
 ```bash
 python3.12 stock_manager.py
 ```
-This creates the database with 10 default stocks (GTI, APLD, INTC, USAR, CRML, NVTS, OKLO, HUT, IBIT, CGC).
+This creates the database with 10 default stocks (TSLA, AAPL, MSFT, NVDA, GOOGL, AMZN, META, NFLX, AMD, COIN).
 
 4. **Start the system**
 ```bash
