@@ -1,10 +1,27 @@
 # Development and testing files
-list_*.py
 check_*.py
+list_*.py
 test_*.py
+*_test.py
+*_dev.py
 fetch_*.py
 
-# Python
+# Setup/configuration for development
+setup.sh
+CLAUDE.md
+
+# Logs
+*.log
+dashboard.log
+monitor.log
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+stock_news.db
+
+# Python cache and build
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,23 +33,22 @@ venv/
 dist/
 build/
 
-# Database
-*.db
-*.sqlite3
-
-# Logs
-*.log
-dashboard.log
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
+
+# Environment
 .env
 .env.local
+.env.*.local
 *.pid
+
+# Backups
+*.bak
+*.backup
+*_old.*
+*_new.*
