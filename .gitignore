@@ -1,16 +1,8 @@
-# StockPulse AI - Git Ignore File
-
-# Database files (don't push stock data and user configurations)
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
-
-# Log files
-*.log
-monitor.log
-dashboard.log
-nohup.out
+# Development and testing files
+list_*.py
+check_*.py
+test_*.py
+fetch_*.py
 
 # Python
 __pycache__/
@@ -18,27 +10,19 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-venv/
 env/
-ENV/
-.venv
+venv/
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+dashboard.log
 
 # IDE
 .vscode/
@@ -46,24 +30,9 @@ ENV/
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Environment variables
+# OS
+.DS_Store
 .env
 .env.local
-
-# Temporary files
-*.tmp
-*.bak
-*.cache
-
-# System files
-Thumbs.db
-
-# Old/backup documentation
-README_ENHANCED.md
-
-# Test scripts (for development only, not for production)
-test_*.py
-list_*.py
-check_*.py
+*.pid
