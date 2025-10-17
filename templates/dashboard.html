@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockPulse AI - Real-Time Market Intelligence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .status-dot {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-running { background: #10b981; }
+        .status-stopped { background: #ef4444; }
+        .status-error { background: #f59e0b; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            color: #667eea;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 968px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .alert-item {
+            background: #f0fdf4;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            transition: transform 0.2s;
+        }
+
+        .alert-item:hover {
+            transform: translateX(5px);
+        }
+
+        .alert-item.new {
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .alert-ticker {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .alert-time {
+            color: #6b7280;
+            font-size: 0.85em;
+            display: block;
+            margin-top: 5px;
+        }
+
+        .alert-title {
+            margin-top: 10px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .alert-link {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9em;
+            display: inline-block;
+            margin-top: 5px;
+        }
+
+        .alert-link:hover {
+            text-decoration: underline;
+        }
+
+        .news-item {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #e5e7eb;
+            background: #f9fafb;
+        }
+
+        .news-item.positive {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .news-item.negative {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .news-ticker {
+            display: inline-block;
+            background: #333;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 0.9em;
+        }
+
+        .sentiment-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .sentiment-positive {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .sentiment-negative {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .sentiment-neutral {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .news-title {
+            margin: 10px 0;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .news-source {
+            color: #6b7280;
+            font-size: 0.85em;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #6b7280;
+            padding: 40px;
+        }
+
+        .refresh-indicator {
+            color: white;
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .stock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stock-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .stock-card.selected {
+            border: 2px solid #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .stock-card.selected .stock-ticker-name,
+        .stock-card.selected .stock-sentiment,
+        .stock-card.selected div {
+            color: white !important;
+        }
+
+        .stock-ticker-name {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .stock-sentiment {
+            font-size: 0.9em;
+            color: #6b7280;
+        }
+
+        .filter-info {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .filter-info.active {
+            display: block;
+        }
+
+        .clear-filter {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+
+        .clear-filter:hover {
+            background: #f0f0f0;
+        }
+
+        .manage-stocks-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .manage-stocks-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .search-results {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .search-results.active {
+            display: block;
+        }
+
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .search-result-item:hover {
+            background: #f9fafb;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .stock-info {
+            flex: 1;
+        }
+
+        .stock-info .ticker {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stock-info .name {
+            font-size: 0.9em;
+            color: #6b7280;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .current-stocks {
+            margin-top: 20px;
+        }
+
+        .current-stocks h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .stock-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .stock-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 5px;
+            background: #f9fafb;
+        }
+
+        .stock-list-item .ticker {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stock-list-item .name {
+            font-size: 0.85em;
+            color: #6b7280;
+            display: block;
+        }
+
+        .stock-list-item button {
+            padding: 5px 10px;
+            font-size: 0.8em;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .message.active {
+            display: block;
+        }
+
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .message.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* AI Analytics Styles */
+        .ai-analytics-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .ai-analytics-section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ai-ratings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .ai-rating-card {
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+        }
+
+        .ai-rating-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+        }
+
+        .ai-rating-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .ai-ticker {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .ai-rating-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: white;
+        }
+
+        .ai-score-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .score-box {
+            padding: 15px;
+            border-radius: 8px;
+            background: #f9fafb;
+            text-align: center;
+        }
+
+        .score-label {
+            font-size: 0.85em;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+
+        .score-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+        }
+
+        .technical-indicators {
+            margin-bottom: 15px;
+        }
+
+        .indicator-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 0.9em;
+        }
+
+        .indicator-label {
+            color: #6b7280;
+        }
+
+        .indicator-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .ai-summary {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-size: 0.9em;
+            color: #1e40af;
+            line-height: 1.5;
+        }
+
+        .signals-section {
+            margin-top: 15px;
+        }
+
+        .signals-section h4 {
+            font-size: 0.95em;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .signal-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .signal-list li {
+            padding: 5px 0;
+            font-size: 0.85em;
+            color: #4b5563;
+            display: flex;
+            align-items: start;
+            gap: 8px;
+        }
+
+        .signal-list li::before {
+            content: '▸';
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .price-display {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0;
+        }
+
+        .view-details-btn {
+            margin-top: 10px;
+            width: 100%;
+            padding: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .view-details-btn:hover {
+            background: #5a67d8;
+        }
+
+        .collapsible-details {
+            margin-top: 15px;
+            display: none;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 15px;
+        }
+
+        .collapsible-details.active {
+            display: block;
+        }
+
+        /* Tabbed Interface Styles */
+        .tabs-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .tabs-header {
+            display: flex;
+            background: #f9fafb;
+            border-bottom: 2px solid #e5e7eb;
+            overflow-x: auto;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1em;
+            color: #6b7280;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            min-width: 120px;
+        }
+
+        .tab-button:hover {
+            background: #f3f4f6;
+            color: #667eea;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: white;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 768px) {
+            .tabs-header {
+                overflow-x: scroll;
+            }
+
+            .tab-button {
+                font-size: 0.9em;
+                padding: 12px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 StockPulse AI</h1>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <div>
+                    <strong>Status:</strong> <span id="statusText">Loading...</span><br>
+                    <small id="statusMessage"></small><br>
+                    <small>Last check: <span id="lastCheck">-</span></small>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Alerts (24h)</h3>
+                <div class="value" id="totalAlerts">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Monitored Stocks</h3>
+                <div class="value">10</div>
+            </div>
+            <div class="stat-card">
+                <h3>Data Sources</h3>
+                <div class="value" style="font-size: 0.8em; line-height: 1.4;">
+                    Google News, Yahoo Finance, Seeking Alpha, MarketWatch, Benzinga, Finviz, Reddit, StockTwits, Twitter/X
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabbed Interface -->
+        <div class="tabs-container">
+            <div class="tabs-header">
+                <button class="tab-button active" onclick="switchTab('overview')">📊 Overview</button>
+                <button class="tab-button" onclick="switchTab('ai-analysis')">🤖 AI Analysis</button>
+                <button class="tab-button" onclick="switchTab('manage')">📝 Manage Stocks</button>
+            </div>
+
+            <!-- Overview Tab -->
+            <div id="tab-overview" class="tab-content active">
+                <h3 style="color: #667eea; margin-bottom: 15px;">Click on a stock to view detailed news and alerts</h3>
+                <div class="stock-grid" id="stockGrid"></div>
+
+                <div class="filter-info" id="filterInfo">
+                    Showing details for <strong id="selectedTicker"></strong>
+                    <button class="clear-filter" onclick="clearFilter()">Clear Selection</button>
+                </div>
+
+                <!-- News & Alerts Section (appears when stock is clicked) -->
+                <div id="stockDetailsSection" style="display: none; margin-top: 20px;">
+                    <div class="main-content">
+                        <div class="panel">
+                            <h2>🔔 Recent Alerts for <span id="alertsStockName"></span></h2>
+                            <div id="alertsList"></div>
+                        </div>
+
+                        <div class="panel">
+                            <h2>📰 Latest News for <span id="newsStockName"></span></h2>
+                            <div id="newsList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Analysis Tab -->
+            <div id="tab-ai-analysis" class="tab-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2 style="margin: 0; color: #667eea;">🤖 AI Stock Analysis</h2>
+                        <p style="margin: 5px 0 0 0; font-size: 0.85em; color: #6b7280;">
+                            <span id="aiAnalysisHint">Analyzing selected stock from Overview...</span>
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="aiStockSelector" class="btn" style="padding: 10px 15px; min-width: 150px;" onchange="loadStockAIAnalysis()">
+                            <option value="">Select a stock...</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="loadStockAIAnalysis()">
+                            Analyze
+                        </button>
+                    </div>
+                </div>
+                <div id="aiRatingsContainer">
+                    <div class="empty-state">Select a stock from Overview tab or use the dropdown above</div>
+                </div>
+            </div>
+
+            <!-- Manage Stocks Tab -->
+            <div id="tab-manage" class="tab-content">
+                <h2 style="color: #667eea; margin-bottom: 20px;">📝 Manage Stocks</h2>
+                <div class="message" id="message"></div>
+                <div class="search-box">
+                    <input
+                        type="text"
+                        id="stockSearch"
+                        placeholder="Search for stocks (e.g., 'tesla', 'apple', 'microsoft')..."
+                        autocomplete="off"
+                    />
+                    <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
+                </div>
+                <div class="search-results" id="searchResults"></div>
+
+                <div class="current-stocks">
+                    <h3>Currently Monitored Stocks</h3>
+                    <div class="stock-list" id="currentStocksList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="refresh-indicator">
+            Auto-refreshing every 10 seconds...
+        </div>
+    </div>
+
+    <script>
+        let lastAlertId = 0;
+        let selectedTicker = null;
+        let allAlerts = [];
+        let allNews = [];
+        let searchTimeout = null;
+        let currentStocks = [];
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000 / 60); // minutes
+
+            if (diff < 1) return 'Just now';
+            if (diff < 60) return `${diff}m ago`;
+            if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+            return date.toLocaleDateString();
+        }
+
+        function selectStock(ticker) {
+            selectedTicker = ticker;
+            document.getElementById('selectedTicker').textContent = ticker;
+            document.getElementById('alertsStockName').textContent = ticker;
+            document.getElementById('newsStockName').textContent = ticker;
+            document.getElementById('filterInfo').classList.add('active');
+
+            // Show the stock details section
+            document.getElementById('stockDetailsSection').style.display = 'block';
+
+            // Update selected styling
+            document.querySelectorAll('.stock-card').forEach(card => {
+                if (card.dataset.ticker === ticker) {
+                    card.classList.add('selected');
+                } else {
+                    card.classList.remove('selected');
+                }
+            });
+
+            // Re-render alerts and news with filter
+            renderAlerts();
+            renderNews();
+
+            // Scroll to details section smoothly
+            setTimeout(() => {
+                document.getElementById('stockDetailsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        function clearFilter() {
+            selectedTicker = null;
+            document.getElementById('filterInfo').classList.remove('active');
+
+            // Hide the stock details section
+            document.getElementById('stockDetailsSection').style.display = 'none';
+
+            // Remove selected styling
+            document.querySelectorAll('.stock-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+        }
+
+        function updateStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusDot = document.getElementById('statusDot');
+                    const statusText = document.getElementById('statusText');
+                    const statusMessage = document.getElementById('statusMessage');
+                    const lastCheck = document.getElementById('lastCheck');
+
+                    statusDot.className = 'status-dot status-' + data.status;
+                    statusText.textContent = data.status.replace('_', ' ').toUpperCase();
+                    statusMessage.textContent = data.message;
+                    lastCheck.textContent = data.last_check ? formatDate(data.last_check) : 'Never';
+                });
+        }
+
+        function updateAlerts() {
+            fetch('/api/alerts')
+                .then(response => response.json())
+                .then(data => {
+                    allAlerts = data;
+
+                    // Trigger notifications for new alerts
+                    data.forEach(alert => {
+                        const isNew = alert.id > lastAlertId;
+                        if (isNew && lastAlertId > 0) {
+                            if (Notification.permission === "granted") {
+                                new Notification(`${alert.ticker} - Positive News!`, {
+                                    body: alert.title,
+                                    icon: '📈'
+                                });
+                            }
+                        }
+                    });
+
+                    if (data.length > 0) {
+                        lastAlertId = Math.max(lastAlertId, ...data.map(a => a.id));
+                    }
+
+                    renderAlerts();
+                });
+        }
+
+        function renderAlerts() {
+            const alertsList = document.getElementById('alertsList');
+
+            // Filter alerts by selected ticker
+            let filteredAlerts = selectedTicker
+                ? allAlerts.filter(alert => alert.ticker === selectedTicker)
+                : allAlerts;
+
+            if (filteredAlerts.length === 0) {
+                const message = selectedTicker
+                    ? `No alerts for ${selectedTicker} yet.`
+                    : 'No alerts yet. Monitor is watching for positive news!';
+                alertsList.innerHTML = `<div class="empty-state">${message}</div>`;
+                return;
+            }
+
+            alertsList.innerHTML = filteredAlerts.map(alert => {
+                return `
+                    <div class="alert-item">
+                        <span class="alert-ticker">${alert.ticker}</span>
+                        <span class="sentiment-badge sentiment-positive">
+                            Score: ${(alert.sentiment_score * 100).toFixed(0)}%
+                        </span>
+                        <div class="alert-title">${alert.title || alert.message}</div>
+                        ${alert.url ? `<a href="${alert.url}" target="_blank" class="alert-link">Read more →</a>` : ''}
+                        <span class="alert-time">${formatDate(alert.created_at)} • ${alert.source || 'Unknown'}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateNews() {
+            fetch('/api/news')
+                .then(response => response.json())
+                .then(data => {
+                    allNews = data;
+                    renderNews();
+                });
+        }
+
+        function renderNews() {
+            const newsList = document.getElementById('newsList');
+
+            // Filter news by selected ticker
+            let filteredNews = selectedTicker
+                ? allNews.filter(article => article.ticker === selectedTicker)
+                : allNews;
+
+            if (filteredNews.length === 0) {
+                const message = selectedTicker
+                    ? `No news for ${selectedTicker} yet.`
+                    : 'No news articles yet.';
+                newsList.innerHTML = `<div class="empty-state">${message}</div>`;
+                return;
+            }
+
+            newsList.innerHTML = filteredNews.slice(0, 50).map(article => `
+                <div class="news-item ${article.sentiment_label}">
+                    <span class="news-ticker">${article.ticker}</span>
+                    <span class="sentiment-badge sentiment-${article.sentiment_label}">
+                        ${article.sentiment_label.toUpperCase()}
+                    </span>
+                    <div class="news-title">${article.title}</div>
+                    ${article.url ? `<a href="${article.url}" target="_blank" class="alert-link">Read article →</a>` : ''}
+                    <div class="news-source">${formatDate(article.created_at)} • ${article.source}</div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats() {
+            Promise.all([
+                fetch('/api/stats').then(r => r.json()),
+                fetch('/api/stocks').then(r => r.json())
+            ])
+            .then(([statsData, allStocks]) => {
+                const activeStocks = allStocks.filter(s => s.active === 1);
+
+                // Update monitored stocks count
+                document.querySelector('.stat-card:nth-child(2) .value').textContent = activeStocks.length;
+
+                document.getElementById('totalAlerts').textContent = statsData.total_alerts_24h;
+
+                const stockGrid = document.getElementById('stockGrid');
+                const stocks = statsData.stocks;
+
+                stockGrid.innerHTML = activeStocks.map(stock => {
+                    const stockData = stocks.find(s => s.ticker === stock.ticker);
+                    const sentiment = stockData ? stockData.avg_sentiment : 0;
+                    const sentimentLabel = sentiment > 0.3 ? '📈 Positive' : sentiment < -0.3 ? '📉 Negative' : '➡️ Neutral';
+                    const isSelected = selectedTicker === stock.ticker ? 'selected' : '';
+
+                    return `
+                        <div class="stock-card ${isSelected}" data-ticker="${stock.ticker}" onclick="selectStock('${stock.ticker}')">
+                            <div class="stock-ticker-name">${stock.ticker}</div>
+                            <div class="stock-sentiment">${sentimentLabel}</div>
+                            ${stockData ? `<div style="font-size: 0.8em; color: #999;">${stockData.total_articles} articles</div>` : '<div style="font-size: 0.8em; color: #999;">No data</div>'}
+                        </div>
+                    `;
+                }).join('');
+            });
+        }
+
+        function showMessage(text, type = 'success') {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message ${type} active`;
+            setTimeout(() => {
+                message.classList.remove('active');
+            }, 5000);
+        }
+
+        function searchStocks(query) {
+            if (!query || query.length < 2) {
+                document.getElementById('searchResults').classList.remove('active');
+                return;
+            }
+
+            fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(results => {
+                    const searchResults = document.getElementById('searchResults');
+
+                    if (results.length === 0) {
+                        searchResults.innerHTML = '<div style="padding: 10px; text-align: center; color: #6b7280;">No results found</div>';
+                        searchResults.classList.add('active');
+                        return;
+                    }
+
+                    searchResults.innerHTML = results.map(stock => `
+                        <div class="search-result-item">
+                            <div class="stock-info">
+                                <div class="ticker">${stock.ticker}</div>
+                                <div class="name">${stock.name}</div>
+                                <div style="font-size: 0.8em; color: #999;">${stock.exchange} • ${stock.type}</div>
+                            </div>
+                            <button class="btn btn-primary" onclick="addStock('${stock.ticker}', '${stock.name.replace(/'/g, "\\'")}')">
+                                Add
+                            </button>
+                        </div>
+                    `).join('');
+                    searchResults.classList.add('active');
+                })
+                .catch(error => {
+                    console.error('Search error:', error);
+                    showMessage('Error searching stocks', 'error');
+                });
+        }
+
+        function clearSearch() {
+            document.getElementById('stockSearch').value = '';
+            document.getElementById('searchResults').classList.remove('active');
+        }
+
+        function addStock(ticker, name) {
+            fetch('/api/stocks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ticker, name })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(`Added ${ticker} to monitoring list`, 'success');
+                    clearSearch();
+                    loadCurrentStocks();
+                    populateAIStockSelector(); // Update AI dropdown
+                    updateAll();
+                } else {
+                    showMessage(`Failed to add ${ticker}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Add stock error:', error);
+                showMessage('Error adding stock', 'error');
+            });
+        }
+
+        function removeStock(ticker) {
+            if (!confirm(`Are you sure you want to remove ${ticker} from monitoring?`)) {
+                return;
+            }
+
+            fetch(`/api/stocks/${ticker}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(`Removed ${ticker} from monitoring list`, 'success');
+                    loadCurrentStocks();
+                    populateAIStockSelector(); // Update AI dropdown
+                    updateAll();
+                } else {
+                    showMessage(`Failed to remove ${ticker}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Remove stock error:', error);
+                showMessage('Error removing stock', 'error');
+            });
+        }
+
+        function loadCurrentStocks() {
+            fetch('/api/stocks')
+                .then(response => response.json())
+                .then(stocks => {
+                    currentStocks = stocks.filter(s => s.active === 1);
+                    const stocksList = document.getElementById('currentStocksList');
+
+                    stocksList.innerHTML = currentStocks.map(stock => `
+                        <div class="stock-list-item">
+                            <div>
+                                <div class="ticker">${stock.ticker}</div>
+                                <span class="name">${stock.name}</span>
+                            </div>
+                            <button class="btn btn-danger" onclick="removeStock('${stock.ticker}')">
+                                Remove
+                            </button>
+                        </div>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Load stocks error:', error);
+                });
+        }
+
+        function toggleDetails(ticker) {
+            const details = document.getElementById(`details-${ticker}`);
+            const btn = document.getElementById(`btn-${ticker}`);
+            if (details.classList.contains('active')) {
+                details.classList.remove('active');
+                btn.textContent = 'View Detailed Analysis';
+            } else {
+                details.classList.add('active');
+                btn.textContent = 'Hide Details';
+            }
+        }
+
+        function loadStockAIAnalysis() {
+            const ticker = document.getElementById('aiStockSelector').value;
+            const container = document.getElementById('aiRatingsContainer');
+            const hint = document.getElementById('aiAnalysisHint');
+
+            if (!ticker) {
+                container.innerHTML = '<div class="empty-state">Please select a stock from the dropdown above</div>';
+                hint.textContent = 'Select a stock to view AI analysis';
+                return;
+            }
+
+            hint.textContent = 'Analyzing ' + ticker + '...';
+            container.innerHTML = '<div class="loading-spinner">Analyzing ' + ticker + ' with AI...</div>';
+
+            fetch('/api/ai/rating/' + ticker)
+                .then(response => response.json())
+                .then(rating => {
+                    renderSingleStockAIRating(rating);
+                    hint.textContent = 'Showing analysis for ' + ticker;
+                })
+                .catch(error => {
+                    console.error('Error loading AI rating:', error);
+                    container.innerHTML = '<div class="loading-spinner" style="color: #ef4444;">Error loading AI analysis</div>';
+                    hint.textContent = 'Error loading analysis';
+                });
+        }
+
+        function populateAIStockSelector() {
+            fetch('/api/stocks')
+                .then(response => response.json())
+                .then(stocks => {
+                    const activeStocks = stocks.filter(s => s.active === 1);
+                    const selector = document.getElementById('aiStockSelector');
+
+                    // Clear existing options except the first one
+                    selector.innerHTML = '<option value="">Select a stock...</option>';
+
+                    activeStocks.forEach(stock => {
+                        const option = document.createElement('option');
+                        option.value = stock.ticker;
+                        option.textContent = `${stock.ticker} - ${stock.name}`;
+                        selector.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading stocks:', error);
+                });
+        }
+
+        function renderSingleStockAIRating(rating) {
+            const container = document.getElementById('aiRatingsContainer');
+
+            if (rating.rating === 'INSUFFICIENT_DATA' || rating.rating === 'ERROR') {
+                container.innerHTML = `
+                    <div class="ai-rating-card">
+                        <div class="ai-rating-header">
+                            <div class="ai-ticker">${rating.ticker}</div>
+                            <span style="color: #6b7280;">⚠️ ${rating.message || 'Insufficient data'}</span>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            const movingAverages = rating.moving_averages || {};
+            const sentiment = rating.sentiment || {};
+
+            container.innerHTML = `
+                <div class="ai-rating-card" style="max-width: 800px; margin: 0 auto;">
+                    <div class="ai-rating-header">
+                        <div class="ai-ticker">${rating.ticker}</div>
+                        <div class="ai-rating-badge" style="background-color: ${rating.color};">
+                            <span>${rating.emoji}</span>
+                            <span>${rating.rating.replace(/_/g, ' ')}</span>
+                        </div>
+                    </div>
+
+                    <div class="price-display">$${rating.current_price.toFixed(2)}</div>
+
+                    <div class="ai-score-section">
+                        <div class="score-box">
+                            <div class="score-label">Overall Score</div>
+                            <div class="score-value" style="color: ${rating.color};">${rating.score}</div>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: ${rating.confidence}%;"></div>
+                            </div>
+                            <div style="font-size: 0.75em; color: #6b7280; margin-top: 5px;">
+                                ${rating.confidence}% confidence
+                            </div>
+                        </div>
+                        <div class="score-box">
+                            <div class="score-label">Technical</div>
+                            <div class="score-value" style="font-size: 1.5em;">${rating.technical_score}</div>
+                            <div class="score-label" style="margin-top: 10px;">Sentiment</div>
+                            <div class="score-value" style="font-size: 1.5em;">${rating.sentiment_score}</div>
+                        </div>
+                    </div>
+
+                    <div class="ai-summary">
+                        ${rating.analysis_summary}
+                    </div>
+
+                    <div class="technical-indicators">
+                        <div class="indicator-row">
+                            <span class="indicator-label">RSI</span>
+                            <span class="indicator-value">${rating.rsi}</span>
+                        </div>
+                        ${Object.entries(movingAverages).map(([key, data]) => `
+                            <div class="indicator-row">
+                                <span class="indicator-label">${key.replace('_', ' ').toUpperCase()}</span>
+                                <span class="indicator-value" style="color: ${data.signal === 'bullish' ? '#10b981' : '#ef4444'};">
+                                    $${data.value.toFixed(2)} ${data.signal === 'bullish' ? '📈' : '📉'}
+                                </span>
+                            </div>
+                        `).join('')}
+                        <div class="indicator-row">
+                            <span class="indicator-label">News Articles</span>
+                            <span class="indicator-value">${sentiment.total_articles || 0}</span>
+                        </div>
+                        <div class="indicator-row">
+                            <span class="indicator-label">Sentiment Trend</span>
+                            <span class="indicator-value">${sentiment.sentiment_trend || 'N/A'}</span>
+                        </div>
+                    </div>
+
+                    ${rating.technical_signals && rating.technical_signals.length > 0 ? `
+                        <div class="signals-section">
+                            <h4>📊 Technical Signals</h4>
+                            <ul class="signal-list">
+                                ${rating.technical_signals.map(signal => `<li>${signal}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+
+                    ${rating.sentiment_signals && rating.sentiment_signals.length > 0 ? `
+                        <div class="signals-section">
+                            <h4>💬 Sentiment Signals</h4>
+                            <ul class="signal-list">
+                                ${rating.sentiment_signals.map(signal => `<li>${signal}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+
+                    <div style="margin-top: 15px; padding: 10px; background: #f9fafb; border-radius: 5px; font-size: 0.8em; color: #6b7280;">
+                        <strong>Analysis Time:</strong> ${new Date(rating.timestamp).toLocaleString()}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAIRatings(ratings) {
+            const container = document.getElementById('aiRatingsContainer');
+
+            if (ratings.length === 0) {
+                container.innerHTML = '<div class="empty-state">No stocks to analyze</div>';
+                return;
+            }
+
+            container.innerHTML = '<div class="ai-ratings-grid">' + ratings.map(rating => {
+                if (rating.rating === 'INSUFFICIENT_DATA' || rating.rating === 'ERROR') {
+                    return `
+                        <div class="ai-rating-card">
+                            <div class="ai-rating-header">
+                                <div class="ai-ticker">${rating.ticker}</div>
+                                <span style="color: #6b7280;">⚠️ ${rating.message || 'Insufficient data'}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const movingAverages = rating.moving_averages || {};
+                const sentiment = rating.sentiment || {};
+
+                return `
+                    <div class="ai-rating-card">
+                        <div class="ai-rating-header">
+                            <div class="ai-ticker">${rating.ticker}</div>
+                            <div class="ai-rating-badge" style="background-color: ${rating.color};">
+                                <span>${rating.emoji}</span>
+                                <span>${rating.rating.replace(/_/g, ' ')}</span>
+                            </div>
+                        </div>
+
+                        <div class="price-display">$${rating.current_price.toFixed(2)}</div>
+
+                        <div class="ai-score-section">
+                            <div class="score-box">
+                                <div class="score-label">Overall Score</div>
+                                <div class="score-value" style="color: ${rating.color};">${rating.score}</div>
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" style="width: ${rating.confidence}%;"></div>
+                                </div>
+                                <div style="font-size: 0.75em; color: #6b7280; margin-top: 5px;">
+                                    ${rating.confidence}% confidence
+                                </div>
+                            </div>
+                            <div class="score-box">
+                                <div class="score-label">Technical</div>
+                                <div class="score-value" style="font-size: 1.5em;">${rating.technical_score}</div>
+                                <div class="score-label" style="margin-top: 10px;">Sentiment</div>
+                                <div class="score-value" style="font-size: 1.5em;">${rating.sentiment_score}</div>
+                            </div>
+                        </div>
+
+                        <div class="ai-summary">
+                            ${rating.analysis_summary}
+                        </div>
+
+                        <div class="technical-indicators">
+                            <div class="indicator-row">
+                                <span class="indicator-label">RSI</span>
+                                <span class="indicator-value">${rating.rsi}</span>
+                            </div>
+                            ${Object.entries(movingAverages).map(([key, data]) => `
+                                <div class="indicator-row">
+                                    <span class="indicator-label">${key.replace('_', ' ').toUpperCase()}</span>
+                                    <span class="indicator-value" style="color: ${data.signal === 'bullish' ? '#10b981' : '#ef4444'};">
+                                        $${data.value.toFixed(2)} ${data.signal === 'bullish' ? '📈' : '📉'}
+                                    </span>
+                                </div>
+                            `).join('')}
+                            <div class="indicator-row">
+                                <span class="indicator-label">News Articles</span>
+                                <span class="indicator-value">${sentiment.total_articles || 0}</span>
+                            </div>
+                            <div class="indicator-row">
+                                <span class="indicator-label">Sentiment Trend</span>
+                                <span class="indicator-value">${sentiment.sentiment_trend || 'N/A'}</span>
+                            </div>
+                        </div>
+
+                        <button class="view-details-btn" id="btn-${rating.ticker}" onclick="toggleDetails('${rating.ticker}')">
+                            View Detailed Analysis
+                        </button>
+
+                        <div class="collapsible-details" id="details-${rating.ticker}">
+                            ${rating.technical_signals && rating.technical_signals.length > 0 ? `
+                                <div class="signals-section">
+                                    <h4>📊 Technical Signals</h4>
+                                    <ul class="signal-list">
+                                        ${rating.technical_signals.map(signal => `<li>${signal}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+
+                            ${rating.sentiment_signals && rating.sentiment_signals.length > 0 ? `
+                                <div class="signals-section">
+                                    <h4>💬 Sentiment Signals</h4>
+                                    <ul class="signal-list">
+                                        ${rating.sentiment_signals.map(signal => `<li>${signal}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+
+                            <div style="margin-top: 15px; padding: 10px; background: #f9fafb; border-radius: 5px; font-size: 0.8em; color: #6b7280;">
+                                <strong>Analysis Time:</strong> ${new Date(rating.timestamp).toLocaleString()}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('') + '</div>';
+        }
+
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+
+            // Show selected tab content
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            // Add active class to clicked button
+            event.target.classList.add('active');
+
+            // Populate AI stock selector when switching to AI Analysis tab
+            if (tabName === 'ai-analysis') {
+                populateAIStockSelector();
+
+                // If a stock was selected in Overview, automatically load its AI analysis
+                if (selectedTicker) {
+                    setTimeout(() => {
+                        document.getElementById('aiStockSelector').value = selectedTicker;
+                        loadStockAIAnalysis();
+                    }, 100);
+                }
+            }
+        }
+
+        function updateAll() {
+            updateStatus();
+            updateAlerts();
+            updateNews();
+            updateStats();
+        }
+
+        // Set up search input listener
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('stockSearch');
+            searchInput.addEventListener('input', function(e) {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    searchStocks(e.target.value);
+                }, 300);
+            });
+
+            // Load current stocks list
+            loadCurrentStocks();
+
+            // Don't load AI ratings immediately - only when tab is clicked
+        });
+
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        // Initial load
+        updateAll();
+
+        // Auto-refresh every 10 seconds
+        setInterval(updateAll, 10000);
+    </script>
+</body>
+</html>

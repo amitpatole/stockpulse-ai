@@ -1,0 +1,20 @@
+# StockPulse AI - Python Dependencies
+
+# Web Framework
+flask==3.0.0
+
+# HTTP Requests
+requests==2.31.0
+
+# RSS Feed Parsing
+feedparser==6.0.10
+
+# Web Scraping
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Reddit API (optional - for social media monitoring)
+praw==7.7.1
+
+# Stock Data & Financial Analysis (for AI analytics module)
+yfinance==0.2.33
