@@ -123,22 +123,39 @@ def get_news():
 @app.route('/api/stats')
 def get_stats():
     """Get statistics"""
+    market = request.args.get('market', None)
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Get stats for each stock
-    cursor.execute('''
-        SELECT
-            ticker,
-            COUNT(*) as total_articles,
-            SUM(CASE WHEN sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
-            SUM(CASE WHEN sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
-            SUM(CASE WHEN sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
-            AVG(sentiment_score) as avg_sentiment
-        FROM news
-        WHERE created_at > datetime('now', '-24 hours')
-        GROUP BY ticker
-    ''')
+    # Get stats for each stock with market filter
+    if market and market != 'All':
+        cursor.execute('''
+            SELECT
+                n.ticker,
+                COUNT(*) as total_articles,
+                SUM(CASE WHEN n.sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
+                SUM(CASE WHEN n.sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
+                SUM(CASE WHEN n.sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
+                AVG(n.sentiment_score) as avg_sentiment
+            FROM news n
+            INNER JOIN stocks s ON n.ticker = s.ticker
+            WHERE n.created_at > datetime('now', '-24 hours')
+                AND s.market = ?
+            GROUP BY n.ticker
+        ''', (market,))
+    else:
+        cursor.execute('''
+            SELECT
+                ticker,
+                COUNT(*) as total_articles,
+                SUM(CASE WHEN sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
+                SUM(CASE WHEN sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
+                SUM(CASE WHEN sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
+                AVG(sentiment_score) as avg_sentiment
+            FROM news
+            WHERE created_at > datetime('now', '-24 hours')
+            GROUP BY ticker
+        ''')
 
     stats = cursor.fetchall()
 
@@ -176,8 +193,14 @@ def search_stocks():
 @app.route('/api/stocks', methods=['GET'])
 def get_stocks():
     """Get all monitored stocks"""
+    market = request.args.get('market', None)
     from stock_manager import get_all_stocks
     stocks = get_all_stocks()
+
+    # Filter by market if specified
+    if market and market != 'All':
+        stocks = [s for s in stocks if s.get('market') == market]
+
     return jsonify(stocks)
 
 
@@ -186,7 +209,8 @@ def add_stock_endpoint():
     """Add new stock"""
     data = request.json
     from stock_manager import add_stock
-    success = add_stock(data['ticker'], data['name'])
+    market = data.get('market', 'US')
+    success = add_stock(data['ticker'], data['name'], market)
     return jsonify({'success': success})
 
 

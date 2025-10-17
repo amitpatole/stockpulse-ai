@@ -8,9 +8,17 @@ StockPulse AI is a comprehensive stock market monitoring system that tracks news
 
 ## ✨ Features
 
+### 🌍 Multi-Market Support
+- **US & India markets** - Track stocks from both markets simultaneously
+- **Market-specific sources** - India stocks (.NS/.BO) get additional coverage from Economic Times, Moneycontrol, and Mint
+- **Market filtering** - Filter dashboard by US, India, or view all markets together
+- **NSE & BSE support** - Full coverage of National Stock Exchange and Bombay Stock Exchange
+
 ### 🔄 Real-Time Monitoring
 - **24/7 automated monitoring** of stock news and social media
-- **9+ data sources** including Google News, Yahoo Finance, Seeking Alpha, MarketWatch, Benzinga, Finviz, Reddit, StockTwits, and Twitter/X
+- **12+ data sources** including:
+  - **Global**: Google News, Yahoo Finance, Seeking Alpha, MarketWatch, Benzinga, Finviz, Reddit, StockTwits, Twitter/X
+  - **India**: Economic Times, Moneycontrol, Mint (for .NS/.BO stocks)
 - **Auto-refresh dashboard** updates every 10 seconds
 - **Instant alerts** for positive news with sentiment scoring
 
@@ -56,7 +64,10 @@ pip install -r requirements.txt
 ```bash
 python3.12 stock_manager.py
 ```
-This creates the database with 10 default stocks (TSLA, AAPL, MSFT, NVDA, GOOGL, AMZN, META, NFLX, AMD, COIN).
+This creates the database with 20 default stocks:
+- **US**: TSLA, AAPL, MSFT, NVDA, GOOGL, AMZN, META, NFLX, AMD, COIN
+- **India (NSE)**: RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ICICIBANK.NS
+- **India (BSE)**: RELIANCE.BO, TCS.BO, HDFCBANK.BO, INFY.BO, ICICIBANK.BO
 
 4. **Start the system**
 ```bash
@@ -71,18 +82,32 @@ http://localhost:5000
 
 ## 📖 Usage Guide
 
+### Market Filtering
+
+**Filter stocks by market:**
+1. Use the market dropdown at the top of the dashboard
+2. Select "US", "India (NSE/BSE)", or "All Markets"
+3. Dashboard, stats, and AI analysis update automatically
+4. Filter persists across tabs
+
 ### Managing Stocks
 
 **Add a stock:**
 1. Go to "Manage Stocks" tab
-2. Type company name or ticker (e.g., "tesla", "TSLA")
+2. Type company name or ticker (e.g., "tesla", "TSLA", "RELIANCE.NS")
 3. Click "Add" on the desired result
 4. Monitor starts automatically
+5. Market is auto-detected from ticker suffix (.NS/.BO = India)
 
 **Remove a stock:**
 1. Go to "Manage Stocks" tab
 2. Click "Remove" next to the stock
 3. Confirm removal
+
+**Adding Indian stocks:**
+- NSE stocks: Add `.NS` suffix (e.g., "RELIANCE.NS", "TCS.NS")
+- BSE stocks: Add `.BO` suffix (e.g., "RELIANCE.BO", "TCS.BO")
+- Yahoo Finance ticker search will show both exchanges
 
 ### Viewing AI Analysis
 
@@ -138,6 +163,7 @@ stockpulse-ai/
 
 StockPulse AI aggregates data from these sources:
 
+### Global Sources (All Stocks)
 | Source | Type | Coverage | Update Frequency |
 |--------|------|----------|------------------|
 | Google News | News | Global | 5 minutes |
@@ -149,6 +175,13 @@ StockPulse AI aggregates data from these sources:
 | Reddit | Social Media | 8 subreddits | 5 minutes |
 | StockTwits | Social Media | Real-time | 5 minutes |
 | Twitter/X | Social Media | Via Nitter | 5 minutes |
+
+### India-Specific Sources (NSE/BSE Stocks Only)
+| Source | Type | Coverage | Update Frequency |
+|--------|------|----------|------------------|
+| Economic Times | News | India | 5 minutes |
+| Moneycontrol | News + Analysis | India | 5 minutes |
+| Mint (Livemint) | News | India | 5 minutes |
 
 ## 🔧 Configuration
 

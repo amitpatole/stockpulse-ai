@@ -23,32 +23,53 @@ def init_stocks_table():
         CREATE TABLE IF NOT EXISTS stocks (
             ticker TEXT PRIMARY KEY,
             name TEXT,
+            market TEXT DEFAULT 'US',
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             active INTEGER DEFAULT 1
         )
     ''')
 
+    # Add market column to existing tables (migration)
+    try:
+        cursor.execute('ALTER TABLE stocks ADD COLUMN market TEXT DEFAULT "US"')
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
+
     # Add default stocks if table is empty
     cursor.execute('SELECT COUNT(*) FROM stocks')
     if cursor.fetchone()[0] == 0:
         default_stocks = [
-            ('TSLA', 'Tesla Inc'),
-            ('AAPL', 'Apple Inc'),
-            ('MSFT', 'Microsoft Corporation'),
-            ('NVDA', 'NVIDIA Corporation'),
-            ('GOOGL', 'Alphabet Inc'),
-            ('AMZN', 'Amazon.com Inc'),
-            ('META', 'Meta Platforms Inc'),
-            ('NFLX', 'Netflix Inc'),
-            ('AMD', 'Advanced Micro Devices'),
-            ('COIN', 'Coinbase Global Inc')
+            # US Stocks
+            ('TSLA', 'Tesla Inc', 'US'),
+            ('AAPL', 'Apple Inc', 'US'),
+            ('MSFT', 'Microsoft Corporation', 'US'),
+            ('NVDA', 'NVIDIA Corporation', 'US'),
+            ('GOOGL', 'Alphabet Inc', 'US'),
+            ('AMZN', 'Amazon.com Inc', 'US'),
+            ('META', 'Meta Platforms Inc', 'US'),
+            ('NFLX', 'Netflix Inc', 'US'),
+            ('AMD', 'Advanced Micro Devices', 'US'),
+            ('COIN', 'Coinbase Global Inc', 'US'),
+            # Indian Stocks - NSE (National Stock Exchange)
+            ('RELIANCE.NS', 'Reliance Industries Ltd (NSE)', 'India'),
+            ('TCS.NS', 'Tata Consultancy Services (NSE)', 'India'),
+            ('HDFCBANK.NS', 'HDFC Bank Ltd (NSE)', 'India'),
+            ('INFY.NS', 'Infosys Ltd (NSE)', 'India'),
+            ('ICICIBANK.NS', 'ICICI Bank Ltd (NSE)', 'India'),
+            # Indian Stocks - BSE (Bombay Stock Exchange)
+            ('RELIANCE.BO', 'Reliance Industries Ltd (BSE)', 'India'),
+            ('TCS.BO', 'Tata Consultancy Services (BSE)', 'India'),
+            ('HDFCBANK.BO', 'HDFC Bank Ltd (BSE)', 'India'),
+            ('INFY.BO', 'Infosys Ltd (BSE)', 'India'),
+            ('ICICIBANK.BO', 'ICICI Bank Ltd (BSE)', 'India')
         ]
 
         cursor.executemany(
-            'INSERT INTO stocks (ticker, name) VALUES (?, ?)',
+            'INSERT INTO stocks (ticker, name, market) VALUES (?, ?, ?)',
             default_stocks
         )
-        logger.info(f"Added {len(default_stocks)} default stocks")
+        logger.info(f"Added {len(default_stocks)} default stocks (US + India NSE/BSE)")
 
     conn.commit()
     conn.close()
@@ -80,16 +101,20 @@ def get_all_stocks() -> List[Dict]:
     return stocks
 
 
-def add_stock(ticker: str, name: str) -> bool:
+def add_stock(ticker: str, name: str, market: str = 'US') -> bool:
     """Add a new stock to monitor"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         ticker = ticker.upper()
+        # Auto-detect market based on ticker suffix
+        if '.NS' in ticker or '.BO' in ticker:
+            market = 'India'
+
         cursor.execute(
-            'INSERT OR REPLACE INTO stocks (ticker, name, active) VALUES (?, ?, 1)',
-            (ticker, name)
+            'INSERT OR REPLACE INTO stocks (ticker, name, market, active) VALUES (?, ?, ?, 1)',
+            (ticker, name, market)
         )
 
         conn.commit()

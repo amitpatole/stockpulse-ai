@@ -453,6 +453,118 @@ class EnhancedStockNewsMonitor:
 
         return articles
 
+    def fetch_economic_times(self, ticker: str) -> List[Dict]:
+        """Fetch news from Economic Times (India) - only for .NS and .BO tickers"""
+        articles = []
+        if not ('.NS' in ticker.upper() or '.BO' in ticker.upper()):
+            return articles
+
+        try:
+            # Remove .NS or .BO suffix for search
+            clean_ticker = ticker.replace('.NS', '').replace('.BO', '').replace('.ns', '').replace('.bo', '')
+            url = f"https://economictimes.indiatimes.com/topic/{clean_ticker}"
+            response = self.session.get(url, timeout=10)
+
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                news_items = soup.find_all('div', class_='eachStory', limit=5)
+
+                for item in news_items:
+                    title_elem = item.find('h3')
+                    link_elem = item.find('a')
+                    if title_elem and link_elem:
+                        article = {
+                            'ticker': ticker,
+                            'title': title_elem.get_text(strip=True),
+                            'description': '',
+                            'url': link_elem.get('href', ''),
+                            'source': 'Economic Times (India)',
+                            'published_date': datetime.now().isoformat(),
+                            'engagement_score': 0
+                        }
+                        if article['url'] and not article['url'].startswith('http'):
+                            article['url'] = f"https://economictimes.indiatimes.com{article['url']}"
+                        articles.append(article)
+
+        except Exception as e:
+            logger.error(f"Error fetching Economic Times for {ticker}: {e}")
+
+        return articles
+
+    def fetch_moneycontrol(self, ticker: str) -> List[Dict]:
+        """Fetch news from Moneycontrol (India) - only for .NS and .BO tickers"""
+        articles = []
+        if not ('.NS' in ticker.upper() or '.BO' in ticker.upper()):
+            return articles
+
+        try:
+            # Remove .NS or .BO suffix for search
+            clean_ticker = ticker.replace('.NS', '').replace('.BO', '').replace('.ns', '').replace('.bo', '')
+            url = f"https://www.moneycontrol.com/stocks/company_info/stock_news.php?sc_id={clean_ticker}"
+            response = self.session.get(url, timeout=10)
+
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                news_items = soup.find_all('li', class_='clearfix', limit=5)
+
+                for item in news_items:
+                    link = item.find('a')
+                    if link:
+                        article = {
+                            'ticker': ticker,
+                            'title': link.get_text(strip=True),
+                            'description': '',
+                            'url': link.get('href', ''),
+                            'source': 'Moneycontrol (India)',
+                            'published_date': datetime.now().isoformat(),
+                            'engagement_score': 0
+                        }
+                        if article['url'] and not article['url'].startswith('http'):
+                            article['url'] = f"https://www.moneycontrol.com{article['url']}"
+                        articles.append(article)
+
+        except Exception as e:
+            logger.error(f"Error fetching Moneycontrol for {ticker}: {e}")
+
+        return articles
+
+    def fetch_mint(self, ticker: str) -> List[Dict]:
+        """Fetch news from Mint/Livemint (India) - only for .NS and .BO tickers"""
+        articles = []
+        if not ('.NS' in ticker.upper() or '.BO' in ticker.upper()):
+            return articles
+
+        try:
+            # Remove .NS or .BO suffix for search
+            clean_ticker = ticker.replace('.NS', '').replace('.BO', '').replace('.ns', '').replace('.bo', '')
+            url = f"https://www.livemint.com/Search/Link/Keyword/{clean_ticker}"
+            response = self.session.get(url, timeout=10)
+
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                news_items = soup.find_all('h2', limit=5)
+
+                for item in news_items:
+                    link = item.find('a')
+                    if link:
+                        article = {
+                            'ticker': ticker,
+                            'title': link.get_text(strip=True),
+                            'description': '',
+                            'url': link.get('href', ''),
+                            'source': 'Mint (India)',
+                            'published_date': datetime.now().isoformat(),
+                            'engagement_score': 0
+                        }
+                        if article['url'] and not article['url'].startswith('http'):
+                            article['url'] = f"https://www.livemint.com{article['url']}"
+                        articles.append(article)
+
+        except Exception as e:
+            logger.error(f"Error fetching Mint for {ticker}: {e}")
+
+        return articles
+
 
     def save_news(self, article: Dict) -> int:
         """Save news article to database and return news_id"""
@@ -544,7 +656,7 @@ class EnhancedStockNewsMonitor:
             logger.info(f"Fetching news for {ticker}...")
             logger.info(f"{'='*60}")
 
-            # Fetch from ALL sources
+            # Fetch from ALL sources (global sources for all stocks)
             all_fetchers = [
                 ('Google News', self.fetch_google_news),
                 ('Yahoo Finance', self.fetch_yahoo_finance_rss),
@@ -556,6 +668,17 @@ class EnhancedStockNewsMonitor:
                 ('StockTwits', self.fetch_stocktwits),
                 ('Twitter/X', self.fetch_twitter_via_nitter),
             ]
+
+            # Add India-specific sources for Indian stocks (.NS and .BO)
+            is_indian_stock = '.NS' in ticker.upper() or '.BO' in ticker.upper()
+            if is_indian_stock:
+                india_fetchers = [
+                    ('Economic Times', self.fetch_economic_times),
+                    ('Moneycontrol', self.fetch_moneycontrol),
+                    ('Mint', self.fetch_mint),
+                ]
+                all_fetchers.extend(india_fetchers)
+                logger.info(f"  📍 Indian stock detected - including India-specific sources")
 
             ticker_new_count = 0
 
@@ -605,8 +728,9 @@ class EnhancedStockNewsMonitor:
         """Main monitoring loop - runs 24x7"""
         logger.info("🚀 StockPulse AI - Enhanced Stock News Monitor started!")
         logger.info(f"Check interval: {CHECK_INTERVAL} seconds")
-        logger.info(f"Sources: Google News, Yahoo Finance, Seeking Alpha, MarketWatch,")
-        logger.info(f"         Benzinga, Finviz, Reddit, StockTwits, Twitter/X")
+        logger.info(f"Global Sources: Google News, Yahoo Finance, Seeking Alpha, MarketWatch,")
+        logger.info(f"                Benzinga, Finviz, Reddit, StockTwits, Twitter/X")
+        logger.info(f"India Sources: Economic Times, Moneycontrol, Mint (for .NS/.BO stocks)")
         logger.info(f"")
         logger.info(f"Stocks are loaded dynamically from the database.")
         logger.info(f"Use the dashboard to add/remove stocks to monitor.")

@@ -255,6 +255,47 @@
             font-size: 0.9em;
         }
 
+        .market-filter-bar {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .market-filter-bar label {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 1em;
+        }
+
+        .market-select {
+            padding: 10px 15px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 1em;
+            font-weight: 500;
+            color: #333;
+            background: white;
+            cursor: pointer;
+            min-width: 150px;
+            transition: all 0.2s;
+        }
+
+        .market-select:hover {
+            background: #f9fafb;
+        }
+
+        .market-select:focus {
+            outline: none;
+            border-color: #5a67d8;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
         .stock-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -798,6 +839,18 @@
             </div>
         </div>
 
+        <div class="market-filter-bar">
+            <label for="marketFilter">🌍 Market:</label>
+            <select id="marketFilter" class="market-select" onchange="handleMarketChange()">
+                <option value="All">All Markets</option>
+                <option value="US">🇺🇸 United States</option>
+                <option value="India">🇮🇳 India (NSE/BSE)</option>
+            </select>
+            <span style="color: #6b7280; font-size: 0.9em;">
+                Filter stocks and data by market region
+            </span>
+        </div>
+
         <div class="stats-grid">
             <div class="stat-card">
                 <h3>Total Alerts (24h)</h3>
@@ -906,6 +959,13 @@
         let allNews = [];
         let searchTimeout = null;
         let currentStocks = [];
+        let selectedMarket = 'All';
+
+        function handleMarketChange() {
+            selectedMarket = document.getElementById('marketFilter').value;
+            clearFilter(); // Clear stock selection when changing market
+            updateAll(); // Refresh all data with new market filter
+        }
 
         function formatDate(dateString) {
             const date = new Date(dateString);
@@ -1073,9 +1133,10 @@
         }
 
         function updateStats() {
+            const marketParam = selectedMarket !== 'All' ? `?market=${selectedMarket}` : '';
             Promise.all([
-                fetch('/api/stats').then(r => r.json()),
-                fetch('/api/stocks').then(r => r.json())
+                fetch(`/api/stats${marketParam}`).then(r => r.json()),
+                fetch(`/api/stocks${marketParam}`).then(r => r.json())
             ])
             .then(([statsData, allStocks]) => {
                 const activeStocks = allStocks.filter(s => s.active === 1);
@@ -1208,7 +1269,8 @@
         }
 
         function loadCurrentStocks() {
-            fetch('/api/stocks')
+            const marketParam = selectedMarket !== 'All' ? `?market=${selectedMarket}` : '';
+            fetch(`/api/stocks${marketParam}`)
                 .then(response => response.json())
                 .then(stocks => {
                     currentStocks = stocks.filter(s => s.active === 1);
@@ -1219,6 +1281,7 @@
                             <div>
                                 <div class="ticker">${stock.ticker}</div>
                                 <span class="name">${stock.name}</span>
+                                ${stock.market ? `<span style="font-size: 0.75em; color: #999;">${stock.market === 'US' ? '🇺🇸' : '🇮🇳'} ${stock.market}</span>` : ''}
                             </div>
                             <button class="btn btn-danger" onclick="removeStock('${stock.ticker}')">
                                 Remove
@@ -1271,7 +1334,8 @@
         }
 
         function populateAIStockSelector() {
-            fetch('/api/stocks')
+            const marketParam = selectedMarket !== 'All' ? `?market=${selectedMarket}` : '';
+            fetch(`/api/stocks${marketParam}`)
                 .then(response => response.json())
                 .then(stocks => {
                     const activeStocks = stocks.filter(s => s.active === 1);
@@ -1283,7 +1347,8 @@
                     activeStocks.forEach(stock => {
                         const option = document.createElement('option');
                         option.value = stock.ticker;
-                        option.textContent = `${stock.ticker} - ${stock.name}`;
+                        const marketFlag = stock.market === 'US' ? '🇺🇸' : stock.market === 'India' ? '🇮🇳' : '';
+                        option.textContent = `${marketFlag} ${stock.ticker} - ${stock.name}`;
                         selector.appendChild(option);
                     });
                 })
