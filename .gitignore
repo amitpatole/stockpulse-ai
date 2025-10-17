@@ -59,3 +59,6 @@ ENV/
 
 # System files
 Thumbs.db
+
+# Old/backup documentation
+README_ENHANCED.md
