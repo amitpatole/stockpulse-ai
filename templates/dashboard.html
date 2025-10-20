@@ -312,6 +312,7 @@
             cursor: pointer;
             transition: all 0.3s;
             border: 2px solid transparent;
+            border-left: 4px solid #e5e7eb;
         }
 
         .stock-card:hover {
@@ -319,9 +320,56 @@
             box-shadow: 0 6px 12px rgba(0,0,0,0.15);
         }
 
+        /* Sentiment-based card colors */
+        .stock-card.sentiment-positive {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-left-color: #22c55e;
+            border-color: #86efac;
+        }
+
+        .stock-card.sentiment-positive .stock-ticker-name {
+            color: #15803d !important;
+        }
+
+        .stock-card.sentiment-positive .stock-sentiment {
+            color: #22c55e !important;
+            font-weight: bold;
+        }
+
+        .stock-card.sentiment-negative {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border-left-color: #ef4444;
+            border-color: #fca5a5;
+        }
+
+        .stock-card.sentiment-negative .stock-ticker-name {
+            color: #991b1b !important;
+        }
+
+        .stock-card.sentiment-negative .stock-sentiment {
+            color: #dc2626 !important;
+            font-weight: bold;
+        }
+
+        .stock-card.sentiment-neutral {
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-left-color: #6b7280;
+            border-color: #d1d5db;
+        }
+
+        .stock-card.sentiment-neutral .stock-ticker-name {
+            color: #374151 !important;
+        }
+
+        .stock-card.sentiment-neutral .stock-sentiment {
+            color: #6b7280 !important;
+            font-weight: bold;
+        }
+
         .stock-card.selected {
             border: 2px solid #667eea;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-left-color: #667eea;
         }
 
         .stock-card.selected .stock-ticker-name,
@@ -340,6 +388,23 @@
         .stock-sentiment {
             font-size: 0.9em;
             color: #6b7280;
+        }
+
+        .stock-article-count {
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .stock-card.sentiment-positive .stock-article-count {
+            color: #15803d !important;
+        }
+
+        .stock-card.sentiment-negative .stock-article-count {
+            color: #991b1b !important;
+        }
+
+        .stock-card.sentiment-neutral .stock-article-count {
+            color: #374151 !important;
         }
 
         .filter-info {
@@ -1689,13 +1754,14 @@
                     const stockData = stocks.find(s => s.ticker === stock.ticker);
                     const sentiment = stockData ? stockData.avg_sentiment : 0;
                     const sentimentLabel = sentiment > 0.3 ? '📈 Positive' : sentiment < -0.3 ? '📉 Negative' : '➡️ Neutral';
+                    const sentimentClass = sentiment > 0.3 ? 'sentiment-positive' : sentiment < -0.3 ? 'sentiment-negative' : 'sentiment-neutral';
                     const isSelected = selectedTicker === stock.ticker ? 'selected' : '';
 
                     return `
-                        <div class="stock-card ${isSelected}" data-ticker="${stock.ticker}" onclick="selectStock('${stock.ticker}')">
+                        <div class="stock-card ${sentimentClass} ${isSelected}" data-ticker="${stock.ticker}" onclick="selectStock('${stock.ticker}')">
                             <div class="stock-ticker-name">${stock.ticker}</div>
                             <div class="stock-sentiment">${sentimentLabel}</div>
-                            ${stockData ? `<div style="font-size: 0.8em; color: #999;">${stockData.total_articles} articles</div>` : '<div style="font-size: 0.8em; color: #999;">No data</div>'}
+                            ${stockData ? `<div class="stock-article-count" style="font-size: 0.8em;">${stockData.total_articles} articles</div>` : '<div class="stock-article-count" style="font-size: 0.8em;">No data</div>'}
                             <button class="chart-icon-btn" onclick="event.stopPropagation(); openChartModal('${stock.ticker}')">📊 Chart</button>
                         </div>
                     `;
