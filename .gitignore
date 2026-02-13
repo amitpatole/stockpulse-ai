@@ -47,6 +47,19 @@ build/
 .env.*.local
 *.pid
 
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+.next/
+
+# Logs directory
+logs/
+
+# Dev utilities
+seed_data.py
+take-screenshots.mjs
+
 # Backups
 *.bak
 *.backup

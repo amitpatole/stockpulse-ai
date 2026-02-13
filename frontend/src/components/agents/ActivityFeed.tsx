@@ -1,0 +1,98 @@
+'use client';
+
+import { Bot, AlertTriangle, CheckCircle, Clock, Radio } from 'lucide-react';
+import { clsx } from 'clsx';
+import { useSSE } from '@/hooks/useSSE';
+import type { SSEEvent } from '@/lib/types';
+
+function EventIcon({ type }: { type: string }) {
+  switch (type) {
+    case 'agent_status':
+      return <Bot className="h-4 w-4 text-blue-400" />;
+    case 'alert':
+      return <AlertTriangle className="h-4 w-4 text-amber-400" />;
+    case 'job_complete':
+      return <CheckCircle className="h-4 w-4 text-emerald-400" />;
+    case 'heartbeat':
+      return <Radio className="h-4 w-4 text-slate-500" />;
+    default:
+      return <Clock className="h-4 w-4 text-slate-400" />;
+  }
+}
+
+function formatEventMessage(event: SSEEvent): string {
+  const data = event.data;
+  switch (event.type) {
+    case 'agent_status':
+      return `Agent "${data.agent_name}" is now ${data.status}${data.message ? `: ${data.message}` : ''}`;
+    case 'alert':
+      return `[${data.ticker}] ${data.message}`;
+    case 'job_complete':
+      return `Job "${data.job_name}" completed (${data.status})`;
+    case 'heartbeat':
+      return 'System heartbeat';
+    default:
+      return JSON.stringify(data);
+  }
+}
+
+function formatTimestamp(ts?: string): string {
+  if (!ts) return '';
+  const date = new Date(ts);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+export default function ActivityFeed() {
+  const { connected, eventLog } = useSSE();
+
+  // Filter out heartbeat events for display
+  const visibleEvents = eventLog.filter((e) => e.type !== 'heartbeat');
+
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/50">
+      <div className="flex items-center justify-between border-b border-slate-700/50 px-4 py-3">
+        <h2 className="text-sm font-semibold text-white">Activity Feed</h2>
+        <div className="flex items-center gap-1.5">
+          <span
+            className={clsx(
+              'h-2 w-2 rounded-full',
+              connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+            )}
+          />
+          <span className="text-xs text-slate-400">{connected ? 'Live' : 'Disconnected'}</span>
+        </div>
+      </div>
+
+      <div className="max-h-96 overflow-y-auto">
+        {visibleEvents.length === 0 ? (
+          <div className="p-6 text-center">
+            <Radio className="mx-auto h-8 w-8 text-slate-600" />
+            <p className="mt-2 text-sm text-slate-500">Waiting for events...</p>
+            <p className="text-xs text-slate-600">
+              {connected ? 'Connected to event stream' : 'Connecting to event stream...'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-700/30">
+            {visibleEvents.map((event, idx) => (
+              <div key={idx} className="flex items-start gap-3 px-4 py-3">
+                <div className="mt-0.5">
+                  <EventIcon type={event.type} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-300">{formatEventMessage(event)}</p>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 capitalize">{event.type.replace('_', ' ')}</span>
+                    {event.timestamp && (
+                      <span className="text-[10px] text-slate-600">{formatTimestamp(event.timestamp)}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

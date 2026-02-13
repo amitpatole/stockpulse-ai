@@ -1,0 +1,45 @@
+# StockPulse AI v3.0 - Backend Dependencies
+# ==========================================
+
+# Web Framework
+flask==3.0.0
+flask-cors>=4.0.0
+flask-apscheduler>=1.13.0
+
+# HTTP Requests
+requests==2.31.0
+
+# RSS Feed Parsing
+feedparser==6.0.10
+
+# Web Scraping
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Reddit API (optional - for authenticated social media monitoring)
+praw==7.7.1
+
+# Stock Data (default provider)
+yfinance==0.2.33
+
+# Agent Framework - CrewAI (MIT licensed, free)
+crewai[anthropic,tools]>=0.100.0
+
+# OpenClaw bridge (WebSocket client)
+websocket-client>=1.7.0
+
+# Scheduling
+apscheduler>=3.10.0
+
+# Timezone support
+pytz>=2024.1
+
+# ==========================================
+# OPTIONAL: Premium Data Providers
+# Install only what you use
+# ==========================================
+# pip install polygon-api-client>=1.14.0    # Polygon.io
+# pip install alpha-vantage>=3.0.0          # Alpha Vantage
+# pip install finnhub-python>=2.4.0         # Finnhub
+# pip install twelvedata>=1.2.0             # Twelve Data
+# pip install alpaca-py>=0.28.0             # Alpaca

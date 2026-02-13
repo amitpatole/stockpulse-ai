@@ -1,0 +1,259 @@
+"""
+StockPulse AI v3.0 - Database Connection Manager
+Thread-safe SQLite helper with context-manager support and table initialisation.
+"""
+
+import sqlite3
+import logging
+from contextlib import contextmanager
+
+from backend.config import Config
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Connection helpers
+# ---------------------------------------------------------------------------
+
+def get_db_connection(db_path: str | None = None) -> sqlite3.Connection:
+    """Return a new SQLite connection with Row factory enabled.
+
+    Parameters
+    ----------
+    db_path : str, optional
+        Override the default database path from Config.
+
+    Notes
+    -----
+    * ``check_same_thread=False`` is required so Flask (and APScheduler)
+      threads can share the connection safely.  SQLite itself serialises
+      writes, so this is safe for the read-heavy workload of StockPulse.
+    """
+    path = db_path or Config.DB_PATH
+    conn = sqlite3.connect(path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')  # better concurrent-read perf
+    conn.execute('PRAGMA foreign_keys=ON')
+    return conn
+
+
+@contextmanager
+def db_session(db_path: str | None = None):
+    """Context manager that yields a connection and auto-closes it.
+
+    Usage::
+
+        with db_session() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT ...')
+            conn.commit()
+    """
+    conn = get_db_connection(db_path)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Table definitions
+# ---------------------------------------------------------------------------
+
+# Existing tables (carried over from stock_monitor.py / settings_manager.py)
+_EXISTING_TABLES_SQL = [
+    # --- news ---
+    """
+    CREATE TABLE IF NOT EXISTS news (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        description     TEXT,
+        url             TEXT UNIQUE,
+        source          TEXT,
+        published_date  TEXT,
+        sentiment_score REAL,
+        sentiment_label TEXT,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- alerts ---
+    """
+    CREATE TABLE IF NOT EXISTS alerts (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker      TEXT NOT NULL,
+        news_id     INTEGER,
+        alert_type  TEXT,
+        message     TEXT,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (news_id) REFERENCES news (id)
+    )
+    """,
+    # --- monitor_status ---
+    """
+    CREATE TABLE IF NOT EXISTS monitor_status (
+        id          INTEGER PRIMARY KEY,
+        last_check  TIMESTAMP,
+        status      TEXT,
+        message     TEXT
+    )
+    """,
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker   TEXT PRIMARY KEY,
+        name     TEXT,
+        market   TEXT DEFAULT 'US',
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        active   INTEGER DEFAULT 1
+    )
+    """,
+    # --- settings ---
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- ai_providers ---
+    """
+    CREATE TABLE IF NOT EXISTS ai_providers (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider_name TEXT NOT NULL,
+        api_key       TEXT NOT NULL,
+        model         TEXT,
+        is_active     INTEGER DEFAULT 0,
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+]
+
+# New v3.0 tables
+_NEW_TABLES_SQL = [
+    # --- agent_runs: tracks every AI agent execution ---
+    """
+    CREATE TABLE IF NOT EXISTS agent_runs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_name      TEXT NOT NULL,
+        framework       TEXT NOT NULL DEFAULT 'crewai',  -- 'crewai' | 'openclaw'
+        status          TEXT NOT NULL DEFAULT 'pending',  -- pending | running | completed | failed
+        input_data      TEXT,       -- JSON
+        output_data     TEXT,       -- JSON
+        tokens_used     INTEGER DEFAULT 0,
+        estimated_cost  REAL    DEFAULT 0.0,
+        duration_ms     INTEGER DEFAULT 0,
+        started_at      TIMESTAMP,
+        completed_at    TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- job_history: scheduler / cron job audit log ---
+    """
+    CREATE TABLE IF NOT EXISTS job_history (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id          TEXT NOT NULL,
+        job_name        TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'pending',  -- pending | running | completed | failed
+        result_summary  TEXT,       -- short human-readable outcome
+        agent_name      TEXT,       -- NULL when job does not involve an agent
+        duration_ms     INTEGER DEFAULT 0,
+        cost            REAL    DEFAULT 0.0,
+        executed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- data_providers_config: market-data provider registry ---
+    """
+    CREATE TABLE IF NOT EXISTS data_providers_config (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider_name         TEXT NOT NULL UNIQUE,
+        api_key               TEXT DEFAULT '',
+        is_active             INTEGER DEFAULT 1,
+        is_primary            INTEGER DEFAULT 0,
+        priority              INTEGER DEFAULT 100,  -- lower = higher priority (fallback order)
+        rate_limit_remaining  INTEGER DEFAULT -1,    -- -1 = unknown / unlimited
+        last_used             TIMESTAMP,
+        created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- research_briefs: AI-generated research reports ---
+    """
+    CREATE TABLE IF NOT EXISTS research_briefs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        content         TEXT NOT NULL,
+        agent_name      TEXT NOT NULL DEFAULT 'researcher',
+        model_used      TEXT,
+        tokens_used     INTEGER DEFAULT 0,
+        estimated_cost  REAL    DEFAULT 0.0,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- cost_tracking: per-call cost ledger ---
+    """
+    CREATE TABLE IF NOT EXISTS cost_tracking (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        date            TEXT NOT NULL,       -- YYYY-MM-DD
+        agent_name      TEXT,
+        provider_name   TEXT,
+        model           TEXT,
+        tokens_input    INTEGER DEFAULT 0,
+        tokens_output   INTEGER DEFAULT 0,
+        estimated_cost  REAL    DEFAULT 0.0,
+        job_name        TEXT,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+]
+
+# Useful indices for the new tables
+_INDEXES_SQL = [
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_status      ON agent_runs (status)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_agent       ON agent_runs (agent_name)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_started     ON agent_runs (started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_job_history_job_id     ON job_history (job_id)",
+    "CREATE INDEX IF NOT EXISTS idx_job_history_executed   ON job_history (executed_at)",
+    "CREATE INDEX IF NOT EXISTS idx_cost_tracking_date     ON cost_tracking (date)",
+    "CREATE INDEX IF NOT EXISTS idx_cost_tracking_agent    ON cost_tracking (agent_name)",
+    "CREATE INDEX IF NOT EXISTS idx_news_ticker            ON news (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_news_created           ON news (created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_created         ON alerts (created_at)",
+]
+
+
+# ---------------------------------------------------------------------------
+# Public initialisation function
+# ---------------------------------------------------------------------------
+
+def init_all_tables(db_path: str | None = None) -> None:
+    """Create every table (existing + new v3.0) and apply indexes.
+
+    Safe to call multiple times -- all statements use
+    ``CREATE TABLE IF NOT EXISTS`` / ``CREATE INDEX IF NOT EXISTS``.
+    """
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    try:
+        for sql in _EXISTING_TABLES_SQL:
+            cursor.execute(sql)
+
+        for sql in _NEW_TABLES_SQL:
+            cursor.execute(sql)
+
+        for sql in _INDEXES_SQL:
+            cursor.execute(sql)
+
+        conn.commit()
+        logger.info("All database tables and indexes initialised successfully")
+    except Exception:
+        conn.rollback()
+        logger.exception("Failed to initialise database tables")
+        raise
+    finally:
+        conn.close()

@@ -1,41 +1,106 @@
 #!/bin/bash
 
-# Stock News Monitor - Startup Script
-# This script runs both the monitor and dashboard as background processes
+# StockPulse AI v3.0 - Startup Script
+# Starts backend (Flask) and frontend (Next.js)
 
-echo "🚀 Starting Enhanced Stock News Monitor..."
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "========================================"
+echo "  StockPulse AI v3.0 - Starting..."
+echo "========================================"
 
 # Kill any existing instances
-pkill -f stock_monitor
-pkill -f dashboard.py
+pkill -f "python.*app.py" 2>/dev/null || true
+pkill -f "next-server" 2>/dev/null || true
+pkill -f "stock_monitor" 2>/dev/null || true
 
-# Start the enhanced stock monitor in background
-echo "📊 Starting news monitoring service (Enhanced with 10+ sources)..."
-nohup /usr/bin/python3.12 stock_monitor_enhanced.py > monitor.log 2>&1 &
-MONITOR_PID=$!
-echo "Monitor started with PID: $MONITOR_PID"
+sleep 1
 
-# Give it a moment to initialize
-sleep 2
+# Create logs directory
+mkdir -p logs
 
-# Start the dashboard in background
-echo "🌐 Starting web dashboard..."
-nohup /usr/bin/python3.12 dashboard.py > dashboard.log 2>&1 &
-DASHBOARD_PID=$!
-echo "Dashboard started with PID: $DASHBOARD_PID"
+# ----------------------------------------
+# Start Backend (Flask API)
+# ----------------------------------------
+echo ""
+echo "[1/2] Starting Flask backend..."
 
+if [ ! -f backend/app.py ]; then
+    echo "ERROR: backend/app.py not found!"
+    exit 1
+fi
+
+cd "$SCRIPT_DIR"
+nohup python3 -m backend.app > logs/backend.log 2>&1 &
+BACKEND_PID=$!
+echo "  Backend PID: $BACKEND_PID"
+echo "  API: http://localhost:5000"
+echo "  Logs: logs/backend.log"
+
+# Wait for backend to start
+sleep 3
+
+# Check if backend is running
+if ! kill -0 $BACKEND_PID 2>/dev/null; then
+    echo "  WARNING: Backend may have failed to start. Check logs/backend.log"
+fi
+
+# ----------------------------------------
+# Start Frontend (Next.js)
+# ----------------------------------------
 echo ""
-echo "✅ Enhanced Stock News Monitor is now running!"
+echo "[2/2] Starting Next.js frontend..."
+
+if [ -d frontend ] && [ -f frontend/package.json ]; then
+    cd "$SCRIPT_DIR/frontend"
+
+    # Install dependencies if needed
+    if [ ! -d node_modules ]; then
+        echo "  Installing frontend dependencies..."
+        npm install --silent
+    fi
+
+    # Build if no .next directory
+    if [ ! -d .next ]; then
+        echo "  Building frontend (first run)..."
+        npm run build
+    fi
+
+    nohup npm run start > "$SCRIPT_DIR/logs/frontend.log" 2>&1 &
+    FRONTEND_PID=$!
+    echo "  Frontend PID: $FRONTEND_PID"
+    echo "  Dashboard: http://localhost:3000"
+    echo "  Logs: logs/frontend.log"
+else
+    echo "  Frontend not found. Using legacy dashboard at http://localhost:5000/legacy"
+    FRONTEND_PID="N/A"
+fi
+
+cd "$SCRIPT_DIR"
+
+# ----------------------------------------
+# Summary
+# ----------------------------------------
 echo ""
-echo "📊 Monitor PID: $MONITOR_PID (logs: monitor.log)"
-echo "🌐 Dashboard PID: $DASHBOARD_PID (logs: dashboard.log)"
+echo "========================================"
+echo "  StockPulse AI v3.0 is running!"
+echo "========================================"
 echo ""
-echo "📰 Data Sources: Google News, Yahoo Finance, Seeking Alpha,"
-echo "                MarketWatch, Benzinga, Finviz, Reddit,"
-echo "                StockTwits, Twitter/X, Trump Posts/Truth Social"
+echo "  Backend API:  http://localhost:5000"
+echo "  Health check: http://localhost:5000/api/health"
+echo "  SSE stream:   http://localhost:5000/api/stream"
+if [ "$FRONTEND_PID" != "N/A" ]; then
+echo "  Dashboard:    http://localhost:3000"
+else
+echo "  Dashboard:    http://localhost:5000/legacy (legacy mode)"
+fi
 echo ""
-echo "🌐 Access the dashboard at: http://localhost:5000"
+echo "  Backend PID:  $BACKEND_PID"
+echo "  Frontend PID: $FRONTEND_PID"
 echo ""
-echo "To stop the monitor, run: ./stop.sh"
-echo "To view logs, run: tail -f monitor.log dashboard.log"
+echo "  To stop: ./stop.sh"
+echo "  To view logs: tail -f logs/backend.log logs/frontend.log"
 echo ""
