@@ -28,10 +28,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       # ── Stage 1: Build Backend with PyInstaller ──
       - name: Install Python dependencies
@@ -106,7 +106,7 @@ jobs:
       # ── Stage 3: Compile Electron TypeScript ──
       - name: Install Electron dependencies
         working-directory: electron
-        run: npm ci
+        run: npm install
 
       - name: Compile Electron TypeScript
         working-directory: electron
