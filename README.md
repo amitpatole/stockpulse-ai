@@ -39,32 +39,62 @@ StockPulse AI is a **research and monitoring tool** - it does not execute trades
 
 ### Prerequisites
 - Python 3.10+
-- Node.js 18+ (for React frontend)
+- Node.js 18+
+- npm
 
-### Installation
+### One-Command Install
+
+**Linux / macOS:**
+```bash
+git clone https://github.com/amitpatole/stockpulse-ai.git
+cd stockpulse-ai
+bash install.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/amitpatole/stockpulse-ai.git
+cd stockpulse-ai
+.\install.ps1
+```
+
+The installer checks prerequisites, creates a Python virtual environment, installs all dependencies, builds the frontend, and sets up your `.env` file.
+
+After installation:
+1. Edit `.env` and add at least one AI provider API key (Anthropic, OpenAI, Google, or xAI)
+2. Run `./run.sh` to start
+3. Open http://localhost:3000
+
+### Manual Installation
+
+<details>
+<summary>Click to expand manual steps</summary>
 
 ```bash
 git clone https://github.com/amitpatole/stockpulse-ai.git
 cd stockpulse-ai
 
-# Copy environment config
+# Environment config
 cp .env.example .env
 # Edit .env with your API keys (at minimum, set ANTHROPIC_API_KEY)
 
-# Install backend dependencies
-cd backend
-pip install -r requirements.txt
-cd ..
+# Python virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r backend/requirements.txt
 
-# Install frontend dependencies
+# Frontend
 cd frontend
 npm install
+npm run build
 cd ..
 
-# Start everything
+# Start
 chmod +x run.sh stop.sh
 ./run.sh
 ```
+
+</details>
 
 **Dashboard**: http://localhost:3000
 **API**: http://localhost:5000
