@@ -78,9 +78,8 @@ function showWizard(): void {
     },
   });
 
-  const wizardPath = app.isPackaged
-    ? path.join(__dirname, '..', 'wizard', 'index.html')
-    : path.join(__dirname, '..', '..', 'wizard', 'index.html');
+  // __dirname = dist/main/ — go up two levels to reach root (both dev and packaged)
+  const wizardPath = path.join(__dirname, '..', '..', 'wizard', 'index.html');
 
   wizardWindow.loadFile(wizardPath);
 
@@ -122,9 +121,7 @@ async function startApp(): Promise<void> {
   });
 
   // Show splash while services start
-  const splashPath = app.isPackaged
-    ? path.join(__dirname, '..', 'wizard', 'splash.html')
-    : path.join(__dirname, '..', '..', 'wizard', 'splash.html');
+  const splashPath = path.join(__dirname, '..', '..', 'wizard', 'splash.html');
 
   mainWindow.loadFile(splashPath);
   mainWindow.show();
