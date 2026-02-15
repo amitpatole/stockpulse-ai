@@ -4,9 +4,8 @@ import * as path from 'path';
 let tray: Tray | null = null;
 
 export function setupTray(mainWindow: BrowserWindow): void {
-  const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets', 'tray-icon.png')
-    : path.join(__dirname, '..', '..', 'assets', 'tray-icon.png');
+  // __dirname = dist/main/ — go up two levels to reach root (both dev and packaged)
+  const iconPath = path.join(__dirname, '..', '..', 'assets', 'tray-icon.png');
 
   tray = new Tray(nativeImage.createFromPath(iconPath));
 
