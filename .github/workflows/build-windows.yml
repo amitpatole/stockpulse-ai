@@ -55,7 +55,7 @@ jobs:
       # ── Stage 2: Build Frontend (Next.js Standalone) ──
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
       - name: Build frontend (Next.js standalone)
         working-directory: frontend
