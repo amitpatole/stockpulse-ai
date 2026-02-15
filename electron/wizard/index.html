@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StockPulse AI - Setup</title>
+  <link rel="stylesheet" href="wizard.css">
+</head>
+<body>
+  <!-- Custom titlebar -->
+  <div class="titlebar">
+    <span>StockPulse AI Setup</span>
+    <div class="titlebar-buttons">
+      <button onclick="window.stockpulse.minimizeWindow()" title="Minimize">&#x2013;</button>
+      <button onclick="window.stockpulse.closeWindow()" title="Close">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress-bar">
+    <div class="progress-steps" id="progress-steps"></div>
+  </div>
+
+  <!-- Content area -->
+  <div class="content">
+
+    <!-- Step 1: Welcome -->
+    <div id="step-1" class="step active">
+      <div class="welcome-center">
+        <span class="welcome-logo">SP</span>
+        <h2>Welcome to StockPulse AI</h2>
+        <p>
+          Multi-agent AI research desk for stock market monitoring.
+          Let's set up your AI providers, preferences, and get you started
+          in just a few steps.
+        </p>
+        <div class="feature-list">
+          <div class="feature-item"><span class="icon">&#10003;</span> 4 AI Research Agents</div>
+          <div class="feature-item"><span class="icon">&#10003;</span> 18+ Scheduled Jobs</div>
+          <div class="feature-item"><span class="icon">&#10003;</span> Real-time Dashboard</div>
+          <div class="feature-item"><span class="icon">&#10003;</span> Multi-provider AI</div>
+          <div class="feature-item"><span class="icon">&#10003;</span> Technical Indicators</div>
+          <div class="feature-item"><span class="icon">&#10003;</span> Social Monitoring</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: AI Providers -->
+    <div id="step-2" class="step">
+      <h2>AI Providers</h2>
+      <p class="subtitle">Configure at least one AI provider. You can add more later in Settings.</p>
+      <div class="provider-cards">
+        <div class="provider-card" id="card-anthropic">
+          <h3>Anthropic <span class="status" id="status-anthropic">Not set</span></h3>
+          <div class="form-group">
+            <input type="password" id="key-anthropic" placeholder="sk-ant-..." oninput="onKeyInput('anthropic')">
+          </div>
+          <button class="btn btn-test btn-sm" id="test-anthropic" onclick="testProvider('anthropic')">Test Connection</button>
+        </div>
+        <div class="provider-card" id="card-openai">
+          <h3>OpenAI <span class="status" id="status-openai">Not set</span></h3>
+          <div class="form-group">
+            <input type="password" id="key-openai" placeholder="sk-..." oninput="onKeyInput('openai')">
+          </div>
+          <button class="btn btn-test btn-sm" id="test-openai" onclick="testProvider('openai')">Test Connection</button>
+        </div>
+        <div class="provider-card" id="card-google">
+          <h3>Google AI <span class="status" id="status-google">Not set</span></h3>
+          <div class="form-group">
+            <input type="password" id="key-google" placeholder="AI..." oninput="onKeyInput('google')">
+          </div>
+          <button class="btn btn-test btn-sm" id="test-google" onclick="testProvider('google')">Test Connection</button>
+        </div>
+        <div class="provider-card" id="card-xai">
+          <h3>xAI (Grok) <span class="status" id="status-xai">Not set</span></h3>
+          <div class="form-group">
+            <input type="password" id="key-xai" placeholder="xai-..." oninput="onKeyInput('xai')">
+          </div>
+          <button class="btn btn-test btn-sm" id="test-xai" onclick="testProvider('xai')">Test Connection</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Market Timezone -->
+    <div id="step-3" class="step">
+      <h2>Market Timezone</h2>
+      <p class="subtitle">Select your primary market timezone for scheduling jobs.</p>
+      <div class="form-group">
+        <label>Timezone</label>
+        <select id="timezone">
+          <option value="US/Eastern">US Eastern (NYSE, NASDAQ)</option>
+          <option value="US/Central">US Central</option>
+          <option value="US/Pacific">US Pacific</option>
+          <option value="Asia/Kolkata">India (NSE, BSE)</option>
+          <option value="Europe/London">London (LSE)</option>
+          <option value="Asia/Tokyo">Tokyo (TSE)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step 4: Budget Limits -->
+    <div id="step-4" class="step">
+      <h2>Budget Limits</h2>
+      <p class="subtitle">Set spending limits for AI API usage. You can change these anytime in Settings.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Monthly Budget Limit ($)</label>
+          <input type="number" id="budget-monthly" value="1500" min="0" step="100">
+          <span class="form-hint">AI agents will pause if this limit is reached</span>
+        </div>
+        <div class="form-group">
+          <label>Daily Warning Threshold ($)</label>
+          <input type="number" id="budget-daily" value="75" min="0" step="5">
+          <span class="form-hint">Dashboard alert when daily spend exceeds this</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Data Providers -->
+    <div id="step-5" class="step">
+      <h2>Data Providers</h2>
+      <p class="subtitle">Optional premium data sources. Yahoo Finance (yfinance) is always available for free.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Polygon.io API Key</label>
+          <input type="password" id="key-polygon" placeholder="Optional">
+        </div>
+        <div class="form-group">
+          <label>Alpha Vantage API Key</label>
+          <input type="password" id="key-alphavantage" placeholder="Optional">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Finnhub API Key</label>
+          <input type="password" id="key-finnhub" placeholder="Optional">
+        </div>
+        <div class="form-group">
+          <label>Twelve Data API Key</label>
+          <input type="password" id="key-twelvedata" placeholder="Optional">
+        </div>
+      </div>
+      <p class="form-hint" style="margin-top: 8px;">Skip this step if you don't have premium data subscriptions. yfinance provides free delayed data for all markets.</p>
+    </div>
+
+    <!-- Step 6: Agent Framework -->
+    <div id="step-6" class="step">
+      <h2>Agent Framework</h2>
+      <p class="subtitle">Choose which framework powers your AI agents.</p>
+      <div class="radio-cards">
+        <div class="radio-card selected" id="fw-crewai" onclick="selectFramework('crewai')">
+          <h3>CrewAI <span class="badge badge-recommended">Recommended</span></h3>
+          <p>Python-native agent framework. Stable, well-tested, works out of the box. Best for most users.</p>
+        </div>
+        <div class="radio-card" id="fw-openclaw" onclick="selectFramework('openclaw')">
+          <h3>OpenClaw <span class="badge badge-experimental">Experimental</span></h3>
+          <p>WebSocket-based agent gateway. Requires separate OpenClaw installation. For advanced users.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 7: Summary -->
+    <div id="step-7" class="step">
+      <h2>Ready to Launch</h2>
+      <p class="subtitle">Review your configuration. You can change any setting later.</p>
+      <div class="summary-grid" id="summary-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- Navigation buttons -->
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" id="btn-back" onclick="prevStep()">Back</button>
+    <button class="btn btn-primary" id="btn-next" onclick="nextStep()">Get Started</button>
+  </div>
+
+  <script src="wizard.js"></script>
+</body>
+</html>

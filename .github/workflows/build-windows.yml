@@ -1,0 +1,178 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 3.0.0)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ── Stage 1: Build Backend with PyInstaller ──
+      - name: Install Python dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build backend (PyInstaller)
+        run: |
+          pyinstaller backend/stockpulse.spec --distpath build/backend --workpath build/temp/backend -y
+
+      - name: Verify backend artifact
+        run: |
+          if (!(Test-Path "build\backend\stockpulse-backend\stockpulse-backend.exe")) {
+            Write-Host "ERROR: Backend build failed — exe not found" -ForegroundColor Red
+            exit 1
+          }
+          $Size = [math]::Round((Get-ChildItem "build\backend" -Recurse | Measure-Object Length -Sum).Sum / 1MB, 1)
+          Write-Host "Backend build complete ($Size MB)" -ForegroundColor Green
+
+      # ── Stage 2: Build Frontend (Next.js Standalone) ──
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend (Next.js standalone)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Assemble frontend bundle
+        run: |
+          New-Item -ItemType Directory -Force -Path "build\frontend" | Out-Null
+
+          # Next.js may nest under workspace name
+          $StandalonePath = "frontend\.next\standalone"
+          $ServerPaths = @(
+              "$StandalonePath\server.js",
+              "$StandalonePath\frontend\server.js"
+          )
+
+          $FoundPath = $null
+          foreach ($p in $ServerPaths) {
+              if (Test-Path $p) {
+                  $FoundPath = Split-Path $p -Parent
+                  break
+              }
+          }
+
+          if (-not $FoundPath) {
+              Write-Host "ERROR: standalone server.js not found" -ForegroundColor Red
+              exit 1
+          }
+
+          Copy-Item -Recurse -Force "$FoundPath\*" "build\frontend"
+
+          # Copy static assets (standalone does not include these)
+          New-Item -ItemType Directory -Force -Path "build\frontend\.next\static" | Out-Null
+          Copy-Item -Recurse -Force "frontend\.next\static\*" "build\frontend\.next\static\"
+
+          # Copy public assets
+          if (Test-Path "frontend\public") {
+              Copy-Item -Recurse -Force "frontend\public" "build\frontend\public"
+          }
+
+      - name: Download Node.js Windows binary
+        run: |
+          $NodeVersion = "v22.14.0"
+          $NodeUrl = "https://nodejs.org/dist/$NodeVersion/win-x64/node.exe"
+          Write-Host "Downloading Node.js $NodeVersion..."
+          Invoke-WebRequest -Uri $NodeUrl -OutFile "build\frontend\node.exe"
+
+      # ── Stage 3: Compile Electron TypeScript ──
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Compile Electron TypeScript
+        working-directory: electron
+        run: npx tsc
+
+      # ── Stage 4: Package Windows Installer (NSIS) ──
+      - name: Build installer with electron-builder
+        working-directory: electron
+        run: npx electron-builder --win --config electron-builder.yml
+
+      - name: Locate installer
+        id: find-exe
+        run: |
+          $Exe = Get-ChildItem "dist-electron" -Filter "*.exe" | Select-Object -First 1
+          if ($Exe) {
+              $Size = [math]::Round($Exe.Length / 1MB, 1)
+              Write-Host "Installer: $($Exe.Name) ($Size MB)" -ForegroundColor Green
+              echo "EXE_NAME=$($Exe.Name)" >> $env:GITHUB_OUTPUT
+              echo "EXE_PATH=dist-electron\$($Exe.Name)" >> $env:GITHUB_OUTPUT
+          } else {
+              Write-Host "ERROR: No installer .exe found in dist-electron/" -ForegroundColor Red
+              exit 1
+          }
+
+      # ── Upload artifact (available for all triggers) ──
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StockPulse-AI-Windows-Installer
+          path: ${{ steps.find-exe.outputs.EXE_PATH }}
+          retention-days: 30
+
+      # ── Create GitHub Release (only on tag push) ──
+      - name: Determine version
+        id: version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          $tag = "${{ github.ref_name }}"
+          echo "TAG=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: StockPulse AI ${{ steps.version.outputs.TAG }}
+          body: |
+            ## StockPulse AI ${{ steps.version.outputs.TAG }} — Windows Desktop
+
+            ### Installation
+            1. Download `${{ steps.find-exe.outputs.EXE_NAME }}` below
+            2. Run the installer (no admin required — per-user install)
+            3. Follow the setup wizard to configure your AI providers
+            4. Launch StockPulse AI from the desktop shortcut
+
+            ### What's included
+            - Multi-agent stock research system (CrewAI)
+            - Real-time dashboard with news, analysis, and alerts
+            - Built-in AI providers: Anthropic, OpenAI, Google, xAI
+            - yfinance data (free, no API key needed)
+            - System tray support (minimize to tray)
+
+            ### Requirements
+            - Windows 10/11 (x64)
+            - Internet connection (for AI API calls and stock data)
+            - At least one AI provider API key
+          files: |
+            ${{ steps.find-exe.outputs.EXE_PATH }}
+          draft: false
+          prerelease: false

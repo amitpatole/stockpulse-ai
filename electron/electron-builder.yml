@@ -1,0 +1,47 @@
+appId: com.stockpulse.ai
+productName: StockPulse AI
+copyright: Copyright (c) 2026 StockPulse AI
+
+directories:
+  output: ../dist-electron
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - wizard/**/*
+  - assets/**/*
+
+extraResources:
+  # PyInstaller backend bundle
+  - from: ../build/backend/stockpulse-backend/
+    to: backend
+    filter:
+      - "**/*"
+  # Next.js standalone frontend + bundled Node.js
+  - from: ../build/frontend/
+    to: frontend
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.ico
+  artifactName: StockPulse-AI-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  license: ../LICENSE
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: StockPulse AI
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+publish: null

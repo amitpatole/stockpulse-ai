@@ -4,6 +4,7 @@ All settings are driven by environment variables with sensible defaults.
 """
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -13,7 +14,11 @@ class Config:
     # -------------------------------------------------------------------------
     # Base paths
     # -------------------------------------------------------------------------
-    BASE_DIR = Path(__file__).parent.parent  # stockpulse-ai/
+    if getattr(sys, 'frozen', False):
+        # PyInstaller bundle: resolve from executable location
+        BASE_DIR = Path(sys.executable).parent.parent
+    else:
+        BASE_DIR = Path(__file__).parent.parent  # stockpulse-ai/
     DB_PATH = os.getenv('DB_PATH', str(BASE_DIR / 'stock_news.db'))
 
     # -------------------------------------------------------------------------

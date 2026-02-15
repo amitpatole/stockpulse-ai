@@ -8,14 +8,14 @@ import sqlite3
 import logging
 from typing import Dict, Optional
 
-logger = logging.getLogger(__name__)
+from backend.config import Config
 
-DB_PATH = 'stock_news.db'
+logger = logging.getLogger(__name__)
 
 
 def init_settings_table():
     """Initialize settings table in database"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(Config.DB_PATH)
     cursor = conn.cursor()
 
     # Create settings table
@@ -48,7 +48,7 @@ def init_settings_table():
 def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
     """Get a setting value"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
@@ -65,7 +65,7 @@ def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
 def set_setting(key: str, value: str):
     """Set a setting value"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -83,7 +83,7 @@ def set_setting(key: str, value: str):
 def get_active_ai_provider() -> Optional[Dict]:
     """Get the currently active AI provider"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -113,7 +113,7 @@ def get_active_ai_provider() -> Optional[Dict]:
 def get_all_ai_providers() -> list:
     """Get all configured AI providers"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -142,7 +142,7 @@ def get_all_ai_providers() -> list:
 def add_ai_provider(provider_name: str, api_key: str, model: Optional[str] = None, set_active: bool = True) -> bool:
     """Add or update an AI provider"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         # If setting as active, deactivate all others
@@ -183,7 +183,7 @@ def add_ai_provider(provider_name: str, api_key: str, model: Optional[str] = Non
 def set_active_provider(provider_id: int) -> bool:
     """Set a provider as active"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         # Deactivate all
@@ -208,7 +208,7 @@ def set_active_provider(provider_id: int) -> bool:
 def delete_ai_provider(provider_id: int) -> bool:
     """Delete an AI provider"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute('DELETE FROM ai_providers WHERE id = ?', (provider_id,))

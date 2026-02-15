@@ -60,6 +60,11 @@ logs/
 seed_data.py
 take-screenshots.mjs
 
+# Electron build output
+dist-electron/
+electron/dist/
+electron/node_modules/
+
 # Backups
 *.bak
 *.backup

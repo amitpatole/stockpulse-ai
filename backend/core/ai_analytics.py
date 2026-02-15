@@ -11,13 +11,15 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import json
 
-logger = logging.getLogger(__name__)
+from backend.config import Config
 
-DB_PATH = 'stock_news.db'
+logger = logging.getLogger(__name__)
 
 
 class StockAnalytics:
-    def __init__(self, db_path=DB_PATH):
+    def __init__(self, db_path=None):
+        if db_path is None:
+            db_path = Config.DB_PATH
         self.db_path = db_path
         self.session = requests.Session()
         self.session.headers.update({

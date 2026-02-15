@@ -8,14 +8,14 @@ import requests
 import logging
 from typing import List, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from backend.config import Config
 
-DB_PATH = 'stock_news.db'
+logger = logging.getLogger(__name__)
 
 
 def init_stocks_table():
     """Initialize stocks table in database"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(Config.DB_PATH)
     cursor = conn.cursor()
 
     # Create stocks table
@@ -77,7 +77,7 @@ def init_stocks_table():
 
 def get_active_stocks() -> List[str]:
     """Get list of active stock tickers"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(Config.DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -90,7 +90,7 @@ def get_active_stocks() -> List[str]:
 
 def get_all_stocks() -> List[Dict]:
     """Get all stocks with details"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(Config.DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -104,7 +104,7 @@ def get_all_stocks() -> List[Dict]:
 def add_stock(ticker: str, name: str, market: str = 'US') -> bool:
     """Add a new stock to monitor"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         ticker = ticker.upper()
@@ -129,7 +129,7 @@ def add_stock(ticker: str, name: str, market: str = 'US') -> bool:
 def remove_stock(ticker: str) -> bool:
     """Remove a stock from monitoring (soft delete)"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
 
         ticker = ticker.upper()

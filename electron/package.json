@@ -1,0 +1,25 @@
+{
+  "name": "stockpulse-ai",
+  "version": "3.0.0",
+  "description": "StockPulse AI - Multi-agent stock research desktop app",
+  "main": "dist/main/index.js",
+  "author": "StockPulse AI",
+  "license": "GPL-3.0",
+  "scripts": {
+    "dev": "tsc && electron .",
+    "build:main": "tsc",
+    "build:installer": "electron-builder --win --config electron-builder.yml",
+    "build": "npm run build:main && npm run build:installer"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "electron-log": "^5.1.0",
+    "electron-updater": "^6.1.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.5.0",
+    "@types/node": "^20.0.0"
+  }
+}
