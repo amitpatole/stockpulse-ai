@@ -124,8 +124,9 @@ jobs:
           if ($Exe) {
               $Size = [math]::Round($Exe.Length / 1MB, 1)
               Write-Host "Installer: $($Exe.Name) ($Size MB)" -ForegroundColor Green
+              $RelPath = "dist-electron/$($Exe.Name)"
               echo "EXE_NAME=$($Exe.Name)" >> $env:GITHUB_OUTPUT
-              echo "EXE_PATH=dist-electron\$($Exe.Name)" >> $env:GITHUB_OUTPUT
+              echo "EXE_PATH=$RelPath" >> $env:GITHUB_OUTPUT
           } else {
               Write-Host "ERROR: No installer .exe found in dist-electron/" -ForegroundColor Red
               exit 1
