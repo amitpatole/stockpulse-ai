@@ -145,9 +145,12 @@ _NEW_TABLES_SQL = [
         status          TEXT NOT NULL DEFAULT 'pending',  -- pending | running | completed | failed
         input_data      TEXT,       -- JSON
         output_data     TEXT,       -- JSON
-        tokens_used     INTEGER DEFAULT 0,
+        tokens_input    INTEGER DEFAULT 0,
+        tokens_output   INTEGER DEFAULT 0,
         estimated_cost  REAL    DEFAULT 0.0,
         duration_ms     INTEGER DEFAULT 0,
+        error           TEXT,
+        metadata        TEXT,       -- JSON
         started_at      TIMESTAMP,
         completed_at    TIMESTAMP,
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -231,6 +234,35 @@ _INDEXES_SQL = [
 # Public initialisation function
 # ---------------------------------------------------------------------------
 
+def _migrate_agent_runs(cursor) -> None:
+    """Migrate agent_runs from v3.0.0 schema (tokens_used) to v3.0.1 (tokens_input/tokens_output).
+
+    Safe to call multiple times — silently skips if columns already exist.
+    """
+    # Check existing columns
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(agent_runs)").fetchall()}
+    if not cols:
+        return  # table doesn't exist yet, CREATE TABLE will handle it
+
+    migrations = []
+    if 'tokens_input' not in cols:
+        migrations.append("ALTER TABLE agent_runs ADD COLUMN tokens_input INTEGER DEFAULT 0")
+    if 'tokens_output' not in cols:
+        migrations.append("ALTER TABLE agent_runs ADD COLUMN tokens_output INTEGER DEFAULT 0")
+    if 'error' not in cols:
+        migrations.append("ALTER TABLE agent_runs ADD COLUMN error TEXT")
+    if 'metadata' not in cols:
+        migrations.append("ALTER TABLE agent_runs ADD COLUMN metadata TEXT")
+
+    # Copy data from old tokens_used into tokens_input if migrating
+    if 'tokens_used' in cols and 'tokens_input' not in cols:
+        migrations.append("UPDATE agent_runs SET tokens_input = tokens_used WHERE tokens_used > 0")
+
+    for sql in migrations:
+        cursor.execute(sql)
+        logger.info(f"Migration applied: {sql}")
+
+
 def init_all_tables(db_path: str | None = None) -> None:
     """Create every table (existing + new v3.0) and apply indexes.
 
@@ -242,6 +274,9 @@ def init_all_tables(db_path: str | None = None) -> None:
     try:
         for sql in _EXISTING_TABLES_SQL:
             cursor.execute(sql)
+
+        # Migrate existing agent_runs before CREATE TABLE (which is a no-op if table exists)
+        _migrate_agent_runs(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)
