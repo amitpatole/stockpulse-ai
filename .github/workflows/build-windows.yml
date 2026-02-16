@@ -112,10 +112,19 @@ jobs:
         working-directory: electron
         run: npx tsc
 
-      # ── Stage 4: Package Windows Installer (NSIS) ──
+      # ── Stage 4: Package Windows Installer (NSIS) + Publish ──
       - name: Build installer with electron-builder
         working-directory: electron
-        run: npx electron-builder --win --config electron-builder.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ("${{ github.ref }}".StartsWith("refs/tags/")) {
+            Write-Host "Tag build detected — publishing to GitHub Releases" -ForegroundColor Green
+            npx electron-builder --win --config electron-builder.yml --publish always
+          } else {
+            Write-Host "Non-tag build — artifact only" -ForegroundColor Yellow
+            npx electron-builder --win --config electron-builder.yml
+          }
 
       - name: Locate installer
         id: find-exe
@@ -124,9 +133,8 @@ jobs:
           if ($Exe) {
               $Size = [math]::Round($Exe.Length / 1MB, 1)
               Write-Host "Installer: $($Exe.Name) ($Size MB)" -ForegroundColor Green
-              $RelPath = "dist-electron/$($Exe.Name)"
               echo "EXE_NAME=$($Exe.Name)" >> $env:GITHUB_OUTPUT
-              echo "EXE_PATH=$RelPath" >> $env:GITHUB_OUTPUT
+              echo "EXE_PATH=dist-electron/$($Exe.Name)" >> $env:GITHUB_OUTPUT
           } else {
               Write-Host "ERROR: No installer .exe found in dist-electron/" -ForegroundColor Red
               exit 1
@@ -139,41 +147,3 @@ jobs:
           name: StockPulse-AI-Windows-Installer
           path: ${{ steps.find-exe.outputs.EXE_PATH }}
           retention-days: 30
-
-      # ── Create GitHub Release (only on tag push) ──
-      - name: Determine version
-        id: version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          $tag = "${{ github.ref_name }}"
-          echo "TAG=$tag" >> $env:GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: StockPulse AI ${{ steps.version.outputs.TAG }}
-          body: |
-            ## StockPulse AI ${{ steps.version.outputs.TAG }} — Windows Desktop
-
-            ### Installation
-            1. Download `${{ steps.find-exe.outputs.EXE_NAME }}` below
-            2. Run the installer (no admin required — per-user install)
-            3. Follow the setup wizard to configure your AI providers
-            4. Launch StockPulse AI from the desktop shortcut
-
-            ### What's included
-            - Multi-agent stock research system (CrewAI)
-            - Real-time dashboard with news, analysis, and alerts
-            - Built-in AI providers: Anthropic, OpenAI, Google, xAI
-            - yfinance data (free, no API key needed)
-            - System tray support (minimize to tray)
-
-            ### Requirements
-            - Windows 10/11 (x64)
-            - Internet connection (for AI API calls and stock data)
-            - At least one AI provider API key
-          files: |
-            ${{ steps.find-exe.outputs.EXE_PATH }}
-          draft: false
-          prerelease: false

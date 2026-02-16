@@ -44,4 +44,8 @@ nsis:
   deleteAppDataOnUninstall: false
   runAfterFinish: true
 
-publish: null
+publish:
+  provider: github
+  owner: amitpatole
+  repo: stockpulse-ai
+  releaseType: release
