@@ -11,6 +11,7 @@ from backend.jobs.reddit_scanner import run_reddit_scan
 from backend.jobs.daily_summary import run_daily_summary
 from backend.jobs.weekly_review import run_weekly_review
 from backend.jobs.regime_check import run_regime_check
+from backend.jobs.download_tracking import run_download_tracking
 
 
 def register_all_jobs(scheduler_manager) -> None:
@@ -109,6 +110,20 @@ def register_all_jobs(scheduler_manager) -> None:
         hours=2,
     )
 
+    # ---- Download Tracking: Daily at 9:00 AM ET ----
+    scheduler_manager.register_job(
+        job_id='download_tracking',
+        func=run_download_tracking,
+        trigger='cron',
+        name='Download Tracking',
+        description=(
+            'Tracks repository clone statistics from GitHub. '
+            'Provides daily reports on unique downloads and repository popularity.'
+        ),
+        hour=9,
+        minute=0,
+    )
+
 
 __all__ = [
     'register_all_jobs',
@@ -118,4 +133,5 @@ __all__ = [
     'run_daily_summary',
     'run_weekly_review',
     'run_regime_check',
+    'run_download_tracking',
 ]

@@ -19,6 +19,7 @@ from backend.agents.scanner_agent import ScannerAgent, SCANNER_CONFIG
 from backend.agents.researcher_agent import ResearcherAgent, RESEARCHER_CONFIG
 from backend.agents.regime_agent import RegimeAgent, REGIME_CONFIG
 from backend.agents.investigator_agent import InvestigatorAgent, INVESTIGATOR_CONFIG
+from backend.agents.download_tracker_agent import DownloadTrackerAgent, DOWNLOAD_TRACKER_CONFIG
 
 from backend.agents.crewai_engine import StockPulseCrewEngine
 from backend.agents.openclaw_engine import OpenClawBridge
@@ -45,11 +46,13 @@ __all__ = [
     "ResearcherAgent",
     "RegimeAgent",
     "InvestigatorAgent",
+    "DownloadTrackerAgent",
     # Agent default configs
     "SCANNER_CONFIG",
     "RESEARCHER_CONFIG",
     "REGIME_CONFIG",
     "INVESTIGATOR_CONFIG",
+    "DOWNLOAD_TRACKER_CONFIG",
     # Engines
     "StockPulseCrewEngine",
     "OpenClawBridge",
@@ -64,7 +67,7 @@ __all__ = [
 
 
 def create_default_agents(db_path: str = "stock_news.db") -> AgentRegistry:
-    """Create and register all four default StockPulse agents.
+    """Create and register all default StockPulse agents.
 
     Returns an :class:`AgentRegistry` with the following agents registered:
 
@@ -72,6 +75,7 @@ def create_default_agents(db_path: str = "stock_news.db") -> AgentRegistry:
     - **researcher** -- Research Analyst (Sonnet 4.5) -- deep research briefs
     - **regime** -- Market Regime Analyst (Sonnet 4.5) -- macro regime classification
     - **investigator** -- Social Media Investigator (Haiku 4.5) -- Reddit/social scanning
+    - **download_tracker** -- Download Tracker (Haiku 4.5) -- repository analytics
 
     The registry persists run history to *db_path* (default: ``stock_news.db``).
     """
@@ -92,6 +96,10 @@ def create_default_agents(db_path: str = "stock_news.db") -> AgentRegistry:
     # --- Investigator Agent (Haiku 4.5 -- Reddit/social scanning) ---
     investigator = InvestigatorAgent()
     registry.register(investigator)
+
+    # --- Download Tracker Agent (Haiku 4.5 -- repository analytics) ---
+    download_tracker = DownloadTrackerAgent()
+    registry.register(download_tracker)
 
     logger.info(
         f"Registered {len(registry.list_agents())} default agents: "

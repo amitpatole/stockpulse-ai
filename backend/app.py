@@ -204,6 +204,7 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.chat':             'chat_bp',
         'backend.api.settings':         'settings_bp',
         'backend.api.scheduler_routes': 'scheduler_bp',
+        'backend.api.downloads':        'downloads_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():
