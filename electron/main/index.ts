@@ -15,8 +15,9 @@ import log from 'electron-log';
 import { getAppDataPath, isFirstRun, getLogsPath } from './paths';
 import { BackendManager } from './backend-manager';
 import { FrontendManager } from './frontend-manager';
-import { setupTray } from './tray';
+import { setupTray, rebuildTrayMenu } from './tray';
 import { registerIpcHandlers } from './ipc-handlers';
+import { initAutoUpdater, checkForUpdatesManual, setOnStatusChange } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let wizardWindow: BrowserWindow | null = null;
@@ -104,6 +105,13 @@ function buildAppMenu(): void {
     {
       label: 'Help',
       submenu: [
+        {
+          label: 'Check for Updates...',
+          click: () => {
+            checkForUpdatesManual();
+          },
+        },
+        { type: 'separator' },
         {
           label: 'About StockPulse AI',
           click: () => {
@@ -268,6 +276,10 @@ async function startApp(): Promise<void> {
 
     // Setup system tray
     setupTray(mainWindow);
+
+    // Initialize auto-updater and wire status changes to tray
+    initAutoUpdater(mainWindow);
+    setOnStatusChange(() => rebuildTrayMenu());
 
     log.info('StockPulse AI is running');
   } catch (err) {
