@@ -19,6 +19,7 @@ from backend.agents.scanner_agent import ScannerAgent, SCANNER_CONFIG
 from backend.agents.researcher_agent import ResearcherAgent, RESEARCHER_CONFIG
 from backend.agents.regime_agent import RegimeAgent, REGIME_CONFIG
 from backend.agents.investigator_agent import InvestigatorAgent, INVESTIGATOR_CONFIG
+from backend.agents.download_tracker_agent import DownloadTrackerAgent, DOWNLOAD_TRACKER_CONFIG
 
 from backend.agents.crewai_engine import StockPulseCrewEngine
 from backend.agents.openclaw_engine import OpenClawBridge
@@ -45,11 +46,13 @@ __all__ = [
     "ResearcherAgent",
     "RegimeAgent",
     "InvestigatorAgent",
+    "DownloadTrackerAgent",
     # Agent default configs
     "SCANNER_CONFIG",
     "RESEARCHER_CONFIG",
     "REGIME_CONFIG",
     "INVESTIGATOR_CONFIG",
+    "DOWNLOAD_TRACKER_CONFIG",
     # Engines
     "StockPulseCrewEngine",
     "OpenClawBridge",
@@ -92,6 +95,10 @@ def create_default_agents(db_path: str = "stock_news.db") -> AgentRegistry:
     # --- Investigator Agent (Haiku 4.5 -- Reddit/social scanning) ---
     investigator = InvestigatorAgent()
     registry.register(investigator)
+
+    # --- Download Tracker Agent (Haiku 4.5 -- GitHub analytics) ---
+    download_tracker = DownloadTrackerAgent()
+    registry.register(download_tracker)
 
     logger.info(
         f"Registered {len(registry.list_agents())} default agents: "
