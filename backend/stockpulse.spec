@@ -8,6 +8,10 @@ import os
 block_cipher = None
 root_dir = os.path.abspath('.')
 
+# Locate crewai package directory for bundling data files
+import crewai as _crewai
+_crewai_dir = os.path.dirname(_crewai.__file__)
+
 a = Analysis(
     [os.path.join(root_dir, 'backend', 'desktop_entry.py')],
     pathex=[root_dir],
@@ -15,6 +19,8 @@ a = Analysis(
     datas=[
         (os.path.join(root_dir, 'templates'), 'templates'),
         (os.path.join(root_dir, '.env.example'), '.'),
+        # CrewAI translations (required at runtime)
+        (os.path.join(_crewai_dir, 'translations'), os.path.join('crewai', 'translations')),
     ],
     hiddenimports=[
         # Flask and extensions

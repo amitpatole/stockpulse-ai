@@ -49,7 +49,7 @@ export function setupTray(mainWindow: BrowserWindow): void {
     },
   ]);
 
-  tray.setToolTip('StockPulse AI v3.0');
+  tray.setToolTip(`StockPulse AI v${app.getVersion()}`);
   tray.setContextMenu(contextMenu);
 
   // Click tray icon to show window
