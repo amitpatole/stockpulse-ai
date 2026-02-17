@@ -98,6 +98,11 @@ class Config:
     REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET', '')
 
     # -------------------------------------------------------------------------
+    # GitHub (for repository analytics)
+    # -------------------------------------------------------------------------
+    GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
+
+    # -------------------------------------------------------------------------
     # Agent framework
     # -------------------------------------------------------------------------
     DEFAULT_AGENT_FRAMEWORK = os.getenv(
