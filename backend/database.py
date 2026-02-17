@@ -213,6 +213,30 @@ _NEW_TABLES_SQL = [
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    # --- download_stats: aggregate repository download statistics ---
+    """
+    CREATE TABLE IF NOT EXISTS download_stats (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_owner      TEXT NOT NULL,
+        repo_name       TEXT NOT NULL,
+        total_clones    INTEGER DEFAULT 0,
+        unique_clones   INTEGER DEFAULT 0,
+        period_start    TIMESTAMP,
+        period_end      TIMESTAMP,
+        recorded_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- download_daily: daily breakdown of repository downloads ---
+    """
+    CREATE TABLE IF NOT EXISTS download_daily (
+        repo_owner      TEXT NOT NULL,
+        repo_name       TEXT NOT NULL,
+        date            TEXT NOT NULL,       -- YYYY-MM-DD
+        clones          INTEGER DEFAULT 0,
+        unique_clones   INTEGER DEFAULT 0,
+        PRIMARY KEY (repo_owner, repo_name, date)
+    )
+    """,
 ]
 
 # Useful indices for the new tables
@@ -227,6 +251,9 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_news_ticker            ON news (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_news_created           ON news (created_at)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_created         ON alerts (created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_download_stats_repo    ON download_stats (repo_owner, repo_name)",
+    "CREATE INDEX IF NOT EXISTS idx_download_stats_date    ON download_stats (recorded_at)",
+    "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
 ]
 
 

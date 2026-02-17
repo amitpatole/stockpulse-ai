@@ -118,6 +118,7 @@ docker compose up -d
 | Researcher | Sonnet 4.5 | Generate comprehensive research briefs | On-demand |
 | Regime | Sonnet 4.5 | Market regime classification (risk-on/off) | Every 2 hours |
 | Investigator | Haiku 4.5 | Reddit/social media monitoring | Hourly |
+| Download Tracker | Haiku 4.5 | Track GitHub repository downloads via API | Daily at 9:00 AM ET |
 
 Agents can be triggered manually via the dashboard or run on automated schedules.
 
@@ -218,6 +219,13 @@ tickerpulse-ai/
 | `/api/agents/runs` | GET | Agent run history |
 | `/api/agents/costs` | GET | Cost summary |
 
+### Downloads
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/downloads/stats` | GET | Aggregate download statistics |
+| `/api/downloads/daily` | GET | Daily breakdown of downloads |
+| `/api/downloads/summary` | GET | Summary with trends and totals |
+
 ### Scheduler
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -241,6 +249,7 @@ tickerpulse-ai/
 | Researcher (Sonnet, on-demand) | $2-5 | $44-110 |
 | Regime (Sonnet, 4x/day) | $1-3 | $22-66 |
 | Investigator (Haiku, hourly) | $1-3 | $22-66 |
+| Download Tracker (Haiku, daily) | <$0.01 | <$0.30 |
 | **Total** | **$17-36** | **$373-792** |
 
 Budget limits are configurable via `MONTHLY_BUDGET_LIMIT` and `DAILY_BUDGET_WARNING`.
@@ -248,6 +257,19 @@ Budget limits are configurable via `MONTHLY_BUDGET_LIMIT` and `DAILY_BUDGET_WARN
 ## Configuration
 
 All settings can be configured via environment variables (`.env` file) or the Settings page in the dashboard. See `.env.example` for all available options.
+
+### GitHub Token for Download Tracking
+
+To enable repository download tracking via the Download Tracker agent, you need to provide a GitHub personal access token:
+
+1. Create a GitHub personal access token with `repo` scope at https://github.com/settings/tokens
+2. Add it to your `.env` file:
+   ```
+   GITHUB_TOKEN=your_github_token_here
+   ```
+3. The Download Tracker agent will run daily at 9:00 AM ET to collect clone statistics
+
+Without a GitHub token, the Download Tracker agent will be disabled.
 
 ## Inspiration & Acknowledgment
 
