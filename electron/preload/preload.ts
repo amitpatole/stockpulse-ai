@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-contextBridge.exposeInMainWorld('stockpulse', {
+contextBridge.exposeInMainWorld('tickerpulse', {
   /**
    * Test an AI provider API key from the wizard.
    */

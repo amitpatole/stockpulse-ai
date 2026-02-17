@@ -1,5 +1,5 @@
 """
-StockPulse AI - Desktop Entry Point
+TickerPulse AI - Desktop Entry Point
 Used by PyInstaller for the standalone Windows build.
 """
 

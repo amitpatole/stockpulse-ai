@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-StockPulse AI - Enhanced Stock News Monitor
+TickerPulse AI - Enhanced Stock News Monitor
 Tracks news from ALL available free sources with AI-powered analysis
 24/7 market intelligence and sentiment tracking
 """
@@ -726,7 +726,7 @@ class EnhancedStockNewsMonitor:
 
     def run(self):
         """Main monitoring loop - runs 24x7"""
-        logger.info("🚀 StockPulse AI - Enhanced Stock News Monitor started!")
+        logger.info("🚀 TickerPulse AI - Enhanced Stock News Monitor started!")
         logger.info(f"Check interval: {CHECK_INTERVAL} seconds")
         logger.info(f"Global Sources: Google News, Yahoo Finance, Seeking Alpha, MarketWatch,")
         logger.info(f"                Benzinga, Finviz, Reddit, StockTwits, Twitter/X")

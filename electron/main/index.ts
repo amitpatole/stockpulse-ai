@@ -1,5 +1,5 @@
 /**
- * StockPulse AI - Electron Main Process
+ * TickerPulse AI - Electron Main Process
  *
  * Manages the application lifecycle:
  * 1. First run → setup wizard
@@ -113,12 +113,12 @@ function buildAppMenu(): void {
         },
         { type: 'separator' },
         {
-          label: 'About StockPulse AI',
+          label: 'About TickerPulse AI',
           click: () => {
             dialog.showMessageBox({
               type: 'info',
-              title: 'About StockPulse AI',
-              message: 'StockPulse AI',
+              title: 'About TickerPulse AI',
+              message: 'TickerPulse AI',
               detail: [
                 `Version: ${app.getVersion()}`,
                 '',
@@ -160,7 +160,7 @@ function buildAppMenu(): void {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
-  log.info('StockPulse AI starting...');
+  log.info('TickerPulse AI starting...');
 
   buildAppMenu();
   registerIpcHandlers();
@@ -241,7 +241,7 @@ async function startApp(): Promise<void> {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: 'StockPulse AI',
+    title: 'TickerPulse AI',
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -281,7 +281,7 @@ async function startApp(): Promise<void> {
     initAutoUpdater(mainWindow);
     setOnStatusChange(() => rebuildTrayMenu());
 
-    log.info('StockPulse AI is running');
+    log.info('TickerPulse AI is running');
   } catch (err) {
     log.error('Failed to start services:', err);
     showErrorPage(String(err));
@@ -304,7 +304,7 @@ function showErrorPage(errorMessage: string): void {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>StockPulse AI - Startup Error</title>
+  <title>TickerPulse AI - Startup Error</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -349,14 +349,14 @@ function showErrorPage(errorMessage: string): void {
 </head>
 <body>
   <h1>Startup Error</h1>
-  <p>StockPulse AI failed to start its services.</p>
+  <p>TickerPulse AI failed to start its services.</p>
   <pre>${errorMessage.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
   <p>Check the logs at: <span class="path">${logsDir.replace(/\\/g, '\\\\')}</span></p>
   <div class="hint">
     <h3>Troubleshooting</h3>
     <ul>
       <li>Check that ports 5000 and 3000 are not in use by another application</li>
-      <li>Try restarting StockPulse AI</li>
+      <li>Try restarting TickerPulse AI</li>
       <li>Check the electron.log file in the logs folder for details</li>
       <li>Use Help > Open Logs Folder from the menu to view logs</li>
     </ul>

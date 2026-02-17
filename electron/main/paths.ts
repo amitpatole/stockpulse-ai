@@ -3,11 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 /**
- * User data directory: %APPDATA%/StockPulse/
+ * User data directory: %APPDATA%/TickerPulse/
  * Stores .env, database, logs, and setup flag.
  */
 export function getAppDataPath(): string {
-  const p = path.join(app.getPath('appData'), 'StockPulse');
+  const p = path.join(app.getPath('appData'), 'TickerPulse');
   fs.mkdirSync(p, { recursive: true });
   return p;
 }
@@ -15,13 +15,13 @@ export function getAppDataPath(): string {
 /**
  * Resolve a path relative to the app's bundled resources.
  * In production: process.resourcesPath (inside the ASAR/extraResources)
- * In development: relative to the project root (stockpulse-ai/)
+ * In development: relative to the project root (tickerpulse-ai/)
  */
 export function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, relativePath);
   }
-  // Dev mode: electron/ is one level inside stockpulse-ai/
+  // Dev mode: electron/ is one level inside tickerpulse-ai/
   return path.join(__dirname, '..', '..', '..', relativePath);
 }
 

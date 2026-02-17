@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Researcher Agent
+TickerPulse AI v3.0 - Researcher Agent
 Deep-reasoning research analyst using Sonnet 4.5.
 Generates comprehensive markdown research briefs for individual stocks.
 Works standalone (direct API calls) even without CrewAI.

@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Research API Routes
+TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs.
 """
 

@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Reddit Scanner Tool (CrewAI Compatible)
+TickerPulse AI v3.0 - Reddit Scanner Tool (CrewAI Compatible)
 Uses Reddit's public .json endpoints -- NO API key or PRAW dependency needed.
 Rate limit: 100 requests per 10 minutes (respected with time.sleep).
 """

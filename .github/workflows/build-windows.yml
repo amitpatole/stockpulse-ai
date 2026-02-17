@@ -41,11 +41,11 @@ jobs:
 
       - name: Build backend (PyInstaller)
         run: |
-          pyinstaller backend/stockpulse.spec --distpath build/backend --workpath build/temp/backend -y
+          pyinstaller backend/tickerpulse.spec --distpath build/backend --workpath build/temp/backend -y
 
       - name: Verify backend artifact
         run: |
-          if (!(Test-Path "build\backend\stockpulse-backend\stockpulse-backend.exe")) {
+          if (!(Test-Path "build\backend\tickerpulse-backend\tickerpulse-backend.exe")) {
             Write-Host "ERROR: Backend build failed — exe not found" -ForegroundColor Red
             exit 1
           }
@@ -144,6 +144,6 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: StockPulse-AI-Windows-Installer
+          name: TickerPulse-AI-Windows-Installer
           path: ${{ steps.find-exe.outputs.EXE_PATH }}
           retention-days: 30

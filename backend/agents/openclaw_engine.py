@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - OpenClaw WebSocket Bridge
+TickerPulse AI v3.0 - OpenClaw WebSocket Bridge
 Connects to a local OpenClaw Gateway via WebSocket for agent task delegation.
 Gracefully falls back if OpenClaw is not running or websocket-client is not installed.
 """
@@ -162,7 +162,7 @@ class OpenClawBridge:
                 "task_description": task_description,
                 "inputs": inputs or {},
                 "metadata": {
-                    "source": "stockpulse-ai",
+                    "source": "tickerpulse-ai",
                     "timestamp": datetime.utcnow().isoformat(),
                 },
             },

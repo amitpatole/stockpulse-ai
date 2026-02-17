@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# StockPulse AI v3.0 - Installer
+# TickerPulse AI v3.0 - Installer
 # Linux / macOS
 # ============================================================
 #
@@ -39,7 +39,7 @@ fatal() { err "$@"; exit 1; }
 # ── Banner ─────────────────────────────────────────────────
 echo >&2
 echo "${BOLD}========================================${RESET}" >&2
-echo "${BOLD}  StockPulse AI v3.0 — Installer${RESET}" >&2
+echo "${BOLD}  TickerPulse AI v3.0 — Installer${RESET}" >&2
 echo "${BOLD}========================================${RESET}" >&2
 echo >&2
 
@@ -113,7 +113,7 @@ if [ "$MISSING" -ne 0 ]; then
 fi
 
 # ── Determine Install Directory ───────────────────────────
-REPO_URL="https://github.com/amitpatole/stockpulse-ai.git"
+REPO_URL="https://github.com/amitpatole/tickerpulse-ai.git"
 
 if [ -f "backend/app.py" ] && [ -f "frontend/package.json" ]; then
     # Already inside the repo
@@ -124,9 +124,9 @@ else
     if ! command -v git >/dev/null 2>&1; then
         fatal "git is required to clone the repo. Install it from https://git-scm.com/"
     fi
-    info "Cloning StockPulse AI..."
-    git clone "$REPO_URL" stockpulse-ai
-    PROJECT_DIR="$(pwd)/stockpulse-ai"
+    info "Cloning TickerPulse AI..."
+    git clone "$REPO_URL" tickerpulse-ai
+    PROJECT_DIR="$(pwd)/tickerpulse-ai"
     cd "$PROJECT_DIR"
     ok "Cloned to $PROJECT_DIR"
 fi

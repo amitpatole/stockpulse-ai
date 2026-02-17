@@ -1,5 +1,5 @@
 """
-Custom Data Provider Template for StockPulse AI v3.0
+Custom Data Provider Template for TickerPulse AI v3.0
 
 Copy this file and rename it to create your own data provider.
 For example: ``my_broker_provider.py``

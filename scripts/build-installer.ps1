@@ -1,5 +1,5 @@
-# StockPulse AI - Package Windows Installer (NSIS)
-# Produces: dist-electron/StockPulse-AI-Setup-3.0.0.exe
+# TickerPulse AI - Package Windows Installer (NSIS)
+# Produces: dist-electron/TickerPulse-AI-Setup-3.0.0.exe
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
@@ -7,7 +7,7 @@ $ProjectRoot = Split-Path $PSScriptRoot -Parent
 Write-Host "[installer] Packaging with electron-builder..." -ForegroundColor Cyan
 
 # Verify build artifacts exist
-$BackendExe = "$ProjectRoot\build\backend\stockpulse-backend\stockpulse-backend.exe"
+$BackendExe = "$ProjectRoot\build\backend\tickerpulse-backend\tickerpulse-backend.exe"
 $FrontendServer = "$ProjectRoot\build\frontend\server.js"
 $ElectronDist = "$ProjectRoot\electron\dist\main\index.js"
 

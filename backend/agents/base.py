@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Agent Base Layer
+TickerPulse AI v3.0 - Agent Base Layer
 Agent registry, base classes, and result tracking.
 """
 
@@ -68,7 +68,7 @@ class AgentResult:
 
 
 class BaseAgent(ABC):
-    """Abstract base class for all StockPulse agents"""
+    """Abstract base class for all TickerPulse agents"""
 
     def __init__(self, config: AgentConfig):
         self.config = config

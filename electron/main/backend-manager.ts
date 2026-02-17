@@ -32,7 +32,7 @@ export class BackendManager {
     let args: string[];
 
     // Detect if running packaged (PyInstaller exe) or dev mode
-    const packagedBackend = getResourcePath('backend/stockpulse-backend.exe');
+    const packagedBackend = getResourcePath('backend/tickerpulse-backend.exe');
     const { existsSync } = await import('fs');
 
     if (existsSync(packagedBackend)) {

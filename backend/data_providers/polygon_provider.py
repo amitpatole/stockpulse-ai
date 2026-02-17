@@ -1,5 +1,5 @@
 """
-Polygon.io Data Provider for StockPulse AI v3.0
+Polygon.io Data Provider for TickerPulse AI v3.0
 
 Premium provider using the Polygon.io REST API.
 Uses the official ``polygon-api-client`` library when available,
@@ -34,7 +34,7 @@ try:
 except ImportError:
     HAS_POLYGON_LIB = False
 
-# Map StockPulse period strings to (multiplier, timespan, days_back) tuples
+# Map TickerPulse period strings to (multiplier, timespan, days_back) tuples
 # that the Polygon /aggs/ticker endpoint expects.
 _PERIOD_MAP: Dict[str, tuple] = {
     '1d':  (5,  'minute', 1),

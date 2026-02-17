@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Scanner Agent
+TickerPulse AI v3.0 - Scanner Agent
 Fast, cheap scanning of all monitored stocks using Haiku 4.5.
 Computes technical signals, ranks by opportunity, returns scored list.
 Works standalone (direct API calls) even without CrewAI.

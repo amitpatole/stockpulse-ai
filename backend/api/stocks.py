@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Stocks API Routes
+TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, and search stocks.
 """
 

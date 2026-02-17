@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - News Fetcher Tool (CrewAI Compatible)
+TickerPulse AI v3.0 - News Fetcher Tool (CrewAI Compatible)
 Wraps the EnhancedStockNewsMonitor's fetch methods as a CrewAI tool.
 Fetches from Google News, Yahoo Finance, Seeking Alpha, MarketWatch,
 Benzinga, Finviz, StockTwits, and returns formatted results with sentiment.

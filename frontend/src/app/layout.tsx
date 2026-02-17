@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StockPulse AI v3.0",
+  title: "TickerPulse AI v3.0",
   description: "Multi-agent AI stock research and monitoring dashboard",
 };
 

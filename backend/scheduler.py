@@ -1,5 +1,5 @@
 """
-APScheduler configuration and management for StockPulse AI.
+APScheduler configuration and management for TickerPulse AI.
 Sets up job store (SQLite), job defaults, and exposes helpers.
 """
 import logging
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 class SchedulerManager:
-    """Manages all scheduled jobs for StockPulse AI."""
+    """Manages all scheduled jobs for TickerPulse AI."""
 
     def __init__(self, app=None):
         self.scheduler = None

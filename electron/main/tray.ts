@@ -13,7 +13,7 @@ export function setupTray(mainWindow: BrowserWindow): void {
   const iconPath = path.join(__dirname, '..', '..', 'assets', 'tray-icon.png');
 
   tray = new Tray(nativeImage.createFromPath(iconPath));
-  tray.setToolTip(`StockPulse AI v${app.getVersion()}`);
+  tray.setToolTip(`TickerPulse AI v${app.getVersion()}`);
 
   buildTrayMenu();
 
@@ -44,7 +44,7 @@ function buildTrayMenu(): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show StockPulse AI',
+      label: 'Show TickerPulse AI',
       click: () => {
         mainWindow.show();
         mainWindow.focus();

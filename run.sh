@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# StockPulse AI v3.0 - Startup Script
+# TickerPulse AI v3.0 - Startup Script
 # Starts backend (Flask) and frontend (Next.js)
 
 set -e
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "========================================"
-echo "  StockPulse AI v3.0 - Starting..."
+echo "  TickerPulse AI v3.0 - Starting..."
 echo "========================================"
 
 # Kill any existing instances
@@ -86,7 +86,7 @@ cd "$SCRIPT_DIR"
 # ----------------------------------------
 echo ""
 echo "========================================"
-echo "  StockPulse AI v3.0 is running!"
+echo "  TickerPulse AI v3.0 is running!"
 echo "========================================"
 echo ""
 echo "  Backend API:  http://localhost:5000"

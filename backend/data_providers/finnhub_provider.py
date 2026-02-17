@@ -1,5 +1,5 @@
 """
-Finnhub Data Provider for StockPulse AI v3.0
+Finnhub Data Provider for TickerPulse AI v3.0
 
 Uses direct HTTP requests to the Finnhub REST API (https://finnhub.io).
 Free tier: 60 calls/minute, real-time US quotes.
@@ -25,7 +25,7 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
-# Map StockPulse period strings to Finnhub candle resolution + seconds-back
+# Map TickerPulse period strings to Finnhub candle resolution + seconds-back
 _RESOLUTION_MAP: Dict[str, tuple] = {
     '1d':  ('5',  86400),           # 5-min candles, 1 day
     '5d':  ('15', 86400 * 5),       # 15-min candles, 5 days

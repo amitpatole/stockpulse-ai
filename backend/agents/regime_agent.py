@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Market Regime Agent
+TickerPulse AI v3.0 - Market Regime Agent
 Classifies overall market regime (risk-on / risk-off / transitioning)
 using VIX, S&P 500, 10Y Treasury, and Dollar Index data.
 Uses Sonnet 4.5 for deep reasoning.

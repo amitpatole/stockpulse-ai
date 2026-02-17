@@ -1,5 +1,5 @@
 """
-Alpha Vantage Data Provider for StockPulse AI v3.0
+Alpha Vantage Data Provider for TickerPulse AI v3.0
 
 Uses direct HTTP requests to the Alpha Vantage REST API.
 Free tier: 25 calls/day.  Premium: starts at $49/mo for 75 calls/min.
@@ -25,7 +25,7 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
-# Map StockPulse period strings to Alpha Vantage function + parameters
+# Map TickerPulse period strings to Alpha Vantage function + parameters
 _PERIOD_CONFIG: Dict[str, Dict] = {
     '1d':  {'function': 'TIME_SERIES_INTRADAY', 'interval': '5min', 'outputsize': 'compact'},
     '5d':  {'function': 'TIME_SERIES_INTRADAY', 'interval': '15min', 'outputsize': 'full'},

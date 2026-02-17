@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-StockPulse AI - Real-Time Market Intelligence Dashboard
+TickerPulse AI - Real-Time Market Intelligence Dashboard
 Web interface for 24/7 stock monitoring with AI-powered analysis
 """
 

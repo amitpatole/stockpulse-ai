@@ -1,4 +1,4 @@
-# StockPulse AI - Master Build Script
+# TickerPulse AI - Master Build Script
 # Runs all 4 build stages to produce the Windows installer.
 #
 # Usage: .\scripts\build-all.ps1
@@ -8,7 +8,7 @@ $ScriptDir = $PSScriptRoot
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor White
-Write-Host "  StockPulse AI - Desktop Build" -ForegroundColor White
+Write-Host "  TickerPulse AI - Desktop Build" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor White
 Write-Host ""
 
@@ -40,5 +40,5 @@ Write-Host "========================================" -ForegroundColor White
 Write-Host "  Build Complete ($Duration min)" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor White
 Write-Host ""
-Write-Host "  Installer: dist-electron\StockPulse-AI-Setup-3.0.0.exe"
+Write-Host "  Installer: dist-electron\TickerPulse-AI-Setup-3.0.0.exe"
 Write-Host ""
