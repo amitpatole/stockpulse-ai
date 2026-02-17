@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Analysis API Routes
+TickerPulse AI v3.0 - Analysis API Routes
 Blueprint for AI ratings and chart data endpoints.
 """
 

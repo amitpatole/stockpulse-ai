@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Stock Data Fetcher Tool (CrewAI Compatible)
+TickerPulse AI v3.0 - Stock Data Fetcher Tool (CrewAI Compatible)
 Wraps the pluggable data_providers system to fetch stock quotes and historical data.
 Falls back through the provider chain automatically.
 """

@@ -1,4 +1,4 @@
-# StockPulse AI v3.0 - Docker Compose
+# TickerPulse AI v3.0 - Docker Compose
 # Optional containerized deployment
 
 services:
@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: stockpulse-backend
+    container_name: tickerpulse-backend
     ports:
       - "5000:5000"
     environment:
@@ -29,7 +29,7 @@ services:
       - MONTHLY_BUDGET_LIMIT=${MONTHLY_BUDGET_LIMIT:-1500.0}
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
     volumes:
-      - stockpulse-data:/app/data
+      - tickerpulse-data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
@@ -41,7 +41,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: stockpulse-frontend
+    container_name: tickerpulse-frontend
     ports:
       - "3000:3000"
     environment:
@@ -52,5 +52,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  stockpulse-data:
+  tickerpulse-data:
     driver: local

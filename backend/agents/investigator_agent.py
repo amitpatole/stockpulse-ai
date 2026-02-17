@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Investigator Agent
+TickerPulse AI v3.0 - Investigator Agent
 Social Media Investigator using Haiku 4.5.
 Scans Reddit for trending stock mentions, verifies claims, flags unusual activity.
 """

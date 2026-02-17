@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - News API Routes
+TickerPulse AI v3.0 - News API Routes
 Blueprint for news articles, alerts, and statistics endpoints.
 """
 

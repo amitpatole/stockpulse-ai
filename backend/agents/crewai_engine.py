@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - CrewAI Orchestration Engine
+TickerPulse AI v3.0 - CrewAI Orchestration Engine
 Maps AgentConfig objects to CrewAI Agent objects, builds Tasks and Crews,
 and routes to the correct LLM using ai_providers.py settings.
 """
@@ -26,7 +26,7 @@ except ImportError:
     CrewTask = None
     Crew = None
     Process = None
-    logger.info("CrewAI not installed -- StockPulseCrewEngine will operate in fallback mode")
+    logger.info("CrewAI not installed -- TickerPulseCrewEngine will operate in fallback mode")
 
 # ------------------------------------------------------------------
 # Model pricing (per 1M tokens)
@@ -114,8 +114,8 @@ def _build_crewai_agent(config: AgentConfig, tools: Optional[List] = None) -> An
 # ------------------------------------------------------------------
 # The Engine
 # ------------------------------------------------------------------
-class StockPulseCrewEngine:
-    """Orchestration engine that maps StockPulse AgentConfig objects to
+class TickerPulseCrewEngine:
+    """Orchestration engine that maps TickerPulse AgentConfig objects to
     CrewAI Agent/Task/Crew objects and runs them.
 
     Supports:

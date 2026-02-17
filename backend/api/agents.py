@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Agents API Routes
+TickerPulse AI v3.0 - Agents API Routes
 Blueprint for agent management, execution, run history, and cost tracking.
 
 All routes return stub/placeholder data since the agent execution system is

@@ -1,10 +1,10 @@
-# StockPulse AI
+# TickerPulse AI
 
 **Version 3.0** - Multi-Agent Research Desk
 
 24/7 stock market intelligence with AI-powered multi-agent analysis, automated research briefs, and real-time monitoring across 12+ data sources.
 
-StockPulse AI is a **research and monitoring tool** - it does not execute trades or provide financial advice. All trading decisions are made by humans.
+TickerPulse AI is a **research and monitoring tool** - it does not execute trades or provide financial advice. All trading decisions are made by humans.
 
 ---
 
@@ -46,15 +46,15 @@ StockPulse AI is a **research and monitoring tool** - it does not execute trades
 
 **Linux / macOS:**
 ```bash
-git clone https://github.com/amitpatole/stockpulse-ai.git
-cd stockpulse-ai
+git clone https://github.com/amitpatole/tickerpulse-ai.git
+cd tickerpulse-ai
 bash install.sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-git clone https://github.com/amitpatole/stockpulse-ai.git
-cd stockpulse-ai
+git clone https://github.com/amitpatole/tickerpulse-ai.git
+cd tickerpulse-ai
 .\install.ps1
 ```
 
@@ -71,8 +71,8 @@ After installation:
 <summary>Click to expand manual steps</summary>
 
 ```bash
-git clone https://github.com/amitpatole/stockpulse-ai.git
-cd stockpulse-ai
+git clone https://github.com/amitpatole/tickerpulse-ai.git
+cd tickerpulse-ai
 
 # Environment config
 cp .env.example .env
@@ -167,14 +167,14 @@ Configure via the Settings page or `.env`:
 ## Project Structure
 
 ```
-stockpulse-ai/
+tickerpulse-ai/
 ├── backend/
 │   ├── app.py              # Flask app factory
 │   ├── config.py            # Central configuration
 │   ├── database.py          # SQLite connection manager
 │   ├── scheduler.py         # APScheduler setup
 │   ├── api/                 # REST API routes (6 blueprints)
-│   ├── core/                # Original StockPulse modules
+│   ├── core/                # Original TickerPulse modules
 │   ├── agents/              # Multi-agent system
 │   │   ├── base.py          # Agent registry & base classes
 │   │   ├── crewai_engine.py # CrewAI orchestration
@@ -251,13 +251,13 @@ All settings can be configured via environment variables (`.env` file) or the Se
 
 ## Inspiration & Acknowledgment
 
-The multi-agent enhancement in StockPulse AI v3.0 was inspired by a [Reddit post](https://www.reddit.com/r/openclaw/comments/1r1lp3n/) describing a multi-agent AI workflow built with OpenClaw. The concept of specialized AI agents collaborating on market research motivated our own independent implementation. This work is inspired by, not copied from, the original post -- all code, architecture, and design decisions are original to the StockPulse AI project.
+The multi-agent enhancement in TickerPulse AI v3.0 was inspired by a [Reddit post](https://www.reddit.com/r/openclaw/comments/1r1lp3n/) describing a multi-agent AI workflow built with OpenClaw. The concept of specialized AI agents collaborating on market research motivated our own independent implementation. This work is inspired by, not copied from, the original post -- all code, architecture, and design decisions are original to the TickerPulse AI project.
 
-StockPulse AI is a research and monitoring tool -- it does not execute trades or provide financial advice.
+TickerPulse AI is a research and monitoring tool -- it does not execute trades or provide financial advice.
 
 ## Disclaimer
 
-**IMPORTANT:** StockPulse AI is for informational and educational purposes only. It is NOT financial advice.
+**IMPORTANT:** TickerPulse AI is for informational and educational purposes only. It is NOT financial advice.
 
 - Do not make investment decisions based solely on this tool
 - Always do your own research (DYOR)
@@ -269,7 +269,7 @@ StockPulse AI is a research and monitoring tool -- it does not execute trades or
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** - see the [LICENSE](LICENSE) file for details.
 
-**Attribution Required:** All use must credit Amit Patole and link to https://github.com/amitpatole/stockpulse-ai
+**Attribution Required:** All use must credit Amit Patole and link to https://github.com/amitpatole/tickerpulse-ai
 
 ## Acknowledgments
 

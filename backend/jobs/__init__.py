@@ -1,5 +1,5 @@
 """
-Job definitions for StockPulse AI scheduler.
+Job definitions for TickerPulse AI scheduler.
 
 Each module in this package defines a single scheduled job. The
 ``register_all_jobs`` function wires them all into a ``SchedulerManager``

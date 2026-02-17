@@ -1,5 +1,5 @@
 /**
- * StockPulse AI - Setup Wizard Logic
+ * TickerPulse AI - Setup Wizard Logic
  * Vanilla JS step-based state machine.
  */
 
@@ -44,7 +44,7 @@ function showStep(step) {
   if (step === 1) {
     nextBtn.textContent = 'Get Started';
   } else if (step === TOTAL_STEPS) {
-    nextBtn.textContent = 'Launch StockPulse AI';
+    nextBtn.textContent = 'Launch TickerPulse AI';
   } else {
     nextBtn.textContent = 'Next';
   }
@@ -112,7 +112,7 @@ async function testProvider(provider) {
   btn.disabled = true;
 
   try {
-    const result = await window.stockpulse.testAiProvider({
+    const result = await window.tickerpulse.testAiProvider({
       provider: provider,
       api_key: apiKey,
     });
@@ -213,10 +213,10 @@ async function saveAndLaunch() {
   const config = gatherConfig();
 
   try {
-    const result = await window.stockpulse.saveConfig(config);
+    const result = await window.tickerpulse.saveConfig(config);
     if (result.success) {
       btn.textContent = 'Launching...';
-      window.stockpulse.completeWizard();
+      window.tickerpulse.completeWizard();
     } else {
       btn.textContent = 'Error saving';
       btn.disabled = false;

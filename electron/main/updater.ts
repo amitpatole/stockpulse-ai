@@ -1,5 +1,5 @@
 /**
- * StockPulse AI - Auto-Update Manager
+ * TickerPulse AI - Auto-Update Manager
  *
  * Uses electron-updater to check GitHub Releases for new versions,
  * download silently in the background, and prompt the user to restart.
@@ -137,7 +137,7 @@ function promptUserToRestart(version: string): void {
     .showMessageBox(mainWindowRef, {
       type: 'info',
       title: 'Update Ready',
-      message: `StockPulse AI v${version} is ready to install.`,
+      message: `TickerPulse AI v${version} is ready to install.`,
       detail:
         'The update has been downloaded. Restart now to apply it?\n\n' +
         'All running services will be stopped gracefully.',

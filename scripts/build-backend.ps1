@@ -1,5 +1,5 @@
-# StockPulse AI - Build Backend (PyInstaller)
-# Produces: build/backend/stockpulse-backend/
+# TickerPulse AI - Build Backend (PyInstaller)
+# Produces: build/backend/tickerpulse-backend/
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
@@ -23,10 +23,10 @@ if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }
 
 # Run PyInstaller from project root
 Push-Location $ProjectRoot
-pyinstaller backend\stockpulse.spec --distpath "$OutDir" --workpath "$TempDir" -y
+pyinstaller backend\tickerpulse.spec --distpath "$OutDir" --workpath "$TempDir" -y
 Pop-Location
 
-$ExePath = "$OutDir\stockpulse-backend\stockpulse-backend.exe"
+$ExePath = "$OutDir\tickerpulse-backend\tickerpulse-backend.exe"
 if (Test-Path $ExePath) {
     $Size = [math]::Round((Get-ChildItem $OutDir -Recurse | Measure-Object Length -Sum).Sum / 1MB, 1)
     Write-Host "[backend] Build complete: $ExePath ($Size MB)" -ForegroundColor Green

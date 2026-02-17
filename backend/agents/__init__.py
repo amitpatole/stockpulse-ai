@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Multi-Agent System
+TickerPulse AI v3.0 - Multi-Agent System
 Exports all agents, engines, and the factory function for creating
 and registering the default agent set.
 """
@@ -20,7 +20,7 @@ from backend.agents.researcher_agent import ResearcherAgent, RESEARCHER_CONFIG
 from backend.agents.regime_agent import RegimeAgent, REGIME_CONFIG
 from backend.agents.investigator_agent import InvestigatorAgent, INVESTIGATOR_CONFIG
 
-from backend.agents.crewai_engine import StockPulseCrewEngine
+from backend.agents.crewai_engine import TickerPulseCrewEngine
 from backend.agents.openclaw_engine import OpenClawBridge
 
 from backend.agents.tools import (
@@ -51,7 +51,7 @@ __all__ = [
     "REGIME_CONFIG",
     "INVESTIGATOR_CONFIG",
     # Engines
-    "StockPulseCrewEngine",
+    "TickerPulseCrewEngine",
     "OpenClawBridge",
     # Tools
     "StockDataFetcher",
@@ -64,7 +64,7 @@ __all__ = [
 
 
 def create_default_agents(db_path: str = "stock_news.db") -> AgentRegistry:
-    """Create and register all four default StockPulse agents.
+    """Create and register all four default TickerPulse agents.
 
     Returns an :class:`AgentRegistry` with the following agents registered:
 

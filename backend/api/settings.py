@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Settings API Routes
+TickerPulse AI v3.0 - Settings API Routes
 Blueprint for AI provider settings, data provider settings, and agent framework configuration.
 """
 

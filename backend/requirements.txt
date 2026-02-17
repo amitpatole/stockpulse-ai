@@ -1,4 +1,4 @@
-# StockPulse AI v3.0 - Backend Dependencies
+# TickerPulse AI v3.0 - Backend Dependencies
 # ==========================================
 
 # Web Framework

@@ -1,5 +1,5 @@
 // ============================================================
-// StockPulse AI v3.0 - TypeScript Type Definitions
+// TickerPulse AI v3.0 - TypeScript Type Definitions
 // ============================================================
 
 export interface Stock {

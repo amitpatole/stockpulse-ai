@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Technical Analyzer Tool (CrewAI Compatible)
+TickerPulse AI v3.0 - Technical Analyzer Tool (CrewAI Compatible)
 Wraps ai_analytics.py calculations plus new indicators:
 Bollinger Bands, ATR, VWAP, OBV, Stochastic Oscillator.
 """

@@ -1,4 +1,4 @@
-# StockPulse AI - Build Frontend (Next.js Standalone)
+# TickerPulse AI - Build Frontend (Next.js Standalone)
 # Produces: build/frontend/ with server.js, .next/static/, public/, node.exe
 
 $ErrorActionPreference = "Stop"

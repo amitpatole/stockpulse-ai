@@ -1,5 +1,5 @@
 """
-YFinance Data Provider for StockPulse AI v3.0
+YFinance Data Provider for TickerPulse AI v3.0
 
 Default (free) provider using Yahoo Finance data.
 Uses the requests library to hit Yahoo's v8 chart API directly (matching the

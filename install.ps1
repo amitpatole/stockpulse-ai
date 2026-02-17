@@ -1,5 +1,5 @@
 # ============================================================
-# StockPulse AI v3.0 - Installer
+# TickerPulse AI v3.0 - Installer
 # Windows PowerShell
 # ============================================================
 #
@@ -33,7 +33,7 @@ function Test-CommandExists($cmd) {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor White
-Write-Host "  StockPulse AI v3.0 — Installer" -ForegroundColor White
+Write-Host "  TickerPulse AI v3.0 — Installer" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor White
 Write-Host ""
 
@@ -98,7 +98,7 @@ if ($Missing -ne 0) {
 
 # ── Determine Install Directory ───────────────────────────
 
-$RepoUrl = "https://github.com/amitpatole/stockpulse-ai.git"
+$RepoUrl = "https://github.com/amitpatole/tickerpulse-ai.git"
 
 if ((Test-Path "backend\app.py") -and (Test-Path "frontend\package.json")) {
     $ProjectDir = Get-Location
@@ -108,9 +108,9 @@ if ((Test-Path "backend\app.py") -and (Test-Path "frontend\package.json")) {
         Write-Err "git is required to clone the repo. Install it from https://git-scm.com/"
         exit 1
     }
-    Write-Info "Cloning StockPulse AI..."
-    git clone $RepoUrl stockpulse-ai
-    $ProjectDir = Join-Path (Get-Location) "stockpulse-ai"
+    Write-Info "Cloning TickerPulse AI..."
+    git clone $RepoUrl tickerpulse-ai
+    $ProjectDir = Join-Path (Get-Location) "tickerpulse-ai"
     Set-Location $ProjectDir
     Write-Ok "Cloned to $ProjectDir"
 }

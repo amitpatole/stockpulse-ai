@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Chat API Routes
+TickerPulse AI v3.0 - Chat API Routes
 Blueprint for the AI chat endpoint that provides conversational stock analysis.
 """
 

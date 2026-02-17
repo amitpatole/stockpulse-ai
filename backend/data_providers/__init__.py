@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 -- Pluggable Data Provider System
+TickerPulse AI v3.0 -- Pluggable Data Provider System
 
 This package provides a provider-agnostic data layer that lets users
 plug in whatever stock data subscriptions they already pay for.

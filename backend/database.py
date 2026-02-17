@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Database Connection Manager
+TickerPulse AI v3.0 - Database Connection Manager
 Thread-safe SQLite helper with context-manager support and table initialisation.
 """
 
@@ -28,7 +28,7 @@ def get_db_connection(db_path: str | None = None) -> sqlite3.Connection:
     -----
     * ``check_same_thread=False`` is required so Flask (and APScheduler)
       threads can share the connection safely.  SQLite itself serialises
-      writes, so this is safe for the read-heavy workload of StockPulse.
+      writes, so this is safe for the read-heavy workload of TickerPulse.
     """
     path = db_path or Config.DB_PATH
     conn = sqlite3.connect(path, check_same_thread=False)

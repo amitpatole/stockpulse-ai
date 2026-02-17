@@ -44,7 +44,7 @@ export default function Sidebar() {
           </div>
           {!collapsed && (
             <div className="overflow-hidden">
-              <h1 className="text-sm font-bold text-white tracking-wide">StockPulse AI</h1>
+              <h1 className="text-sm font-bold text-white tracking-wide">TickerPulse AI</h1>
               <p className="text-[10px] text-slate-400">v3.0</p>
             </div>
           )}

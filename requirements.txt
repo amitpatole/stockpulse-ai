@@ -1,4 +1,4 @@
-# StockPulse AI - Python Dependencies
+# TickerPulse AI - Python Dependencies
 
 # Web Framework
 flask==3.0.0

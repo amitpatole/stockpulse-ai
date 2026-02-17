@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Central Configuration
+TickerPulse AI v3.0 - Central Configuration
 All settings are driven by environment variables with sensible defaults.
 """
 
@@ -18,13 +18,13 @@ class Config:
         # PyInstaller bundle: resolve from executable location
         BASE_DIR = Path(sys.executable).parent.parent
     else:
-        BASE_DIR = Path(__file__).parent.parent  # stockpulse-ai/
+        BASE_DIR = Path(__file__).parent.parent  # tickerpulse-ai/
     DB_PATH = os.getenv('DB_PATH', str(BASE_DIR / 'stock_news.db'))
 
     # -------------------------------------------------------------------------
     # Flask
     # -------------------------------------------------------------------------
-    SECRET_KEY = os.getenv('SECRET_KEY', 'stockpulse-dev-key-change-in-prod')
+    SECRET_KEY = os.getenv('SECRET_KEY', 'tickerpulse-dev-key-change-in-prod')
     FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
     FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for StockPulse AI backend
-# Run from the stockpulse-ai/ root directory:
-#   pyinstaller backend/stockpulse.spec --distpath build/backend --workpath build/temp -y
+# PyInstaller spec for TickerPulse AI backend
+# Run from the tickerpulse-ai/ root directory:
+#   pyinstaller backend/tickerpulse.spec --distpath build/backend --workpath build/temp -y
 
 import os
 
@@ -111,7 +111,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='stockpulse-backend',
+    name='tickerpulse-backend',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -132,5 +132,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='stockpulse-backend',
+    name='tickerpulse-backend',
 )

@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Flask Application Factory
+TickerPulse AI v3.0 - Flask Application Factory
 Creates and configures the Flask app, registers blueprints, sets up SSE,
 initialises the database and scheduler.
 """
@@ -166,7 +166,7 @@ def _setup_logging(app: Flask) -> None:
 
     # Rotating file handler
     file_handler = RotatingFileHandler(
-        str(log_dir / 'stockpulse.log'),
+        str(log_dir / 'tickerpulse.log'),
         maxBytes=Config.LOG_MAX_BYTES,
         backupCount=Config.LOG_BACKUP_COUNT,
     )

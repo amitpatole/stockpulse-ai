@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - Agent Tools Package
+TickerPulse AI v3.0 - Agent Tools Package
 CrewAI-compatible tools for stock data, news, technical analysis, and Reddit scanning.
 All tools work standalone (without CrewAI) via their public helper methods.
 """

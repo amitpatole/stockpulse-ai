@@ -1,5 +1,5 @@
 """
-StockPulse AI v3.0 - API Blueprints Package
+TickerPulse AI v3.0 - API Blueprints Package
 Import all blueprint objects for convenient registration with the Flask app.
 """
 

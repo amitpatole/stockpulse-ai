@@ -1,4 +1,4 @@
-# StockPulse AI - Compile Electron Main Process
+# TickerPulse AI - Compile Electron Main Process
 # Produces: electron/dist/ with compiled TypeScript
 
 $ErrorActionPreference = "Stop"
