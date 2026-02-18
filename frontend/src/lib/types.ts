@@ -9,6 +9,13 @@ export interface Stock {
   added_at?: string;
 }
 
+export interface StockSearchResult {
+  ticker: string;
+  name: string;
+  exchange: string;
+  type: string;
+}
+
 export interface AIRating {
   ticker: string;
   rating: string;

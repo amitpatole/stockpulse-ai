@@ -4,6 +4,7 @@
 
 import type {
   Stock,
+  StockSearchResult,
   AIRating,
   Agent,
   AgentRun,
@@ -70,10 +71,17 @@ export async function getStocks(): Promise<Stock[]> {
   return data.stocks || [];
 }
 
-export async function addStock(ticker: string): Promise<Stock> {
+export async function searchStocks(query: string): Promise<StockSearchResult[]> {
+  if (!query.trim()) return [];
+  return request<StockSearchResult[]>(`/api/stocks/search?q=${encodeURIComponent(query.trim())}`);
+}
+
+export async function addStock(ticker: string, name?: string): Promise<Stock> {
+  const body: Record<string, string> = { ticker: ticker.toUpperCase() };
+  if (name) body.name = name;
   return request<Stock>('/api/stocks', {
     method: 'POST',
-    body: JSON.stringify({ ticker: ticker.toUpperCase() }),
+    body: JSON.stringify(body),
   });
 }
 
