@@ -39,18 +39,29 @@ def add_stock_endpoint():
 
     Request Body (JSON):
         ticker (str): Stock ticker symbol (e.g. 'AAPL', 'RELIANCE.NS')
-        name (str): Company name
+        name (str, optional): Company name. Auto-looked up via Yahoo Finance if omitted.
         market (str, optional): Market identifier, defaults to 'US'
 
     Returns:
         JSON object with 'success' boolean.
     """
     data = request.json
-    if not data or 'ticker' not in data or 'name' not in data:
-        return jsonify({'success': False, 'error': 'Missing required fields: ticker, name'}), 400
+    if not data or 'ticker' not in data:
+        return jsonify({'success': False, 'error': 'Missing required field: ticker'}), 400
+
+    ticker = data['ticker'].strip().upper()
+    name = data.get('name')
+
+    # Auto-lookup name if not provided
+    if not name:
+        results = search_stock_ticker(ticker)
+        if results:
+            name = results[0].get('name', ticker)
+        else:
+            name = ticker
 
     market = data.get('market', 'US')
-    success = add_stock(data['ticker'], data['name'], market)
+    success = add_stock(ticker, name, market)
     return jsonify({'success': success})
 
 
