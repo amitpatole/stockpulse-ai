@@ -39,11 +39,12 @@ def add_stock_endpoint():
 
     Request Body (JSON):
         ticker (str): Stock ticker symbol (e.g. 'AAPL', 'RELIANCE.NS')
-        name (str, optional): Company name. Auto-looked up via Yahoo Finance if omitted.
+        name (str, optional): Company name. Validated via Yahoo Finance if omitted.
         market (str, optional): Market identifier, defaults to 'US'
 
     Returns:
-        JSON object with 'success' boolean.
+        JSON object with 'success' boolean and stock details.
+        Returns 404 if ticker is not found on any exchange.
     """
     data = request.json
     if not data or 'ticker' not in data:
@@ -52,17 +53,29 @@ def add_stock_endpoint():
     ticker = data['ticker'].strip().upper()
     name = data.get('name')
 
-    # Auto-lookup name if not provided
+    # Validate ticker exists and look up name if not provided
     if not name:
         results = search_stock_ticker(ticker)
-        if results:
-            name = results[0].get('name', ticker)
+        # Check for an exact ticker match
+        match = next((r for r in results if r['ticker'].upper() == ticker), None)
+        if match:
+            name = match.get('name', ticker)
+        elif results:
+            # No exact match — reject with suggestions
+            suggestions = [f"{r['ticker']} ({r['name']})" for r in results[:3]]
+            return jsonify({
+                'success': False,
+                'error': f"Ticker '{ticker}' not found. Did you mean: {', '.join(suggestions)}?"
+            }), 404
         else:
-            name = ticker
+            return jsonify({
+                'success': False,
+                'error': f"Ticker '{ticker}' not found on any exchange."
+            }), 404
 
     market = data.get('market', 'US')
     success = add_stock(ticker, name, market)
-    return jsonify({'success': success})
+    return jsonify({'success': success, 'ticker': ticker, 'name': name, 'market': market})
 
 
 @stocks_bp.route('/stocks/<ticker>', methods=['DELETE'])
