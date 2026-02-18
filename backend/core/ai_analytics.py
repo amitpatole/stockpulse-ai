@@ -27,7 +27,8 @@ class StockAnalytics:
         })
 
     def get_stock_price_data(self, ticker: str, period='1mo') -> Dict:
-        """Fetch stock price data from Yahoo Finance"""
+        """Fetch stock price data from Yahoo Finance with yfinance library fallback."""
+        # Attempt 1: Direct Yahoo v8 API
         try:
             url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}"
             params = {
@@ -46,19 +47,35 @@ class StockAnalytics:
                 quote = result.get('indicators', {}).get('quote', [{}])[0]
                 timestamps = result.get('timestamp', [])
 
-                prices = {
-                    'open': quote.get('open', []),
-                    'high': quote.get('high', []),
-                    'low': quote.get('low', []),
-                    'close': quote.get('close', []),
-                    'volume': quote.get('volume', []),
-                    'timestamps': timestamps
-                }
-
-                return prices
+                if timestamps and quote.get('close'):
+                    return {
+                        'open': quote.get('open', []),
+                        'high': quote.get('high', []),
+                        'low': quote.get('low', []),
+                        'close': quote.get('close', []),
+                        'volume': quote.get('volume', []),
+                        'timestamps': timestamps
+                    }
 
         except Exception as e:
-            logger.error(f"Error fetching price data for {ticker}: {e}")
+            logger.warning(f"Yahoo v8 API failed for {ticker}: {e}")
+
+        # Attempt 2: yfinance library fallback
+        try:
+            import yfinance as yf
+            tk = yf.Ticker(ticker)
+            hist = tk.history(period=period, interval='1d')
+            if not hist.empty:
+                return {
+                    'open': hist['Open'].tolist(),
+                    'high': hist['High'].tolist(),
+                    'low': hist['Low'].tolist(),
+                    'close': hist['Close'].tolist(),
+                    'volume': hist['Volume'].tolist(),
+                    'timestamps': [int(ts.timestamp()) for ts in hist.index]
+                }
+        except Exception as e:
+            logger.error(f"yfinance fallback also failed for {ticker}: {e}")
 
         return {}
 
@@ -173,14 +190,20 @@ class StockAnalytics:
         sentiments = [a['sentiment_score'] for a in articles]
         labels = [a['sentiment_label'] for a in articles]
 
-        # Weight by engagement score
+        # Weight by engagement score (handle missing column gracefully)
         weighted_sentiments = []
+        total_weight = 0
         for article in articles:
-            weight = 1 + (article['engagement_score'] / 100)  # Higher engagement = more weight
+            try:
+                engagement = article['engagement_score'] or 0
+            except (IndexError, KeyError):
+                engagement = 0
+            weight = 1 + (engagement / 100)
             weighted_sentiments.append(article['sentiment_score'] * weight)
+            total_weight += weight
 
         avg_sentiment = sum(sentiments) / len(sentiments)
-        weighted_sentiment = sum(weighted_sentiments) / sum([1 + (a['engagement_score'] / 100) for a in articles])
+        weighted_sentiment = sum(weighted_sentiments) / total_weight if total_weight > 0 else avg_sentiment
 
         positive_count = labels.count('positive')
         negative_count = labels.count('negative')
@@ -261,6 +284,9 @@ class StockAnalytics:
 
         # Technical Analysis
         current_price = closes[-1]
+        prev_close = closes[-2] if len(closes) >= 2 else current_price
+        price_change = current_price - prev_close
+        price_change_pct = (price_change / prev_close * 100) if prev_close else 0.0
         rsi = self.calculate_rsi(closes)
         moving_averages = self.calculate_moving_averages(closes)
 
@@ -365,27 +391,70 @@ class StockAnalytics:
         # Generate AI summary
         summary_text, ai_powered = self._generate_summary(rating, final_score, technical_signals, sentiment_signals)
 
-        return {
+        result = {
             'ticker': ticker,
             'rating': rating,
             'emoji': emoji,
             'color': color,
-            'score': round(final_score, 1),
-            'confidence': round(confidence, 1),
+            'score': round(final_score / 10, 1),          # 0-10 for frontend
+            'confidence': round(confidence / 100, 2),      # 0-1 for frontend
             'technical_score': round(technical_score, 1),
-            'sentiment_score': round(sentiment_score, 1),
-            'current_price': current_price,
+            'sentiment_score': round(sentiment.get('avg_sentiment', 0), 2),  # -1 to 1
+            'current_price': round(current_price, 2),
+            'price_change': round(price_change, 2),
+            'price_change_pct': round(price_change_pct, 2),
             'currency': currency,
             'currency_symbol': currency_symbol,
             'rsi': round(rsi, 2),
             'moving_averages': moving_averages,
             'sentiment': sentiment,
+            'sentiment_label': sentiment.get('sentiment_trend', 'neutral'),
             'technical_signals': technical_signals,
             'sentiment_signals': sentiment_signals,
             'analysis_summary': summary_text,
             'ai_powered': ai_powered,
             'timestamp': datetime.now().isoformat()
         }
+
+        # Cache rating to database
+        self._save_rating_to_db(result)
+
+        return result
+
+    def _save_rating_to_db(self, rating_data: Dict) -> None:
+        """Cache computed rating to ai_ratings table for fast subsequent reads."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("""
+                INSERT INTO ai_ratings
+                    (ticker, rating, score, confidence, current_price, price_change, price_change_pct,
+                     rsi, sentiment_score, sentiment_label, technical_score, summary, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(ticker) DO UPDATE SET
+                    rating=excluded.rating, score=excluded.score, confidence=excluded.confidence,
+                    current_price=excluded.current_price, price_change=excluded.price_change,
+                    price_change_pct=excluded.price_change_pct, rsi=excluded.rsi,
+                    sentiment_score=excluded.sentiment_score, sentiment_label=excluded.sentiment_label,
+                    technical_score=excluded.technical_score, summary=excluded.summary,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                rating_data['ticker'],
+                rating_data['rating'],
+                rating_data['score'],
+                rating_data['confidence'],
+                rating_data.get('current_price'),
+                rating_data.get('price_change'),
+                rating_data.get('price_change_pct'),
+                rating_data.get('rsi'),
+                rating_data.get('sentiment_score'),
+                rating_data.get('sentiment_label', 'neutral'),
+                rating_data.get('technical_score'),
+                rating_data.get('analysis_summary'),
+            ))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.debug(f"Could not cache rating for {rating_data['ticker']}: {e}")
 
     def _generate_summary(self, rating: str, score: float, technical_signals: List[str],
                          sentiment_signals: List[str]) -> tuple:

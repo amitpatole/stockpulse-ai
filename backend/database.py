@@ -78,6 +78,7 @@ _EXISTING_TABLES_SQL = [
         published_date  TEXT,
         sentiment_score REAL,
         sentiment_label TEXT,
+        engagement_score REAL DEFAULT 0,
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
@@ -198,6 +199,26 @@ _NEW_TABLES_SQL = [
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    # --- ai_ratings: cached AI ratings for stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS ai_ratings (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL UNIQUE,
+        rating          TEXT NOT NULL DEFAULT 'HOLD',
+        score           REAL NOT NULL DEFAULT 0,
+        confidence      REAL NOT NULL DEFAULT 0,
+        current_price   REAL,
+        price_change    REAL,
+        price_change_pct REAL,
+        rsi             REAL,
+        sentiment_score REAL,
+        sentiment_label TEXT,
+        technical_score REAL,
+        fundamental_score REAL,
+        summary         TEXT,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
     # --- cost_tracking: per-call cost ledger ---
     """
     CREATE TABLE IF NOT EXISTS cost_tracking (
@@ -248,6 +269,7 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_job_history_executed   ON job_history (executed_at)",
     "CREATE INDEX IF NOT EXISTS idx_cost_tracking_date     ON cost_tracking (date)",
     "CREATE INDEX IF NOT EXISTS idx_cost_tracking_agent    ON cost_tracking (agent_name)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_ticker       ON ai_ratings (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_news_ticker            ON news (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_news_created           ON news (created_at)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_created         ON alerts (created_at)",
@@ -290,6 +312,16 @@ def _migrate_agent_runs(cursor) -> None:
         logger.info(f"Migration applied: {sql}")
 
 
+def _migrate_news(cursor) -> None:
+    """Add engagement_score column to news table if missing."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(news)").fetchall()}
+    if not cols:
+        return
+    if 'engagement_score' not in cols:
+        cursor.execute("ALTER TABLE news ADD COLUMN engagement_score REAL DEFAULT 0")
+        logger.info("Migration applied: added engagement_score to news table")
+
+
 def init_all_tables(db_path: str | None = None) -> None:
     """Create every table (existing + new v3.0) and apply indexes.
 
@@ -302,8 +334,9 @@ def init_all_tables(db_path: str | None = None) -> None:
         for sql in _EXISTING_TABLES_SQL:
             cursor.execute(sql)
 
-        # Migrate existing agent_runs before CREATE TABLE (which is a no-op if table exists)
+        # Migrate existing tables before CREATE TABLE (which is a no-op if table exists)
         _migrate_agent_runs(cursor)
+        _migrate_news(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)

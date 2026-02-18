@@ -22,11 +22,7 @@ def _get_cached_ratings():
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         rows = conn.execute("""
-            SELECT r.*, s.current_price as live_price, s.price_change as live_change,
-                   s.price_change_pct as live_change_pct
-            FROM ai_ratings r
-            LEFT JOIN stocks s ON r.ticker = s.ticker
-            ORDER BY r.ticker
+            SELECT * FROM ai_ratings ORDER BY ticker
         """).fetchall()
         conn.close()
         if rows:
@@ -36,9 +32,9 @@ def _get_cached_ratings():
                     'rating': r['rating'],
                     'score': r['score'] or 0,
                     'confidence': r['confidence'] or 0,
-                    'current_price': r['live_price'] or r['current_price'] or 0,
-                    'price_change': r['live_change'] or r['price_change'] or 0,
-                    'price_change_pct': r['live_change_pct'] or r['price_change_pct'] or 0,
+                    'current_price': r['current_price'] or 0,
+                    'price_change': r['price_change'] or 0,
+                    'price_change_pct': r['price_change_pct'] or 0,
                     'rsi': r['rsi'] or 0,
                     'sentiment_score': r['sentiment_score'] or 0,
                     'sentiment_label': r['sentiment_label'] or 'neutral',
@@ -55,26 +51,67 @@ def _get_cached_ratings():
 
 @analysis_bp.route('/ai/ratings', methods=['GET'])
 def get_ai_ratings():
-    """Get AI ratings for all active stocks."""
-    # First try pre-computed ratings from DB
-    cached = _get_cached_ratings()
-    if cached:
-        return jsonify(cached)
-    # Fall back to live calculation
+    """Get AI ratings for all active stocks.
+
+    Serves cached ratings from ai_ratings table, then computes live ratings
+    for any active stocks that are missing from the cache.
+    """
     analytics = StockAnalytics()
-    ratings = analytics.get_all_ratings()
-    return jsonify(ratings)
+
+    # Get all active stock tickers
+    try:
+        conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        active_tickers = {
+            row['ticker']
+            for row in conn.execute("SELECT ticker FROM stocks WHERE active = 1").fetchall()
+        }
+        conn.close()
+    except Exception:
+        active_tickers = set()
+
+    # Try cached ratings
+    cached = _get_cached_ratings()
+    cached_map = {}
+    if cached:
+        cached_map = {r['ticker']: r for r in cached}
+
+    # Find active stocks missing from cache
+    missing = active_tickers - set(cached_map.keys())
+
+    # Compute live ratings for missing stocks
+    for ticker in missing:
+        try:
+            rating = analytics.calculate_ai_rating(ticker)
+            cached_map[ticker] = rating
+        except Exception as e:
+            logger.error(f"Error calculating rating for {ticker}: {e}")
+            cached_map[ticker] = {
+                'ticker': ticker,
+                'rating': 'ERROR',
+                'score': 0,
+                'confidence': 0,
+                'message': str(e)
+            }
+
+    # Return only active stocks, sorted by ticker
+    results = [cached_map[t] for t in sorted(active_tickers) if t in cached_map]
+    return jsonify(results)
 
 
 @analysis_bp.route('/ai/rating/<ticker>', methods=['GET'])
 def get_ai_rating(ticker):
     """Get AI rating for a specific stock."""
     # Try cached first
-    cached = _get_cached_ratings()
-    if cached:
-        for r in cached:
-            if r['ticker'].upper() == ticker.upper():
-                return jsonify(r)
+    try:
+        conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM ai_ratings WHERE ticker = ?", (ticker.upper(),)).fetchone()
+        conn.close()
+        if row:
+            return jsonify(dict(row))
+    except Exception:
+        pass
     # Fall back to live calculation
     analytics = StockAnalytics()
     rating = analytics.calculate_ai_rating(ticker)
