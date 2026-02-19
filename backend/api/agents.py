@@ -2,111 +2,61 @@
 TickerPulse AI v3.0 - Agents API Routes
 Blueprint for agent management, execution, run history, and cost tracking.
 
-All routes return stub/placeholder data since the agent execution system is
-not yet implemented. The route structure and response schemas are designed to
-be forward-compatible with the real agent framework.
+Routes delegate to the module-level AgentRegistry singleton (initialised in
+create_app via backend.agents.init_registry).  No stub data; all metrics
+are produced by real agent runs.
 """
 
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 import sqlite3
-import random
-import time
 import logging
 
 from backend.config import Config
+from backend.agents import get_registry
+from backend.agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
 agents_bp = Blueprint('agents', __name__, url_prefix='/api')
 
 # ---------------------------------------------------------------------------
-# Placeholder agent registry -- replaced by real agent discovery once the
-# agent framework (CrewAI / OpenClaw) is wired up.
+# Category map: agent name → API category string
 # ---------------------------------------------------------------------------
 
-_STUB_AGENTS = [
-    {
-        'name': 'sentiment_analyst',
-        'display_name': 'Sentiment Analyst',
-        'description': 'Analyzes news and social media sentiment for monitored stocks',
-        'category': 'analysis',
-        'schedule': '*/30 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
-    },
-    {
-        'name': 'technical_analyst',
-        'display_name': 'Technical Analyst',
-        'description': 'Runs technical indicator analysis (RSI, MACD, moving averages) across watchlist',
-        'category': 'analysis',
-        'schedule': '0 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
-    },
-    {
-        'name': 'news_scanner',
-        'display_name': 'News Scanner',
-        'description': 'Scans multiple news sources for articles about monitored stocks',
-        'category': 'data_collection',
-        'schedule': '*/15 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
-    },
-    {
-        'name': 'risk_monitor',
-        'display_name': 'Risk Monitor',
-        'description': 'Monitors portfolio risk metrics and generates alerts on threshold breaches',
-        'category': 'monitoring',
-        'schedule': '*/10 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
-    },
-    {
-        'name': 'report_generator',
-        'display_name': 'Report Generator',
-        'description': 'Generates daily and weekly summary reports of market activity',
-        'category': 'reporting',
-        'schedule': '0 18 * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
-    },
-    {
-        'name': 'researcher',
-        'display_name': 'Deep Researcher',
-        'description': 'Generates in-depth research briefs with AI-powered analysis',
-        'category': 'research',
+_CATEGORY_MAP: dict[str, str] = {
+    'scanner': 'analysis',
+    'researcher': 'research',
+    'regime': 'analysis',
+    'investigator': 'monitoring',
+    'download_tracker': 'data_collection',
+}
+
+
+def _to_api_dict(agent: BaseAgent) -> dict:
+    """Map a BaseAgent to the response shape expected by the frontend.
+
+    ``get_status_dict()`` returns role/model/tags; this function adds the
+    display_name/description/category fields the dashboard relies on.
+    """
+    cfg = agent.config
+    category = _CATEGORY_MAP.get(cfg.name, cfg.tags[0] if cfg.tags else 'general')
+    return {
+        'name': cfg.name,
+        'display_name': cfg.role,
+        'description': cfg.goal,
+        'category': category,
         'schedule': None,
-        'status': 'idle',
+        'status': agent.status.value,
+        'enabled': cfg.enabled,
+        'model': cfg.model,
+        'tags': cfg.tags,
+        # DB-enriched fields populated by the route
         'last_run': None,
         'avg_duration_seconds': None,
         'total_runs': 0,
-        'enabled': True
-    },
-]
-
-
-def _find_agent(name):
-    """Look up a stub agent by name. Returns None if not found."""
-    for agent in _STUB_AGENTS:
-        if agent['name'] == name:
-            return agent
-    return None
+        'total_cost': 0.0,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +68,7 @@ def list_agents():
     """List all registered agents with their current status.
 
     Query Parameters:
-        category (str, optional): Filter by agent category
-            (analysis, data_collection, monitoring, reporting).
+        category (str, optional): Filter by agent category.
         enabled (str, optional): Filter by enabled status ('true' or 'false').
 
     Returns:
@@ -130,7 +79,12 @@ def list_agents():
     category = request.args.get('category', None)
     enabled_filter = request.args.get('enabled', None)
 
-    agents = list(_STUB_AGENTS)
+    registry = get_registry()
+    agents = []
+    for status_dict in registry.list_agents():
+        agent = registry.get(status_dict['name'])
+        if agent:
+            agents.append(_to_api_dict(agent))
 
     if category:
         agents = [a for a in agents if a['category'] == category]
@@ -159,18 +113,16 @@ def list_agents():
                     'tokens_used': (row['tokens_input'] or 0) + (row['tokens_output'] or 0),
                     'estimated_cost': row['estimated_cost'] or 0,
                 }
-                # Update total_runs from DB
-                count = conn.execute(
-                    'SELECT COUNT(*) FROM agent_runs WHERE agent_name = ?',
-                    (agent['name'],)
-                ).fetchone()[0]
-                agent['total_runs'] = count
-                # Compute total_cost
-                total_cost = conn.execute(
-                    'SELECT COALESCE(SUM(estimated_cost), 0) FROM agent_runs WHERE agent_name = ?',
-                    (agent['name'],)
-                ).fetchone()[0]
-                agent['total_cost'] = round(total_cost, 4)
+            count = conn.execute(
+                'SELECT COUNT(*) FROM agent_runs WHERE agent_name = ?',
+                (agent['name'],)
+            ).fetchone()[0]
+            agent['total_runs'] = count
+            total_cost = conn.execute(
+                'SELECT COALESCE(SUM(estimated_cost), 0) FROM agent_runs WHERE agent_name = ?',
+                (agent['name'],)
+            ).fetchone()[0]
+            agent['total_cost'] = round(total_cost, 4)
         conn.close()
     except Exception as e:
         logger.error(f"Failed to enrich agents with run data: {e}")
@@ -186,7 +138,7 @@ def get_agent_detail(name):
     """Get detailed information about a specific agent including run history.
 
     Path Parameters:
-        name (str): Agent identifier (e.g. 'sentiment_analyst').
+        name (str): Agent identifier (e.g. 'scanner').
 
     Returns:
         JSON object with full agent details and a 'recent_runs' array.
@@ -194,19 +146,20 @@ def get_agent_detail(name):
     Errors:
         404: Agent not found.
     """
-    agent = _find_agent(name)
+    registry = get_registry()
+    agent = registry.get(name)
     if not agent:
         return jsonify({'error': f'Agent not found: {name}'}), 404
 
-    # Build detailed response with empty run history (stub)
-    detail = dict(agent)
-    detail['recent_runs'] = []
+    detail = _to_api_dict(agent)
+    detail['recent_runs'] = registry.get_run_history(agent_name=name, limit=10)
     detail['config'] = {
-        'max_retries': 3,
-        'timeout_seconds': 300,
-        'concurrency': 1
+        'model': agent.config.model,
+        'max_tokens': agent.config.max_tokens,
+        'temperature': agent.config.temperature,
+        'provider': agent.config.provider,
     }
-    detail['tools'] = _get_agent_tools(name)
+    detail['tools'] = []
 
     return jsonify(detail)
 
@@ -219,95 +172,96 @@ def trigger_agent_run(name):
         name (str): Agent identifier.
 
     Request Body (JSON, optional):
-        params (dict): Optional parameters to pass to the agent.
-            For example, {'tickers': ['AAPL', 'TSLA']} to limit scope.
+        params (dict): Parameters passed to the agent
+            (e.g. {'ticker': 'AAPL'} for the researcher).
 
     Returns:
-        JSON object with:
-        - success (bool): Whether the run was accepted.
-        - run_id (str): Unique identifier for this run.
-        - agent (str): Agent name.
-        - status: 'queued' (the run has been accepted for execution).
+        JSON object with real duration_ms, token counts, cost, and output.
 
     Errors:
         404: Agent not found.
         400: Agent is disabled.
+        503: Missing dependency or API key.
     """
-    agent = _find_agent(name)
+    registry = get_registry()
+    agent = registry.get(name)
     if not agent:
         return jsonify({'error': f'Agent not found: {name}'}), 404
 
-    if not agent.get('enabled'):
+    if not agent.config.enabled:
         return jsonify({
             'success': False,
             'error': f'Agent "{name}" is currently disabled. Enable it in settings first.'
         }), 400
 
     data = request.get_json(silent=True) or {}
-    params = data.get('params', {})
+    inputs = data.get('params', {})
 
-    # Execute a simulated agent run and store results
-    started_at = datetime.utcnow()
-    duration_ms = random.randint(800, 3500)
+    # Run agent synchronously; registry persists the result to DB
+    result = registry.run_agent(name, inputs)
 
-    # Generate stub output based on agent type
-    output = _generate_agent_output(name)
+    if result is None:
+        return jsonify({'error': f'Agent not found: {name}'}), 404
 
-    # Store in agent_runs table
+    if result.status == 'error':
+        error_msg = result.error or 'Agent execution failed'
+        # Surface missing dependency / config errors as 503
+        dependency_keywords = ('CrewAI', 'crewai', 'API key', 'ANTHROPIC_API_KEY', 'ImportError')
+        if any(kw in error_msg for kw in dependency_keywords):
+            return jsonify({
+                'success': False,
+                'error': error_msg,
+                'message': (
+                    'Agent could not run due to a missing dependency or configuration. '
+                    'Check API keys and installed packages.'
+                ),
+            }), 503
+
+    # Retrieve the run_id assigned by the DB insert in _persist_result
+    run_id = None
     try:
         conn = sqlite3.connect(Config.DB_PATH)
-        tokens_in = random.randint(100, 800)
-        tokens_out = random.randint(100, 700)
-        cursor = conn.execute("""
-            INSERT INTO agent_runs
-            (agent_name, framework, status, input_data, output_data,
-             tokens_input, tokens_output, estimated_cost, duration_ms, started_at, completed_at)
-            VALUES (?, 'crewai', 'completed', ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            name,
-            str(params) if params else None,
-            output,
-            tokens_in,
-            tokens_out,
-            round(random.uniform(0.001, 0.02), 4),
-            duration_ms,
-            started_at.isoformat() + 'Z',
-            (started_at + timedelta(milliseconds=duration_ms)).isoformat() + 'Z',
-        ))
-        run_id = cursor.lastrowid
-        conn.commit()
+        row = conn.execute(
+            'SELECT id FROM agent_runs WHERE agent_name = ? ORDER BY id DESC LIMIT 1',
+            (name,)
+        ).fetchone()
         conn.close()
+        if row:
+            run_id = row[0]
     except Exception as e:
-        logger.error(f"Failed to store agent run: {e}")
-        run_id = 0
+        logger.error(f"Failed to fetch run_id: {e}")
 
-    # Update in-memory stub agent state
-    agent['total_runs'] = agent.get('total_runs', 0) + 1
-    agent['last_run'] = started_at.isoformat() + 'Z'
-    agent['status'] = 'idle'
-
-    # Send SSE notification
+    # SSE notification
     try:
         from backend.app import send_sse_event
         send_sse_event('agent_status', {
             'agent_name': name,
-            'status': 'completed',
+            'status': result.status,
             'run_id': run_id,
-            'message': f'Agent "{agent["display_name"]}" completed successfully',
+            'message': f'Agent "{agent.config.role}" completed with status: {result.status}',
         })
     except Exception:
         pass
 
-    logger.info(f"Agent run completed: {name}, run_id={run_id}, duration={duration_ms}ms")
+    logger.info(
+        "Agent run completed: %s, run_id=%s, duration=%dms, status=%s",
+        name, run_id, result.duration_ms, result.status,
+    )
 
     return jsonify({
-        'success': True,
+        'success': result.status == 'success',
         'run_id': run_id,
         'agent': name,
-        'status': 'completed',
-        'duration_ms': duration_ms,
-        'message': f'Agent "{agent["display_name"]}" completed successfully',
-        'completed_at': (started_at + timedelta(milliseconds=duration_ms)).isoformat() + 'Z',
+        'status': result.status,
+        'duration_ms': result.duration_ms,
+        'tokens_input': result.tokens_input,
+        'tokens_output': result.tokens_output,
+        'estimated_cost': result.estimated_cost,
+        'output': result.output,
+        'error': result.error,
+        'started_at': result.started_at,
+        'completed_at': result.completed_at,
+        'message': f'Agent "{agent.config.role}" completed with status: {result.status}',
     })
 
 
@@ -318,8 +272,7 @@ def list_recent_runs():
     Query Parameters:
         limit (int, optional): Maximum number of runs to return. Default 50, max 200.
         agent (str, optional): Filter by agent name.
-        status (str, optional): Filter by run status
-            (queued, running, completed, failed).
+        status (str, optional): Filter by run status (queued, running, completed, failed).
 
     Returns:
         JSON object with:
@@ -385,7 +338,7 @@ def get_cost_summary():
             Defaults to 'daily'.
 
     Returns:
-        JSON object with cost breakdown by period and agent, plus totals.
+        JSON object with real cost breakdown from the agent_runs table.
     """
     period = request.args.get('period', 'daily')
     valid_periods = ['daily', 'weekly', 'monthly']
@@ -395,140 +348,29 @@ def get_cost_summary():
             'error': f'Invalid period: {period}. Must be one of: {", ".join(valid_periods)}'
         }), 400
 
-    # Determine date range based on period
-    now = datetime.utcnow()
-    if period == 'daily':
-        range_start = (now - timedelta(days=1)).isoformat() + 'Z'
-        range_label = 'Last 24 hours'
-    elif period == 'weekly':
-        range_start = (now - timedelta(weeks=1)).isoformat() + 'Z'
-        range_label = 'Last 7 days'
-    else:  # monthly
-        range_start = (now - timedelta(days=30)).isoformat() + 'Z'
-        range_label = 'Last 30 days'
+    period_days = {'daily': 1, 'weekly': 7, 'monthly': 30}[period]
+    range_labels = {'daily': 'Last 24 hours', 'weekly': 'Last 7 days', 'monthly': 'Last 30 days'}
 
-    # Stub: return zero costs -- no runs have occurred yet
+    registry = get_registry()
+    summary = registry.get_cost_summary(days=period_days)
+
+    now = datetime.utcnow()
     return jsonify({
         'period': period,
-        'range_label': range_label,
-        'range_start': range_start,
+        'range_label': range_labels[period],
+        'range_start': (now - timedelta(days=period_days)).isoformat() + 'Z',
         'range_end': now.isoformat() + 'Z',
-        'total_cost_usd': 0.0,
-        'total_runs': 0,
-        'total_tokens': 0,
+        'total_cost_usd': summary['total_cost'],
+        'total_runs': summary['total_runs'],
+        'total_tokens': summary['total_tokens_input'] + summary['total_tokens_output'],
         'by_agent': {
-            agent['name']: {
-                'display_name': agent['display_name'],
-                'runs': 0,
-                'cost_usd': 0.0,
-                'tokens_used': 0
+            row['agent_name']: {
+                'runs': row['runs'],
+                'cost_usd': row['cost'],
+                'tokens_used': row['tokens'],
             }
-            for agent in _STUB_AGENTS
+            for row in summary['by_agent']
         },
+        'by_day': summary['by_day'],
         'by_provider': {},
-        'message': 'Cost tracking will populate once agent runs begin'
     })
-
-
-# ---------------------------------------------------------------------------
-# Helper: map agent names to their expected tool sets
-# ---------------------------------------------------------------------------
-
-def _get_agent_tools(agent_name):
-    """Return the list of tools available to a given agent (stub metadata)."""
-    tool_map = {
-        'sentiment_analyst': [
-            {'name': 'news_fetcher', 'description': 'Fetches news articles from configured sources'},
-            {'name': 'sentiment_scorer', 'description': 'Scores text sentiment using NLP models'},
-            {'name': 'db_writer', 'description': 'Persists analysis results to database'},
-        ],
-        'technical_analyst': [
-            {'name': 'price_fetcher', 'description': 'Fetches historical price data'},
-            {'name': 'indicator_calculator', 'description': 'Calculates RSI, MACD, moving averages'},
-            {'name': 'db_writer', 'description': 'Persists analysis results to database'},
-        ],
-        'news_scanner': [
-            {'name': 'rss_reader', 'description': 'Reads RSS feeds from news sources'},
-            {'name': 'web_scraper', 'description': 'Scrapes article content from web pages'},
-            {'name': 'deduplicator', 'description': 'Detects and filters duplicate articles'},
-            {'name': 'db_writer', 'description': 'Persists articles to database'},
-        ],
-        'risk_monitor': [
-            {'name': 'portfolio_reader', 'description': 'Reads current portfolio state'},
-            {'name': 'risk_calculator', 'description': 'Calculates VaR, drawdown, exposure metrics'},
-            {'name': 'alert_sender', 'description': 'Sends alerts via configured channels'},
-        ],
-        'report_generator': [
-            {'name': 'data_aggregator', 'description': 'Aggregates data from all analysis results'},
-            {'name': 'template_renderer', 'description': 'Renders reports from templates'},
-            {'name': 'email_sender', 'description': 'Sends reports via email'},
-        ],
-    }
-    return tool_map.get(agent_name, [])
-
-
-def _generate_agent_output(agent_name):
-    """Generate realistic stub output for an agent run."""
-    outputs = {
-        'sentiment_analyst': (
-            "Sentiment Analysis Complete\n"
-            "Analyzed 8 stocks across 45 news articles and 120 social mentions.\n"
-            "- NVDA: Strongly positive (0.85) - AI chip demand narrative\n"
-            "- MSFT: Positive (0.72) - Azure growth momentum\n"
-            "- TSLA: Mixed (-0.15) - Competition concerns offset by FSD progress\n"
-            "- AAPL: Moderately positive (0.55) - Vision Pro momentum\n"
-            "Overall market sentiment: Cautiously optimistic"
-        ),
-        'technical_analyst': (
-            "Technical Scan Complete\n"
-            "Scanned 8 stocks for RSI, MACD, and moving average signals.\n"
-            "Signals detected:\n"
-            "- NVDA: RSI 62.4 (neutral), MACD bullish crossover, above 50-day MA\n"
-            "- MSFT: RSI 48.7 (neutral), MACD neutral, above 200-day MA\n"
-            "- AMD: RSI 50.8 (neutral), approaching 20-day MA resistance\n"
-            "- TSLA: RSI 45.2 (slightly oversold zone), below 50-day MA\n"
-            "No breakout alerts triggered."
-        ),
-        'news_scanner': (
-            "News Scan Complete\n"
-            "Scanned 12 sources, found 28 new articles.\n"
-            "Top stories:\n"
-            "1. NVDA: Record Q4 revenue on AI chip demand (Reuters)\n"
-            "2. MSFT: Azure revenue grows 30% YoY (CNBC)\n"
-            "3. AMZN: AWS announces new AI infrastructure investments (Reuters)\n"
-            "4. TSLA: Faces increased competition in Chinese EV market (WSJ)\n"
-            "Deduplicated: 6 duplicate articles removed."
-        ),
-        'risk_monitor': (
-            "Risk Assessment Complete\n"
-            "Portfolio risk metrics:\n"
-            "- VaR (95%, 1-day): -2.3%\n"
-            "- Max drawdown (30d): -4.1%\n"
-            "- Sharpe ratio: 1.42\n"
-            "- Beta to S&P 500: 1.15\n"
-            "- Concentration risk: NVDA at 22% (threshold: 25%)\n"
-            "No threshold breaches. All metrics within acceptable ranges."
-        ),
-        'report_generator': (
-            "Daily Report Generated\n"
-            "Report includes:\n"
-            "- Market overview: S&P 500 +0.3%, NASDAQ +0.5%\n"
-            "- Watchlist performance: 6 of 8 stocks positive\n"
-            "- Top mover: NVDA +4.2%\n"
-            "- Worst performer: TSLA -1.5%\n"
-            "- Sentiment summary: 75% positive across monitored stocks\n"
-            "Report saved and ready for distribution."
-        ),
-        'researcher': (
-            "Research Brief Generated\n"
-            "Generated in-depth analysis for top opportunity.\n"
-            "Focus: NVDA - AI semiconductor leadership\n"
-            "Key findings:\n"
-            "- Revenue growth trajectory accelerating\n"
-            "- Data center segment driving 80% of revenue\n"
-            "- Competitive moat strengthening with CUDA ecosystem\n"
-            "- Valuation premium justified by growth rate\n"
-            "Full brief saved to research library."
-        ),
-    }
-    return outputs.get(agent_name, f"Agent {agent_name} completed successfully.")

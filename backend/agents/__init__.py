@@ -5,6 +5,7 @@ and registering the default agent set.
 """
 
 import logging
+from typing import Optional
 
 from backend.agents.base import (
     AgentConfig,
@@ -32,6 +33,33 @@ from backend.agents.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+_registry: Optional[AgentRegistry] = None
+
+
+def get_registry() -> AgentRegistry:
+    """Return the module-level singleton registry.
+
+    Raises RuntimeError if :func:`init_registry` has not been called yet.
+    """
+    if _registry is None:
+        raise RuntimeError(
+            "AgentRegistry not initialized. Call init_registry() before using get_registry()."
+        )
+    return _registry
+
+
+def init_registry(db_path: str = "stock_news.db") -> AgentRegistry:
+    """Initialize the module-level singleton registry with all default agents.
+
+    Should be called once at application startup (e.g. in ``create_app()``).
+    Returns the newly created :class:`AgentRegistry`.
+    """
+    global _registry
+    _registry = create_default_agents(db_path=db_path)
+    logger.info("Module-level AgentRegistry initialized with db_path=%s", db_path)
+    return _registry
+
 
 __all__ = [
     # Base
@@ -63,6 +91,9 @@ __all__ = [
     "RedditScanner",
     # Factory
     "create_default_agents",
+    # Singleton accessors
+    "get_registry",
+    "init_registry",
 ]
 
 
