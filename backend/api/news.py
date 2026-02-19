@@ -13,50 +13,83 @@ logger = logging.getLogger(__name__)
 news_bp = Blueprint('news', __name__, url_prefix='/api')
 
 
+def _parse_pagination(args):
+    """Parse and validate page/page_size query parameters.
+
+    Returns (page, page_size, error_response). On success, error_response is None.
+    On validation failure, page and page_size are None and error_response is a
+    (response, status_code) tuple ready to return from a Flask view.
+    """
+    try:
+        page = int(args.get('page', 1))
+        page_size = int(args.get('page_size', 25))
+    except (ValueError, TypeError):
+        return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+
+    if not (1 <= page_size <= 100):
+        return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
+
+    return page, page_size, None
+
+
 @news_bp.route('/news', methods=['GET'])
 def get_news():
     """Get recent news articles with optional ticker filter.
 
     Query Parameters:
         ticker (str, optional): Filter articles by stock ticker.
+        page (int, optional): Page number, 1-based. Default 1.
+        page_size (int, optional): Results per page, 1-100. Default 25.
 
     Returns:
-        JSON array of news article objects. Limited to 50 per ticker or 100 overall.
+        JSON envelope with data array and pagination metadata.
     """
     ticker = request.args.get('ticker', None)
+    page, page_size, err = _parse_pagination(request.args)
+    if err:
+        return err
+
+    offset = (page - 1) * page_size
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     if ticker:
-        cursor.execute('''
-            SELECT * FROM news
-            WHERE ticker = ?
-            ORDER BY created_at DESC
-            LIMIT 50
-        ''', (ticker,))
+        cursor.execute('SELECT COUNT(*) FROM news WHERE ticker = ?', (ticker,))
+        total = cursor.fetchone()[0]
+        cursor.execute(
+            'SELECT * FROM news WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            (ticker, page_size, offset)
+        )
     else:
-        cursor.execute('''
-            SELECT * FROM news
-            ORDER BY created_at DESC
-            LIMIT 100
-        ''')
+        cursor.execute('SELECT COUNT(*) FROM news')
+        total = cursor.fetchone()[0]
+        cursor.execute(
+            'SELECT * FROM news ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            (page_size, offset)
+        )
 
     news = cursor.fetchall()
     conn.close()
 
-    return jsonify([{
-        'id': article['id'],
-        'ticker': article['ticker'],
-        'title': article['title'],
-        'description': article['description'],
-        'url': article['url'],
-        'source': article['source'],
-        'published_date': article['published_date'],
-        'sentiment_score': article['sentiment_score'],
-        'sentiment_label': article['sentiment_label'],
-        'created_at': article['created_at']
-    } for article in news])
+    return jsonify({
+        'data': [{
+            'id': article['id'],
+            'ticker': article['ticker'],
+            'title': article['title'],
+            'description': article['description'],
+            'url': article['url'],
+            'source': article['source'],
+            'published_date': article['published_date'],
+            'sentiment_score': article['sentiment_score'],
+            'sentiment_label': article['sentiment_label'],
+            'created_at': article['created_at']
+        } for article in news],
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'has_next': (page * page_size) < total,
+    })
 
 
 @news_bp.route('/alerts', methods=['GET'])

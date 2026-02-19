@@ -93,15 +93,16 @@ export async function deleteStock(ticker: string): Promise<void> {
 
 // ---- News ----
 
-export async function getNews(ticker?: string, limit = 50): Promise<NewsArticle[]> {
+export async function getNews(ticker?: string, page?: number, pageSize?: number): Promise<NewsArticle[]> {
   const params = new URLSearchParams();
   if (ticker) params.set('ticker', ticker);
-  params.set('limit', String(limit));
-  const data = await request<{ articles: NewsArticle[] } | NewsArticle[]>(
+  if (page !== undefined) params.set('page', String(page));
+  if (pageSize !== undefined) params.set('page_size', String(pageSize));
+  const data = await request<{ data: NewsArticle[] } | NewsArticle[]>(
     `/api/news?${params.toString()}`
   );
   if (Array.isArray(data)) return data;
-  return data.articles || [];
+  return (data as { data: NewsArticle[] }).data || [];
 }
 
 // ---- Alerts ----
@@ -198,14 +199,16 @@ export async function getHealth(): Promise<HealthCheck> {
 
 // ---- Research ----
 
-export async function getResearchBriefs(ticker?: string): Promise<ResearchBrief[]> {
+export async function getResearchBriefs(ticker?: string, page?: number, pageSize?: number): Promise<ResearchBrief[]> {
   const params = new URLSearchParams();
   if (ticker) params.set('ticker', ticker);
-  params.set('limit', '50');
-  const data = await request<ResearchBrief[]>(
+  if (page !== undefined) params.set('page', String(page));
+  if (pageSize !== undefined) params.set('page_size', String(pageSize));
+  const data = await request<{ data: ResearchBrief[] } | ResearchBrief[]>(
     `/api/research/briefs?${params.toString()}`
   );
-  return Array.isArray(data) ? data : [];
+  if (Array.isArray(data)) return data;
+  return (data as { data: ResearchBrief[] }).data || [];
 }
 
 export async function generateResearchBrief(ticker?: string): Promise<ResearchBrief> {
