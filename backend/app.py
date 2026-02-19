@@ -76,6 +76,19 @@ def create_app() -> Flask:
         init_all_tables()
         logger.info("Database tables initialised")
 
+    # -- Agent Registry ------------------------------------------------------
+    try:
+        from backend.agents import create_default_agents
+        registry = create_default_agents(Config.DB_PATH)
+        app.extensions['agent_registry'] = registry
+        logger.info(
+            "Agent registry initialised with %d agents: %s",
+            len(registry.list_agents()),
+            ', '.join(a['name'] for a in registry.list_agents()),
+        )
+    except Exception as exc:
+        logger.warning("Could not initialise agent registry: %s", exc)
+
     # -- Register API blueprints ---------------------------------------------
     _register_blueprints(app)
 

@@ -2,17 +2,20 @@
 TickerPulse AI v3.0 - Agents API Routes
 Blueprint for agent management, execution, run history, and cost tracking.
 
-All routes return stub/placeholder data since the agent execution system is
-not yet implemented. The route structure and response schemas are designed to
-be forward-compatible with the real agent framework.
+All routes delegate to the real AgentRegistry backed by the agent
+implementations in backend/agents/.  Stubs and random data have been removed.
+
+The six original frontend-visible stub agent IDs (sentiment_analyst,
+technical_analyst, news_scanner, risk_monitor, report_generator, researcher)
+are mapped to their canonical registry names via AGENT_ID_MAP so the UI
+contract is preserved without breaking existing bookmarks or API consumers.
 """
 
-from flask import Blueprint, jsonify, request
-from datetime import datetime, timedelta
 import sqlite3
-import random
-import time
 import logging
+from datetime import datetime, timedelta
+
+from flask import Blueprint, current_app, jsonify, request
 
 from backend.config import Config
 
@@ -21,92 +24,195 @@ logger = logging.getLogger(__name__)
 agents_bp = Blueprint('agents', __name__, url_prefix='/api')
 
 # ---------------------------------------------------------------------------
-# Placeholder agent registry -- replaced by real agent discovery once the
-# agent framework (CrewAI / OpenClaw) is wired up.
+# Stub-to-real agent ID mapping
+# The frontend uses the six original stub names from the old placeholder list.
+# This map resolves them to canonical agent names in the AgentRegistry.
+# Real agent names pass through unchanged so the map is the single source
+# of truth for all name resolution.
 # ---------------------------------------------------------------------------
 
-_STUB_AGENTS = [
-    {
-        'name': 'sentiment_analyst',
+AGENT_ID_MAP = {
+    # legacy stub IDs → real registry name
+    'sentiment_analyst': 'investigator',
+    'technical_analyst': 'scanner',
+    'news_scanner':      'scanner',
+    'risk_monitor':      'regime',
+    'report_generator':  'researcher',
+    # real names (pass-through)
+    'researcher':        'researcher',
+    'download_tracker':  'download_tracker',
+    'scanner':           'scanner',
+    'investigator':      'investigator',
+    'regime':            'regime',
+}
+
+# ---------------------------------------------------------------------------
+# Static display metadata keyed by stub/frontend agent ID
+# ---------------------------------------------------------------------------
+
+_AGENT_METADATA = {
+    'sentiment_analyst': {
         'display_name': 'Sentiment Analyst',
         'description': 'Analyzes news and social media sentiment for monitored stocks',
         'category': 'analysis',
         'schedule': '*/30 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
     },
-    {
-        'name': 'technical_analyst',
+    'technical_analyst': {
         'display_name': 'Technical Analyst',
-        'description': 'Runs technical indicator analysis (RSI, MACD, moving averages) across watchlist',
+        'description': (
+            'Runs technical indicator analysis (RSI, MACD, moving averages) '
+            'across watchlist stocks.'
+        ),
         'category': 'analysis',
         'schedule': '0 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
     },
-    {
-        'name': 'news_scanner',
+    'news_scanner': {
         'display_name': 'News Scanner',
         'description': 'Scans multiple news sources for articles about monitored stocks',
         'category': 'data_collection',
         'schedule': '*/15 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
     },
-    {
-        'name': 'risk_monitor',
+    'risk_monitor': {
         'display_name': 'Risk Monitor',
-        'description': 'Monitors portfolio risk metrics and generates alerts on threshold breaches',
+        'description': (
+            'Classifies the current macro market regime and monitors portfolio risk '
+            'using macro indicators.'
+        ),
         'category': 'monitoring',
         'schedule': '*/10 * * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
     },
-    {
-        'name': 'report_generator',
+    'report_generator': {
         'display_name': 'Report Generator',
-        'description': 'Generates daily and weekly summary reports of market activity',
+        'description': (
+            'Generates in-depth research briefs with AI-powered analysis for '
+            'top opportunities and monitored stocks.'
+        ),
         'category': 'reporting',
         'schedule': '0 18 * * *',
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
     },
-    {
-        'name': 'researcher',
+    'researcher': {
         'display_name': 'Deep Researcher',
-        'description': 'Generates in-depth research briefs with AI-powered analysis',
+        'description': (
+            'Generates in-depth research briefs with AI-powered analysis for '
+            'top opportunities and monitored stocks.'
+        ),
         'category': 'research',
         'schedule': None,
-        'status': 'idle',
-        'last_run': None,
-        'avg_duration_seconds': None,
-        'total_runs': 0,
-        'enabled': True
     },
-]
+    'download_tracker': {
+        'display_name': 'Download Tracker',
+        'description': (
+            'Tracks GitHub repository download and star metrics for tech '
+            'stock research and developer adoption signals.'
+        ),
+        'category': 'data_collection',
+        'schedule': '0 */6 * * *',
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_registry():
+    """Retrieve the AgentRegistry from the app extension store."""
+    try:
+        return current_app.extensions.get('agent_registry')
+    except RuntimeError:
+        # Outside Flask app context — create via singleton getter
+        from backend.agents import get_registry
+        return get_registry()
 
 
-def _find_agent(name):
-    """Look up a stub agent by name. Returns None if not found."""
-    for agent in _STUB_AGENTS:
-        if agent['name'] == name:
-            return agent
-    return None
+def _format_agent(stub_name: str, agent_obj) -> dict:
+    """Build an agent summary dict using the stub/frontend name and real agent object."""
+    meta = _AGENT_METADATA.get(stub_name, {})
+    status = 'idle'
+    enabled = True
+    model = ''
+    tags = []
+    if agent_obj is not None:
+        raw_status = agent_obj.status
+        status = raw_status.value if hasattr(raw_status, 'value') else str(raw_status)
+        enabled = agent_obj.config.enabled
+        model = agent_obj.config.model
+        tags = agent_obj.config.tags or []
+    return {
+        'name': stub_name,
+        'display_name': meta.get('display_name', stub_name.replace('_', ' ').title()),
+        'description': meta.get('description', ''),
+        'category': meta.get('category', 'analysis'),
+        'schedule': meta.get('schedule'),
+        'status': status,
+        'enabled': enabled,
+        'model': model,
+        'tags': tags,
+        'total_runs': 0,
+        'last_run': None,
+        'total_cost': 0.0,
+    }
+
+
+def _get_latest_run_id(agent_name: str) -> int:
+    """Return the rowid of the most recently persisted run for agent_name."""
+    try:
+        conn = sqlite3.connect(Config.DB_PATH)
+        row = conn.execute(
+            'SELECT MAX(id) FROM agent_runs WHERE agent_name = ?',
+            (agent_name,)
+        ).fetchone()
+        conn.close()
+        return row[0] if row and row[0] is not None else 0
+    except Exception as e:
+        logger.error("Failed to get latest run id for %s: %s", agent_name, e)
+        return 0
+
+
+def _dispatch(registry, agent_name: str, params: dict):
+    """Route execution: OpenClaw (if enabled/reachable) → direct agent.run().
+
+    Returns an AgentResult regardless of path taken.  The result is NOT
+    persisted here — callers are responsible for DB persistence so that a
+    single row is written (no duplicate INSERTs).
+
+    Resolution order
+    ----------------
+    1. OpenClaw gateway — only attempted when ``Config.OPENCLAW_ENABLED`` is
+       True **and** ``OpenClawBridge.is_available()`` returns True.
+    2. Native CrewAI path — calls ``agent_obj.run()`` directly (not
+       ``registry.run_agent()``) to avoid a second ``_persist_result`` call.
+    """
+    if Config.OPENCLAW_ENABLED:
+        try:
+            from backend.agents.openclaw_engine import OpenClawBridge
+            bridge = OpenClawBridge()
+            if bridge.is_available():
+                logger.info("Dispatching %s via OpenClaw", agent_name)
+                return bridge.run_task(
+                    agent_name=agent_name,
+                    task_description=f"Run {agent_name} agent",
+                    inputs=params or {},
+                )
+        except Exception as e:
+            logger.warning(
+                "OpenClaw dispatch failed for %s, falling back to native: %s",
+                agent_name, e,
+            )
+
+    # Native path: call agent.run() directly so the caller controls persistence
+    agent_obj = registry.get(agent_name)
+    if agent_obj is not None:
+        return agent_obj.run(params or {})
+
+    # Should not be reachable (caller already validated the agent exists)
+    from backend.agents.base import AgentResult
+    return AgentResult(
+        agent_name=agent_name,
+        framework='native',
+        status='error',
+        output='',
+        error=f'Agent {agent_name} not found in registry',
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +224,7 @@ def list_agents():
     """List all registered agents with their current status.
 
     Query Parameters:
-        category (str, optional): Filter by agent category
-            (analysis, data_collection, monitoring, reporting).
+        category (str, optional): Filter by agent category.
         enabled (str, optional): Filter by enabled status ('true' or 'false').
 
     Returns:
@@ -127,10 +232,18 @@ def list_agents():
         - agents: Array of agent summary objects.
         - total: Total count of agents returned.
     """
-    category = request.args.get('category', None)
-    enabled_filter = request.args.get('enabled', None)
+    category = request.args.get('category')
+    enabled_filter = request.args.get('enabled')
 
-    agents = list(_STUB_AGENTS)
+    registry = _get_registry()
+
+    # Build the response list from _AGENT_METADATA stub IDs.
+    # Each stub is resolved to a real agent via AGENT_ID_MAP.
+    agents = []
+    for stub_id in _AGENT_METADATA:
+        real_name = AGENT_ID_MAP.get(stub_id, stub_id)
+        agent_obj = registry.get(real_name) if registry else None
+        agents.append(_format_agent(stub_id, agent_obj))
 
     if category:
         agents = [a for a in agents if a['category'] == category]
@@ -139,14 +252,15 @@ def list_agents():
         enabled_bool = enabled_filter.lower() == 'true'
         agents = [a for a in agents if a['enabled'] == enabled_bool]
 
-    # Enrich with last_run data from DB
+    # Enrich each agent with live run stats from DB
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         for agent in agents:
+            real_name = AGENT_ID_MAP.get(agent['name'], agent['name'])
             row = conn.execute(
                 'SELECT * FROM agent_runs WHERE agent_name = ? ORDER BY started_at DESC LIMIT 1',
-                (agent['name'],)
+                (real_name,)
             ).fetchone()
             if row:
                 agent['last_run'] = {
@@ -159,26 +273,21 @@ def list_agents():
                     'tokens_used': (row['tokens_input'] or 0) + (row['tokens_output'] or 0),
                     'estimated_cost': row['estimated_cost'] or 0,
                 }
-                # Update total_runs from DB
-                count = conn.execute(
-                    'SELECT COUNT(*) FROM agent_runs WHERE agent_name = ?',
-                    (agent['name'],)
-                ).fetchone()[0]
-                agent['total_runs'] = count
-                # Compute total_cost
-                total_cost = conn.execute(
-                    'SELECT COALESCE(SUM(estimated_cost), 0) FROM agent_runs WHERE agent_name = ?',
-                    (agent['name'],)
-                ).fetchone()[0]
-                agent['total_cost'] = round(total_cost, 4)
+            count = conn.execute(
+                'SELECT COUNT(*) FROM agent_runs WHERE agent_name = ?',
+                (real_name,)
+            ).fetchone()[0]
+            agent['total_runs'] = count
+            total_cost = conn.execute(
+                'SELECT COALESCE(SUM(estimated_cost), 0) FROM agent_runs WHERE agent_name = ?',
+                (real_name,)
+            ).fetchone()[0]
+            agent['total_cost'] = round(total_cost, 4)
         conn.close()
     except Exception as e:
-        logger.error(f"Failed to enrich agents with run data: {e}")
+        logger.error("Failed to enrich agents with run data: %s", e)
 
-    return jsonify({
-        'agents': agents,
-        'total': len(agents)
-    })
+    return jsonify({'agents': agents, 'total': len(agents)})
 
 
 @agents_bp.route('/agents/<name>', methods=['GET'])
@@ -186,27 +295,59 @@ def get_agent_detail(name):
     """Get detailed information about a specific agent including run history.
 
     Path Parameters:
-        name (str): Agent identifier (e.g. 'sentiment_analyst').
+        name (str): Agent identifier — may be a stub alias or real registry name.
 
     Returns:
         JSON object with full agent details and a 'recent_runs' array.
 
     Errors:
         404: Agent not found.
+        503: Registry not initialised.
     """
-    agent = _find_agent(name)
-    if not agent:
+    registry = _get_registry()
+    if registry is None:
+        return jsonify({'error': 'Agent registry not initialised'}), 503
+
+    real_name = AGENT_ID_MAP.get(name)
+    if real_name is None:
         return jsonify({'error': f'Agent not found: {name}'}), 404
 
-    # Build detailed response with empty run history (stub)
-    detail = dict(agent)
-    detail['recent_runs'] = []
+    agent_obj = registry.get(real_name)
+    if agent_obj is None:
+        return jsonify({'error': f'Agent not found: {name}'}), 404
+
+    detail = _format_agent(name, agent_obj)
+
+    # Recent runs from DB (keyed by real agent name)
+    try:
+        conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            'SELECT * FROM agent_runs WHERE agent_name = ? ORDER BY started_at DESC LIMIT 10',
+            (real_name,)
+        ).fetchall()
+        conn.close()
+        detail['recent_runs'] = [{
+            'id': r['id'],
+            'status': r['status'],
+            'started_at': r['started_at'],
+            'completed_at': r['completed_at'],
+            'duration_ms': r['duration_ms'] or 0,
+            'tokens_used': (r['tokens_input'] or 0) + (r['tokens_output'] or 0),
+            'estimated_cost': r['estimated_cost'] or 0,
+            'framework': r['framework'],
+        } for r in rows]
+    except Exception as e:
+        logger.error("Failed to fetch recent runs for %s: %s", name, e)
+        detail['recent_runs'] = []
+
     detail['config'] = {
-        'max_retries': 3,
-        'timeout_seconds': 300,
-        'concurrency': 1
+        'model': agent_obj.config.model,
+        'max_tokens': agent_obj.config.max_tokens,
+        'temperature': agent_obj.config.temperature,
+        'provider': agent_obj.config.provider,
     }
-    detail['tools'] = _get_agent_tools(name)
+    detail['tools'] = _get_agent_tools(real_name)
 
     return jsonify(detail)
 
@@ -216,28 +357,37 @@ def trigger_agent_run(name):
     """Manually trigger an agent run.
 
     Path Parameters:
-        name (str): Agent identifier.
+        name (str): Agent identifier — may be a stub alias or real registry name.
 
     Request Body (JSON, optional):
-        params (dict): Optional parameters to pass to the agent.
-            For example, {'tickers': ['AAPL', 'TSLA']} to limit scope.
+        params (dict): Optional parameters passed to the agent.
 
     Returns:
         JSON object with:
-        - success (bool): Whether the run was accepted.
-        - run_id (str): Unique identifier for this run.
-        - agent (str): Agent name.
-        - status: 'queued' (the run has been accepted for execution).
+        - success (bool): Whether the run succeeded.
+        - run_id (int): DB rowid of the persisted run record.
+        - agent (str): The requested agent identifier (stub name preserved).
+        - status: 'completed' on success, 'error' on failure.
+        - framework, tokens_input, tokens_output, estimated_cost, duration_ms.
 
     Errors:
         404: Agent not found.
         400: Agent is disabled.
+        503: Registry not initialised.
     """
-    agent = _find_agent(name)
-    if not agent:
+    registry = _get_registry()
+    if registry is None:
+        return jsonify({'error': 'Agent registry not initialised'}), 503
+
+    real_name = AGENT_ID_MAP.get(name)
+    if real_name is None:
         return jsonify({'error': f'Agent not found: {name}'}), 404
 
-    if not agent.get('enabled'):
+    agent_obj = registry.get(real_name)
+    if agent_obj is None:
+        return jsonify({'error': f'Agent not found: {name}'}), 404
+
+    if not agent_obj.config.enabled:
         return jsonify({
             'success': False,
             'error': f'Agent "{name}" is currently disabled. Enable it in settings first.'
@@ -246,68 +396,37 @@ def trigger_agent_run(name):
     data = request.get_json(silent=True) or {}
     params = data.get('params', {})
 
-    # Execute a simulated agent run and store results
-    started_at = datetime.utcnow()
-    duration_ms = random.randint(800, 3500)
+    # Dispatch: OpenClaw → native agent.run() fallback.
+    # _dispatch() returns the AgentResult without persisting; we persist once
+    # here so the DB always contains exactly one row per trigger call.
+    result = _dispatch(registry, real_name, params)
+    registry._persist_result(result, params)
+    run_id = _get_latest_run_id(real_name)
+    success = result.status == 'success'
 
-    # Generate stub output based on agent type
-    output = _generate_agent_output(name)
-
-    # Store in agent_runs table
-    try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        tokens_in = random.randint(100, 800)
-        tokens_out = random.randint(100, 700)
-        cursor = conn.execute("""
-            INSERT INTO agent_runs
-            (agent_name, framework, status, input_data, output_data,
-             tokens_input, tokens_output, estimated_cost, duration_ms, started_at, completed_at)
-            VALUES (?, 'crewai', 'completed', ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            name,
-            str(params) if params else None,
-            output,
-            tokens_in,
-            tokens_out,
-            round(random.uniform(0.001, 0.02), 4),
-            duration_ms,
-            started_at.isoformat() + 'Z',
-            (started_at + timedelta(milliseconds=duration_ms)).isoformat() + 'Z',
-        ))
-        run_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Failed to store agent run: {e}")
-        run_id = 0
-
-    # Update in-memory stub agent state
-    agent['total_runs'] = agent.get('total_runs', 0) + 1
-    agent['last_run'] = started_at.isoformat() + 'Z'
-    agent['status'] = 'idle'
-
-    # Send SSE notification
-    try:
-        from backend.app import send_sse_event
-        send_sse_event('agent_status', {
-            'agent_name': name,
-            'status': 'completed',
-            'run_id': run_id,
-            'message': f'Agent "{agent["display_name"]}" completed successfully',
-        })
-    except Exception:
-        pass
-
-    logger.info(f"Agent run completed: {name}, run_id={run_id}, duration={duration_ms}ms")
+    logger.info(
+        "Agent run finished: %s (real=%s), run_id=%s, status=%s, duration=%dms",
+        name, real_name, run_id, result.status, result.duration_ms,
+    )
 
     return jsonify({
-        'success': True,
+        'success': success,
         'run_id': run_id,
         'agent': name,
-        'status': 'completed',
-        'duration_ms': duration_ms,
-        'message': f'Agent "{agent["display_name"]}" completed successfully',
-        'completed_at': (started_at + timedelta(milliseconds=duration_ms)).isoformat() + 'Z',
+        'status': 'completed' if success else result.status,
+        'framework': result.framework,
+        'message': (
+            f'Agent "{name}" completed successfully'
+            if success
+            else f'Agent "{name}" failed: {result.error}'
+        ),
+        'tokens_input': result.tokens_input,
+        'tokens_output': result.tokens_output,
+        'estimated_cost': result.estimated_cost,
+        'duration_ms': result.duration_ms,
+        'started_at': result.started_at,
+        'completed_at': result.completed_at,
+        'error': result.error,
     })
 
 
@@ -317,9 +436,8 @@ def list_recent_runs():
 
     Query Parameters:
         limit (int, optional): Maximum number of runs to return. Default 50, max 200.
-        agent (str, optional): Filter by agent name.
-        status (str, optional): Filter by run status
-            (queued, running, completed, failed).
+        agent (str, optional): Filter by agent name (stub aliases accepted).
+        status (str, optional): Filter by run status (running, success, error).
 
     Returns:
         JSON object with:
@@ -327,8 +445,8 @@ def list_recent_runs():
         - total: Total count of runs returned.
     """
     limit = min(int(request.args.get('limit', 50)), 200)
-    agent_filter = request.args.get('agent', None)
-    status_filter = request.args.get('status', None)
+    agent_filter = request.args.get('agent')
+    status_filter = request.args.get('status')
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
@@ -338,8 +456,10 @@ def list_recent_runs():
         params = []
 
         if agent_filter:
+            # Resolve stub alias → real name; fall back to the value as-is
+            real_name = AGENT_ID_MAP.get(agent_filter, agent_filter)
             query += ' AND agent_name = ?'
-            params.append(agent_filter)
+            params.append(real_name)
         if status_filter:
             query += ' AND status = ?'
             params.append(status_filter)
@@ -360,9 +480,10 @@ def list_recent_runs():
             'estimated_cost': r['estimated_cost'] or 0,
             'started_at': r['started_at'],
             'completed_at': r['completed_at'],
+            'framework': r['framework'],
         } for r in rows]
     except Exception as e:
-        logger.error(f"Failed to query agent runs: {e}")
+        logger.error("Failed to query agent runs: %s", e)
         runs = []
 
     return jsonify({
@@ -371,8 +492,8 @@ def list_recent_runs():
         'filters': {
             'limit': limit,
             'agent': agent_filter,
-            'status': status_filter
-        }
+            'status': status_filter,
+        },
     })
 
 
@@ -386,6 +507,8 @@ def get_cost_summary():
 
     Returns:
         JSON object with cost breakdown by period and agent, plus totals.
+        by_agent is keyed by stub/frontend agent IDs (all stubs included, zeros
+        if no runs yet).
     """
     period = request.args.get('period', 'daily')
     valid_periods = ['daily', 'weekly', 'monthly']
@@ -395,140 +518,104 @@ def get_cost_summary():
             'error': f'Invalid period: {period}. Must be one of: {", ".join(valid_periods)}'
         }), 400
 
-    # Determine date range based on period
-    now = datetime.utcnow()
-    if period == 'daily':
-        range_start = (now - timedelta(days=1)).isoformat() + 'Z'
-        range_label = 'Last 24 hours'
-    elif period == 'weekly':
-        range_start = (now - timedelta(weeks=1)).isoformat() + 'Z'
-        range_label = 'Last 7 days'
-    else:  # monthly
-        range_start = (now - timedelta(days=30)).isoformat() + 'Z'
-        range_label = 'Last 30 days'
+    period_days = {'daily': 1, 'weekly': 7, 'monthly': 30}[period]
+    range_labels = {'daily': 'Last 24 hours', 'weekly': 'Last 7 days', 'monthly': 'Last 30 days'}
 
-    # Stub: return zero costs -- no runs have occurred yet
-    return jsonify({
-        'period': period,
-        'range_label': range_label,
-        'range_start': range_start,
-        'range_end': now.isoformat() + 'Z',
-        'total_cost_usd': 0.0,
-        'total_runs': 0,
-        'total_tokens': 0,
-        'by_agent': {
-            agent['name']: {
-                'display_name': agent['display_name'],
+    now = datetime.utcnow()
+    range_start = (now - timedelta(days=period_days)).isoformat() + 'Z'
+
+    # Helper to build an empty by_agent dict (all stubs with zero values)
+    def _empty_by_agent():
+        return {
+            stub_id: {
+                'display_name': meta.get('display_name', stub_id.replace('_', ' ').title()),
                 'runs': 0,
                 'cost_usd': 0.0,
-                'tokens_used': 0
+                'tokens_used': 0,
             }
-            for agent in _STUB_AGENTS
-        },
-        'by_provider': {},
-        'message': 'Cost tracking will populate once agent runs begin'
+            for stub_id, meta in _AGENT_METADATA.items()
+        }
+
+    registry = _get_registry()
+    if registry is None:
+        return jsonify({
+            'period': period,
+            'range_label': range_labels[period],
+            'range_start': range_start,
+            'range_end': now.isoformat() + 'Z',
+            'total_cost_usd': 0.0,
+            'total_runs': 0,
+            'total_tokens': 0,
+            'by_agent': _empty_by_agent(),
+            'by_provider': {},
+        })
+
+    summary = registry.get_cost_summary(days=period_days)
+
+    # Index DB summary by real agent name
+    real_costs = {}
+    for row in summary.get('by_agent', []):
+        real_costs[row['agent_name']] = {
+            'runs': row['runs'],
+            'cost': row['cost'],
+            'tokens': row['tokens'],
+        }
+
+    # Build by_agent keyed by stub IDs; all stubs present even with zero runs
+    by_agent = {}
+    for stub_id, meta in _AGENT_METADATA.items():
+        real_name = AGENT_ID_MAP.get(stub_id, stub_id)
+        rc = real_costs.get(real_name, {'runs': 0, 'cost': 0.0, 'tokens': 0})
+        by_agent[stub_id] = {
+            'display_name': meta.get('display_name', stub_id.replace('_', ' ').title()),
+            'runs': rc['runs'],
+            'cost_usd': round(rc['cost'], 6),
+            'tokens_used': rc['tokens'],
+        }
+
+    return jsonify({
+        'period': period,
+        'range_label': range_labels[period],
+        'range_start': range_start,
+        'range_end': now.isoformat() + 'Z',
+        'total_cost_usd': summary.get('total_cost', 0.0),
+        'total_runs': summary.get('total_runs', 0),
+        'total_tokens': (
+            summary.get('total_tokens_input', 0) + summary.get('total_tokens_output', 0)
+        ),
+        'by_agent': by_agent,
+        'by_provider': {},  # future: aggregate by model provider
+        'by_day': summary.get('by_day', []),
     })
 
 
 # ---------------------------------------------------------------------------
-# Helper: map agent names to their expected tool sets
+# Agent tool metadata (informational, used by GET /api/agents/<name>)
 # ---------------------------------------------------------------------------
 
-def _get_agent_tools(agent_name):
-    """Return the list of tools available to a given agent (stub metadata)."""
+def _get_agent_tools(agent_name: str) -> list:
+    """Return the list of tools available to a given agent (by real registry name)."""
     tool_map = {
-        'sentiment_analyst': [
-            {'name': 'news_fetcher', 'description': 'Fetches news articles from configured sources'},
-            {'name': 'sentiment_scorer', 'description': 'Scores text sentiment using NLP models'},
-            {'name': 'db_writer', 'description': 'Persists analysis results to database'},
+        'scanner': [
+            {'name': 'stock_data_fetcher', 'description': 'Fetches historical OHLCV price data'},
+            {'name': 'technical_analyzer', 'description': 'Computes RSI, MACD, MA, Bollinger Bands, Stochastic'},
+            {'name': 'news_fetcher', 'description': 'Fetches recent news for sentiment context'},
         ],
-        'technical_analyst': [
-            {'name': 'price_fetcher', 'description': 'Fetches historical price data'},
-            {'name': 'indicator_calculator', 'description': 'Calculates RSI, MACD, moving averages'},
-            {'name': 'db_writer', 'description': 'Persists analysis results to database'},
+        'researcher': [
+            {'name': 'stock_data_fetcher', 'description': 'Fetches historical OHLCV price data'},
+            {'name': 'news_fetcher', 'description': 'Fetches news articles for research'},
+            {'name': 'technical_analyzer', 'description': 'Provides technical analysis context'},
         ],
-        'news_scanner': [
-            {'name': 'rss_reader', 'description': 'Reads RSS feeds from news sources'},
-            {'name': 'web_scraper', 'description': 'Scrapes article content from web pages'},
-            {'name': 'deduplicator', 'description': 'Detects and filters duplicate articles'},
-            {'name': 'db_writer', 'description': 'Persists articles to database'},
+        'regime': [
+            {'name': 'stock_data_fetcher', 'description': 'Fetches macro index price data'},
+            {'name': 'technical_analyzer', 'description': 'Computes trend and momentum indicators'},
         ],
-        'risk_monitor': [
-            {'name': 'portfolio_reader', 'description': 'Reads current portfolio state'},
-            {'name': 'risk_calculator', 'description': 'Calculates VaR, drawdown, exposure metrics'},
-            {'name': 'alert_sender', 'description': 'Sends alerts via configured channels'},
+        'investigator': [
+            {'name': 'reddit_scanner', 'description': 'Scans Reddit for stock mentions and sentiment'},
+            {'name': 'news_fetcher', 'description': 'Cross-references news with social signals'},
         ],
-        'report_generator': [
-            {'name': 'data_aggregator', 'description': 'Aggregates data from all analysis results'},
-            {'name': 'template_renderer', 'description': 'Renders reports from templates'},
-            {'name': 'email_sender', 'description': 'Sends reports via email'},
+        'download_tracker': [
+            {'name': 'github_api', 'description': 'Fetches repository download and star metrics'},
         ],
     }
     return tool_map.get(agent_name, [])
-
-
-def _generate_agent_output(agent_name):
-    """Generate realistic stub output for an agent run."""
-    outputs = {
-        'sentiment_analyst': (
-            "Sentiment Analysis Complete\n"
-            "Analyzed 8 stocks across 45 news articles and 120 social mentions.\n"
-            "- NVDA: Strongly positive (0.85) - AI chip demand narrative\n"
-            "- MSFT: Positive (0.72) - Azure growth momentum\n"
-            "- TSLA: Mixed (-0.15) - Competition concerns offset by FSD progress\n"
-            "- AAPL: Moderately positive (0.55) - Vision Pro momentum\n"
-            "Overall market sentiment: Cautiously optimistic"
-        ),
-        'technical_analyst': (
-            "Technical Scan Complete\n"
-            "Scanned 8 stocks for RSI, MACD, and moving average signals.\n"
-            "Signals detected:\n"
-            "- NVDA: RSI 62.4 (neutral), MACD bullish crossover, above 50-day MA\n"
-            "- MSFT: RSI 48.7 (neutral), MACD neutral, above 200-day MA\n"
-            "- AMD: RSI 50.8 (neutral), approaching 20-day MA resistance\n"
-            "- TSLA: RSI 45.2 (slightly oversold zone), below 50-day MA\n"
-            "No breakout alerts triggered."
-        ),
-        'news_scanner': (
-            "News Scan Complete\n"
-            "Scanned 12 sources, found 28 new articles.\n"
-            "Top stories:\n"
-            "1. NVDA: Record Q4 revenue on AI chip demand (Reuters)\n"
-            "2. MSFT: Azure revenue grows 30% YoY (CNBC)\n"
-            "3. AMZN: AWS announces new AI infrastructure investments (Reuters)\n"
-            "4. TSLA: Faces increased competition in Chinese EV market (WSJ)\n"
-            "Deduplicated: 6 duplicate articles removed."
-        ),
-        'risk_monitor': (
-            "Risk Assessment Complete\n"
-            "Portfolio risk metrics:\n"
-            "- VaR (95%, 1-day): -2.3%\n"
-            "- Max drawdown (30d): -4.1%\n"
-            "- Sharpe ratio: 1.42\n"
-            "- Beta to S&P 500: 1.15\n"
-            "- Concentration risk: NVDA at 22% (threshold: 25%)\n"
-            "No threshold breaches. All metrics within acceptable ranges."
-        ),
-        'report_generator': (
-            "Daily Report Generated\n"
-            "Report includes:\n"
-            "- Market overview: S&P 500 +0.3%, NASDAQ +0.5%\n"
-            "- Watchlist performance: 6 of 8 stocks positive\n"
-            "- Top mover: NVDA +4.2%\n"
-            "- Worst performer: TSLA -1.5%\n"
-            "- Sentiment summary: 75% positive across monitored stocks\n"
-            "Report saved and ready for distribution."
-        ),
-        'researcher': (
-            "Research Brief Generated\n"
-            "Generated in-depth analysis for top opportunity.\n"
-            "Focus: NVDA - AI semiconductor leadership\n"
-            "Key findings:\n"
-            "- Revenue growth trajectory accelerating\n"
-            "- Data center segment driving 80% of revenue\n"
-            "- Competitive moat strengthening with CUDA ecosystem\n"
-            "- Valuation premium justified by growth rate\n"
-            "Full brief saved to research library."
-        ),
-    }
-    return outputs.get(agent_name, f"Agent {agent_name} completed successfully.")
