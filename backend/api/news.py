@@ -13,50 +13,76 @@ logger = logging.getLogger(__name__)
 news_bp = Blueprint('news', __name__, url_prefix='/api')
 
 
+def _parse_pagination():
+    """Parse page and page_size query parameters with safe defaults."""
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = min(max(1, int(request.args.get('page_size', 25))), 100)
+    except (ValueError, TypeError):
+        page_size = 25
+    offset = (page - 1) * page_size
+    return page, page_size, offset
+
+
 @news_bp.route('/news', methods=['GET'])
 def get_news():
     """Get recent news articles with optional ticker filter.
 
     Query Parameters:
         ticker (str, optional): Filter articles by stock ticker.
+        page (int, optional): Page number (1-based). Default 1.
+        page_size (int, optional): Items per page (1-100). Default 25.
 
     Returns:
-        JSON array of news article objects. Limited to 50 per ticker or 100 overall.
+        JSON object with data array and pagination metadata.
     """
     ticker = request.args.get('ticker', None)
+    page, page_size, offset = _parse_pagination()
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     if ticker:
+        cursor.execute('SELECT COUNT(*) FROM news WHERE ticker = ?', (ticker,))
+        total = cursor.fetchone()[0]
         cursor.execute('''
             SELECT * FROM news
             WHERE ticker = ?
             ORDER BY created_at DESC
-            LIMIT 50
-        ''', (ticker,))
+            LIMIT ? OFFSET ?
+        ''', (ticker, page_size, offset))
     else:
+        cursor.execute('SELECT COUNT(*) FROM news')
+        total = cursor.fetchone()[0]
         cursor.execute('''
             SELECT * FROM news
             ORDER BY created_at DESC
-            LIMIT 100
-        ''')
+            LIMIT ? OFFSET ?
+        ''', (page_size, offset))
 
     news = cursor.fetchall()
     conn.close()
 
-    return jsonify([{
-        'id': article['id'],
-        'ticker': article['ticker'],
-        'title': article['title'],
-        'description': article['description'],
-        'url': article['url'],
-        'source': article['source'],
-        'published_date': article['published_date'],
-        'sentiment_score': article['sentiment_score'],
-        'sentiment_label': article['sentiment_label'],
-        'created_at': article['created_at']
-    } for article in news])
+    return jsonify({
+        'data': [{
+            'id': article['id'],
+            'ticker': article['ticker'],
+            'title': article['title'],
+            'description': article['description'],
+            'url': article['url'],
+            'source': article['source'],
+            'published_date': article['published_date'],
+            'sentiment_score': article['sentiment_score'],
+            'sentiment_label': article['sentiment_label'],
+            'created_at': article['created_at']
+        } for article in news],
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+    })
 
 
 @news_bp.route('/alerts', methods=['GET'])

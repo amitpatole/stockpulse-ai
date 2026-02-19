@@ -16,50 +16,76 @@ logger = logging.getLogger(__name__)
 research_bp = Blueprint('research', __name__, url_prefix='/api')
 
 
+def _parse_pagination():
+    """Parse page and page_size query parameters with safe defaults."""
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = min(max(1, int(request.args.get('page_size', 25))), 100)
+    except (ValueError, TypeError):
+        page_size = 25
+    offset = (page - 1) * page_size
+    return page, page_size, offset
+
+
 @research_bp.route('/research/briefs', methods=['GET'])
 def list_briefs():
     """List research briefs, optionally filtered by ticker.
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
-        limit (int, optional): Max briefs to return. Default 50.
+        page (int, optional): Page number (1-based). Default 1.
+        page_size (int, optional): Items per page (1-100). Default 25.
 
     Returns:
-        JSON array of research brief objects.
+        JSON object with data array and pagination metadata.
     """
     ticker = request.args.get('ticker', None)
-    limit = min(int(request.args.get('limit', 50)), 200)
+    page, page_size, offset = _parse_pagination()
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
 
         if ticker:
+            upper_ticker = ticker.upper()
+            total = conn.execute(
+                'SELECT COUNT(*) FROM research_briefs WHERE ticker = ?',
+                (upper_ticker,)
+            ).fetchone()[0]
             rows = conn.execute(
-                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ?',
-                (ticker.upper(), limit)
+                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (upper_ticker, page_size, offset)
             ).fetchall()
         else:
+            total = conn.execute(
+                'SELECT COUNT(*) FROM research_briefs'
+            ).fetchone()[0]
             rows = conn.execute(
-                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ?',
-                (limit,)
+                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (page_size, offset)
             ).fetchall()
         conn.close()
 
-        briefs = [{
-            'id': r['id'],
-            'ticker': r['ticker'],
-            'title': r['title'],
-            'content': r['content'],
-            'agent_name': r['agent_name'],
-            'model_used': r['model_used'],
-            'created_at': r['created_at'],
-        } for r in rows]
-
-        return jsonify(briefs)
+        return jsonify({
+            'data': [{
+                'id': r['id'],
+                'ticker': r['ticker'],
+                'title': r['title'],
+                'content': r['content'],
+                'agent_name': r['agent_name'],
+                'model_used': r['model_used'],
+                'created_at': r['created_at'],
+            } for r in rows],
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+        })
     except Exception as e:
         logger.error(f"Error fetching research briefs: {e}")
-        return jsonify([])
+        return jsonify({'data': [], 'page': page, 'page_size': page_size, 'total': 0})
 
 
 @research_bp.route('/research/briefs', methods=['POST'])
