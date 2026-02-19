@@ -237,7 +237,7 @@ def remove_stock_endpoint(ticker):
 @app.route('/api/ai/ratings')
 def get_ai_ratings():
     """Get AI ratings for all stocks"""
-    from ai_analytics import StockAnalytics
+    from backend.core.ai_analytics import StockAnalytics
     analytics = StockAnalytics()
     ratings = analytics.get_all_ratings()
     return jsonify(ratings)
@@ -246,7 +246,7 @@ def get_ai_ratings():
 @app.route('/api/ai/rating/<ticker>')
 def get_ai_rating(ticker):
     """Get AI rating for specific stock"""
-    from ai_analytics import StockAnalytics
+    from backend.core.ai_analytics import StockAnalytics
     analytics = StockAnalytics()
     rating = analytics.calculate_ai_rating(ticker)
     return jsonify(rating)
@@ -256,7 +256,7 @@ def get_ai_rating(ticker):
 def get_chart_data(ticker):
     """Get historical price data for chart"""
     period = request.args.get('period', '1mo')
-    from ai_analytics import StockAnalytics
+    from backend.core.ai_analytics import StockAnalytics
     analytics = StockAnalytics()
     price_data = analytics.get_stock_price_data(ticker, period)
 
@@ -358,7 +358,7 @@ def delete_ai_provider_endpoint(provider_id):
 def test_ai_provider_endpoint():
     """Test AI provider connection"""
     data = request.json
-    from ai_providers import test_provider_connection
+    from backend.core.ai_providers import test_provider_connection
     result = test_provider_connection(
         data['provider'],
         data['api_key'],
@@ -384,8 +384,8 @@ def ask_chat_endpoint():
 
     try:
         from settings_manager import get_active_ai_provider
-        from ai_providers import AIProviderFactory
-        from ai_analytics import StockAnalytics
+        from backend.core.ai_providers import AIProviderFactory
+        from backend.core.ai_analytics import StockAnalytics
 
         # Get active AI provider
         provider_config = get_active_ai_provider()

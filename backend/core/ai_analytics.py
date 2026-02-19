@@ -461,8 +461,8 @@ class StockAnalytics:
         """Generate AI summary of the analysis. Returns (summary_text, is_ai_powered)"""
         # Try to use real AI if configured
         try:
-            from settings_manager import get_active_ai_provider
-            from ai_providers import AIProviderFactory
+            from .settings_manager import get_active_ai_provider
+            from .ai_providers import AIProviderFactory
 
             provider_config = get_active_ai_provider()
 
