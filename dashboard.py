@@ -409,7 +409,7 @@ def ask_chat_endpoint():
 
 Current Stock Analysis:
 - Rating: {rating.get('rating', 'N/A')}
-- Score: {rating.get('score', 'N/A')}/100
+- Score: {rating.get('score', 'N/A')}/10
 - Current Price: {rating.get('currency_symbol', '$')}{rating.get('current_price', 'N/A')}
 - Technical Score: {rating.get('technical_score', 'N/A')}
 - Sentiment Score: {rating.get('sentiment_score', 'N/A')}
