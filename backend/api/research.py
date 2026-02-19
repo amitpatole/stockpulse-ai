@@ -16,33 +16,73 @@ logger = logging.getLogger(__name__)
 research_bp = Blueprint('research', __name__, url_prefix='/api')
 
 
+def _parse_pagination(args):
+    """Parse and validate page/page_size query parameters.
+
+    Supports the legacy ``limit`` parameter (treated as ``page_size``).
+    Returns (page, page_size, error_response). On success, error_response is None.
+    On validation failure, page and page_size are None and error_response is a
+    (response, status_code) tuple ready to return from a Flask view.
+    """
+    try:
+        page = int(args.get('page', 1))
+        if 'limit' in args and 'page_size' not in args:
+            logger.warning(
+                "Query param 'limit' is deprecated for /api/research/briefs; "
+                "use 'page_size' instead."
+            )
+            page_size = int(args.get('limit'))
+        else:
+            page_size = int(args.get('page_size', 25))
+    except (ValueError, TypeError):
+        return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+
+    if not (1 <= page_size <= 100):
+        return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
+
+    return page, page_size, None
+
+
 @research_bp.route('/research/briefs', methods=['GET'])
 def list_briefs():
     """List research briefs, optionally filtered by ticker.
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
-        limit (int, optional): Max briefs to return. Default 50.
+        page (int, optional): Page number, 1-based. Default 1.
+        page_size (int, optional): Results per page, 1-100. Default 25.
+        limit (int, deprecated): Alias for page_size for backwards compatibility.
 
     Returns:
-        JSON array of research brief objects.
+        JSON envelope with data array and pagination metadata.
     """
     ticker = request.args.get('ticker', None)
-    limit = min(int(request.args.get('limit', 50)), 200)
+    page, page_size, err = _parse_pagination(request.args)
+    if err:
+        return err
+
+    offset = (page - 1) * page_size
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
 
         if ticker:
+            total = conn.execute(
+                'SELECT COUNT(*) FROM research_briefs WHERE ticker = ?',
+                (ticker.upper(),)
+            ).fetchone()[0]
             rows = conn.execute(
-                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ?',
-                (ticker.upper(), limit)
+                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (ticker.upper(), page_size, offset)
             ).fetchall()
         else:
+            total = conn.execute(
+                'SELECT COUNT(*) FROM research_briefs'
+            ).fetchone()[0]
             rows = conn.execute(
-                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ?',
-                (limit,)
+                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (page_size, offset)
             ).fetchall()
         conn.close()
 
@@ -56,10 +96,16 @@ def list_briefs():
             'created_at': r['created_at'],
         } for r in rows]
 
-        return jsonify(briefs)
+        return jsonify({
+            'data': briefs,
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'has_next': (page * page_size) < total,
+        })
     except Exception as e:
         logger.error(f"Error fetching research briefs: {e}")
-        return jsonify([])
+        return jsonify({'data': [], 'page': page, 'page_size': page_size, 'total': 0, 'has_next': False})
 
 
 @research_bp.route('/research/briefs', methods=['POST'])
