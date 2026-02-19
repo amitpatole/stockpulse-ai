@@ -5,6 +5,8 @@ and registering the default agent set.
 """
 
 import logging
+import threading
+from typing import Optional
 
 from backend.agents.base import (
     AgentConfig,
@@ -34,6 +36,8 @@ from backend.agents.tools import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    # Registry singleton
+    "get_registry",
     # Base
     "AgentConfig",
     "AgentFramework",
@@ -64,6 +68,35 @@ __all__ = [
     # Factory
     "create_default_agents",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Module-level registry singleton
+# ---------------------------------------------------------------------------
+
+_registry: Optional[AgentRegistry] = None
+_registry_lock = threading.Lock()
+
+
+def get_registry(db_path: str = None) -> AgentRegistry:
+    """Return the module-level :class:`AgentRegistry` singleton.
+
+    On first call, creates and registers all default agents.  Subsequent
+    calls return the same instance regardless of *db_path* so the API and
+    scheduled jobs share a single registry.
+    """
+    global _registry
+    if _registry is not None:
+        return _registry
+    with _registry_lock:
+        if _registry is None:
+            try:
+                from backend.config import Config
+                path = db_path or Config.DB_PATH
+            except ImportError:
+                path = db_path or "stock_news.db"
+            _registry = create_default_agents(path)
+    return _registry
 
 
 def create_default_agents(db_path: str = "stock_news.db") -> AgentRegistry:
