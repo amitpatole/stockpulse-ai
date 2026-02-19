@@ -2,64 +2,64 @@
 
 ## Technical Design
 
-Now I have everything I need. Here's the technical design spec:
-
----
-
 ## Technical Design Spec: Wire Real Agents into Agents API
 
-### Approach
+---
 
-`backend/api/agents.py` currently maintains a parallel `_STUB_AGENTS` list that bears no relationship to the real agent classes in `backend/agents/`. The fix is a **clean replacement**: initialize the `AgentRegistry` at app startup, remove the stub list, and delegate all dispatch and metadata queries to the registry.
+### 1. Approach
 
-The agent name mapping between the stub API names and real classes must be rationalized. The real agents are `scanner`, `researcher`, `regime`, `investigator`, `download_tracker` — the stubs use different names (`technical_analyst`, `sentiment_analyst`, etc.). We align on the real names throughout, since no frontend currently relies on the stub names for anything functional.
-
-Execution path priority: **OpenClaw (if enabled and reachable)** → **CrewAI (if available)** → **direct `AgentRegistry.run_agent()`**. All three paths return an `AgentResult`; the write to `agent_runs` uses fields from that object, not `random.*`.
+Replace the fake run loop in `POST /api/agents/<name>/run` with real agent dispatch via the `AgentRegistry`. The core pattern: pre-insert a `status='running'` row to obtain a stable `run_id`, spin a background thread, dispatch through a OpenClaw-first/native-fallback chain, then `UPDATE` the row with real metrics from `AgentResult`. SSE notifies the frontend on completion.
 
 ---
 
-### Files to Modify / Create
+### 2. Files to Modify/Create
 
-| File | Change |
-|------|--------|
-| `backend/api/agents.py` | **Rewrite**: remove `_STUB_AGENTS`, `_find_agent()`, `_generate_agent_output()`. Replace `trigger_agent_run()` with real dispatch. Replace `get_cost_summary()` with real DB aggregation. |
-| `backend/agents/__init__.py` | Expose a module-level `registry` singleton via `get_registry(db_path)` so the API and app can share the same instance. |
-| `backend/app.py` | Call `create_default_agents(Config.DB_PATH)` at startup and store the returned registry on `app.extensions['agent_registry']`. |
+| File | Action |
+|---|---|
+| `backend/api/agents.py` | **Modify** — gut the fake `time.sleep` + `random.*` run simulation; add `_dispatch()`, `_execute_agent_async()`, `_update_run_row()` helpers |
+| `backend/agents/openclaw_engine.py` | **Reference only** — `OpenClawBridge.run_task()` already exists; no changes needed |
+| `backend/agents/base.py` | **Reference only** — `AgentResult` already carries `tokens_input`, `tokens_output`, `duration_ms`, `estimated_cost` |
+| `backend/agents/__init__.py` | **Reference only** — `get_registry()` singleton already present |
 
-No new files needed.
-
----
-
-### Data Model Changes
-
-None. The existing `agent_runs` schema already carries all required columns (`tokens_input`, `tokens_output`, `estimated_cost`, `duration_ms`, `framework`, `status`, `error`). The stub was writing to these columns with random data; the fix writes real `AgentResult` values instead.
+No new files required.
 
 ---
 
-### API Changes
+### 3. Data Model Changes
 
-**No contract changes.** Request/response shapes stay identical. Internal changes only:
+No schema migrations needed. The `agent_runs` table already has all required columns (`tokens_input`, `tokens_output`, `estimated_cost`, `duration_ms`, `error`, `started_at`, `completed_at`). The `_migrate_agent_runs()` path in `database.py` handles older installs that predate those columns.
 
-- `GET /api/agents` — reads from `AgentRegistry` instead of `_STUB_AGENTS`
-- `POST /api/agents/<name>/run` — dispatches real execution, returns actual `duration_ms`, `tokens_used`, `estimated_cost` from `AgentResult`
-- `GET /api/agents/costs` — queries `agent_runs` table with a real `GROUP BY agent_name` aggregation instead of returning hardcoded zeros
-
-The `status` field returned by `POST .../run` changes from `"completed"` (synchronous stub) to `"running"` → SSE event on completion, matching the existing SSE infrastructure.
+The only behavioral change: `framework` column now reflects `'openclaw'` vs `'crewai'` accurately based on which dispatch path succeeded, rather than a hardcoded default.
 
 ---
 
-### Frontend Changes
+### 4. API Changes
 
-None required. The frontend already listens for `agent_status` SSE events and renders fields from the existing response schema. Real data will populate where zeros/randoms showed before.
+No new endpoints. Modified behavior on existing endpoint:
+
+- `POST /api/agents/<name>/run` — now returns the pre-inserted `run_id` immediately (non-blocking), with real metrics populated asynchronously. Response shape unchanged (`{status, run_id, message}`).
+- `GET /api/agents/runs` and `GET /api/agents/costs` — no contract change; now return real data rather than fabricated values.
 
 ---
 
-### Testing Strategy
+### 5. Frontend Changes
 
-1. **Unit tests** (`tests/test_agents_api.py`): Mock `AgentRegistry.run_agent()` to return a fixed `AgentResult`; assert the DB write uses result fields, not random values. Assert `get_cost_summary()` returns DB-aggregated totals.
+None. The dashboard components consuming `/api/agents/runs` and `/api/agents/costs` were already wired to the correct endpoints and SSE event shape (`agent_status`). Real data flows in transparently.
 
-2. **Integration smoke test**: Run `ScannerAgent` directly against the test DB; verify the `agent_runs` row written has non-zero, deterministic `tokens_input`/`tokens_output` and `duration_ms > 0`.
+---
 
-3. **Graceful degradation test**: Patch the Anthropic API key to an invalid value; assert the run record has `status='error'` and a non-null `error` field rather than a 500.
+### 6. Testing Strategy
 
-4. **OpenClaw fallback test**: Patch `OpenClawBridge.is_available()` to return `False`; assert execution falls through to CrewAI/native path without error.
+**Unit tests** (`tests/test_agents_api.py`):
+- Mock `AgentRegistry.get()` to return a fake agent; assert `run()` is called, not bypassed
+- Assert `status='running'` row is inserted before thread starts (pre-insert pattern)
+- Assert `UPDATE` is called with real `AgentResult` fields on success
+- Assert `status='error'` and `error` column populated when `agent.run()` raises
+
+**Integration tests** (`tests/integration/test_agents_integration.py`):
+- Fire `POST /run` against a real SQLite test DB; poll run row until `status='completed'`; assert `tokens_input > 0` and `estimated_cost > 0`
+- Test OpenClaw fallback: mock bridge as unavailable, assert native path executes
+
+**Regression**:
+- Assert no `random` or `time.sleep` imports remain in `backend/api/agents.py`
+- `GET /api/agents/costs` cost values are deterministic across identical runs (not random)

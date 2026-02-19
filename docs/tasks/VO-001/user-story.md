@@ -2,37 +2,37 @@
 
 ## User Story
 
-Good. I have what I need.
+Looking at the code, this task is already shipped (commit `7d1eb49`). I'll write the user story as if it were being planned — useful for retro, documentation, and sprint history.
 
 ---
 
 ## User Story: Wire Real Agents into Agents API
 
-**Story:**
-As a trader using the Virtual Office dashboard, I want agent runs to execute real AI analysis so that the cost metrics, token usage, and output I see reflect actual work done — not random numbers.
+**As a** dashboard user monitoring AI agent activity,
+**I want** the Agents dashboard to show real execution data (actual token counts, durations, and costs),
+**so that** I can trust the metrics and make informed decisions about agent usage and spend.
 
 ---
 
 ### Acceptance Criteria
 
-- **Remove stubs:** `_STUB_AGENTS`, `trigger_agent_run()` stub logic, `_generate_agent_output()`, and the fake cost summary in `backend/api/agents.py` are deleted or replaced
-- **Real dispatch:** `trigger_agent_run()` routes to the appropriate real agent class (`ScannerAgent`, `ResearcherAgent`, `RegimeAgent`, `InvestigatorAgent`, `DownloadTrackerAgent`) based on agent ID
-- **Accurate metrics:** Token counts, duration (ms), and USD cost written to `agent_runs` table come from actual `AgentResult` objects returned by the engine — not `random.randint`/`random.uniform`
-- **CrewAI path:** If `CREWAI_AVAILABLE`, runs are dispatched through `TickerPulseCrewEngine`; otherwise falls back to direct agent execution
-- **OpenClaw path:** If the OpenClaw gateway is reachable, `OpenClawBridge.run_task()` is wired as an optional execution path (behind a config flag)
-- **Cost summary accurate:** `get_cost_summary()` removes the "will populate once runs begin" stub and returns real aggregated data from the DB
-- **SSE events:** Real run start/complete/error events fire via `send_sse_event()` with actual status
-- **No regression:** Existing API contracts (request/response shapes) unchanged — only the internal execution logic changes
-- **Graceful degradation:** If an agent dependency (API key missing, library not installed) fails, return a structured error in the run record rather than crashing the endpoint
+- **Real dispatch**: `POST /api/agents/<name>/run` triggers the actual agent implementation in `backend/agents/` (e.g. `ScannerAgent.run()`), not a sleep-and-random-data stub
+- **OpenClaw path**: If `OPENCLAW_ENABLED=true` and the bridge is reachable, execution routes through `OpenClawBridge.run_task()`; falls back to native on failure
+- **Accurate metrics**: `agent_runs` DB rows contain real `tokens_input`, `tokens_output`, `duration_ms`, and `estimated_cost` sourced from the actual LLM response
+- **Pre-insert pattern**: A `status='running'` row is inserted before the thread starts; it is `UPDATE`d on completion — no duplicate rows
+- **SSE notification**: An `agent_status` event fires on run completion with real status/cost/duration
+- **No random data**: No `random.randint`, `random.uniform`, or `time.sleep` fake simulation remains in the API layer
+- **Error propagation**: If an agent raises an exception, `status='error'` and the error message are persisted to DB and returned in the SSE event
+- **Existing endpoints unaffected**: `GET /api/agents`, `GET /api/agents/costs`, and `GET /api/agents/runs` continue to work and now reflect real data
 
 ---
 
 ### Priority Reasoning
 
-**High priority.** The dashboard metrics are the core value prop — showing traders real signal. Fake data actively erodes trust. This is table-stakes functionality that should have shipped before the dashboard went live. Unblocks meaningful cost monitoring and model tuning downstream.
+**P0 — ship blocker.** Dashboard cost and token metrics were entirely fabricated. Any capacity planning, model selection, or budget decisions made using those numbers were invalid. This undermines the core value proposition of the platform.
 
 ---
 
-### Estimated Complexity: **3 / 5**
+### Complexity: 3 / 5
 
-The real engines and agent classes already exist and are well-structured. This is primarily a wiring task — replace the stub dispatch in `agents.py` with calls into `backend/agents/`. The main risk is error handling across optional dependencies (CrewAI, OpenClaw gateway availability, missing API keys) and ensuring the SQLite writes stay consistent with the existing schema.
+The agent implementations already existed. The work was plumbing: replacing the fake run loop with real dispatch, adding the pre-insert pattern to avoid race conditions, handling the OpenClaw fallback, and wiring SSE. No new AI logic required, but the async threading and DB update path needed care to avoid duplicate writes.
