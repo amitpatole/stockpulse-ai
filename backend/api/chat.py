@@ -43,8 +43,8 @@ def ask_chat_endpoint():
         500: AI provider initialization failure or generation error.
     """
     data = request.json
-    ticker = data.get('ticker')
-    question = data.get('question')
+    ticker = (data.get('ticker') or '').strip()
+    question = (data.get('question') or '').strip()
     thinking_level = data.get('thinking_level', 'balanced')
 
     if not ticker or not question:
