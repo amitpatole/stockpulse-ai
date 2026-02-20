@@ -64,6 +64,24 @@ class PolygonProvider(DataProvider):
                 logger.debug(f"Could not create Polygon REST client: {e}")
 
     # ------------------------------------------------------------------
+    # Resource management
+    # ------------------------------------------------------------------
+
+    def close(self):
+        """Close the underlying HTTP session."""
+        self.session.close()
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    # ------------------------------------------------------------------
     # Provider metadata
     # ------------------------------------------------------------------
 

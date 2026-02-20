@@ -26,6 +26,13 @@ class StockAnalytics:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
 
+    def close(self):
+        """Close the underlying HTTP session."""
+        self.session.close()
+
+    def __del__(self):
+        self.close()
+
     def get_stock_price_data(self, ticker: str, period='1mo') -> Dict:
         """Fetch stock price data from Yahoo Finance with yfinance library fallback."""
         # Attempt 1: Direct Yahoo v8 API
