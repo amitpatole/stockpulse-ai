@@ -144,7 +144,7 @@ class GoogleProvider(AIProvider):
             # Log error details if request fails
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
+                logger.error(f"Google API error: HTTP {response.status_code}")
                 return f"Error: {error_msg}"
 
             response.raise_for_status()
@@ -185,9 +185,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
