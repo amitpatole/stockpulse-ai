@@ -6,6 +6,7 @@ and routes to the correct LLM using ai_providers.py settings.
 
 import json
 import logging
+import os
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -57,7 +58,14 @@ def _build_crewai_llm(config: AgentConfig) -> Any:
     """Build a CrewAI-compatible LLM from an AgentConfig.
 
     CrewAI accepts litellm model strings directly, so we construct
-    the appropriate provider/model string and set the API key.
+    the appropriate provider/model string and apply the API key.
+
+    API key resolution order (evaluated at call time, not at import time):
+      1. Active provider record from the database (via settings_manager).
+      2. Startup-time env var from Config (fallback).
+
+    This means a key saved via the Settings UI takes effect on the very
+    next agent run without restarting the process.
     """
     if not CREWAI_AVAILABLE:
         return None
@@ -67,25 +75,54 @@ def _build_crewai_llm(config: AgentConfig) -> Any:
     except ImportError:
         Config = None  # type: ignore[assignment,misc]
 
+    # --- Resolve API key from DB at execution time ---
+    try:
+        from backend.core.settings_manager import get_active_ai_provider
+        db_provider = get_active_ai_provider()
+    except Exception:
+        db_provider = None
+
     model = config.model
     provider = config.provider
 
-    # Map provider to litellm prefix
+    # Helper: read key from startup-time Config env vars.
+    _CONFIG_KEY_ATTRS = {
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'openai': 'OPENAI_API_KEY',
+        'google': 'GOOGLE_AI_KEY',
+        'xai': 'XAI_API_KEY',
+    }
+
+    def _config_key(provider_name: str) -> str:
+        attr = _CONFIG_KEY_ATTRS.get(provider_name, '')
+        return getattr(Config, attr, '') if Config and attr else ''
+
+    # Prefer the DB key when the active provider matches this agent's provider.
+    if db_provider and db_provider.get('provider_name') == provider and db_provider.get('api_key'):
+        api_key = db_provider['api_key']
+    else:
+        api_key = _config_key(provider)
+
+    # Map provider to litellm prefix and propagate the resolved key so that
+    # litellm (used internally by CrewAI) picks it up on this execution.
     if provider == "anthropic":
-        api_key = getattr(Config, 'ANTHROPIC_API_KEY', '') if Config else ''
+        if api_key:
+            os.environ['ANTHROPIC_API_KEY'] = api_key
         llm_string = f"anthropic/{model}"
     elif provider == "openai":
-        api_key = getattr(Config, 'OPENAI_API_KEY', '') if Config else ''
+        if api_key:
+            os.environ['OPENAI_API_KEY'] = api_key
         llm_string = f"openai/{model}"
     elif provider == "google":
-        api_key = getattr(Config, 'GOOGLE_AI_KEY', '') if Config else ''
+        if api_key:
+            os.environ['GOOGLE_AI_KEY'] = api_key
         llm_string = f"google/{model}"
     elif provider == "xai":
-        api_key = getattr(Config, 'XAI_API_KEY', '') if Config else ''
+        if api_key:
+            os.environ['XAI_API_KEY'] = api_key
         llm_string = model
     else:
         llm_string = model
-        api_key = ''
 
     # CrewAI 0.40+ accepts a string directly as the llm parameter
     return llm_string

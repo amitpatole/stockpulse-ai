@@ -96,6 +96,7 @@ def get_ai_providers_endpoint():
                 'default_model': db_row['model'] if db_row else info['models'][0],
                 'is_active': bool(db_row['is_active']) if db_row else False,
                 'status': 'active' if db_row and db_row['is_active'] else ('configured' if db_row else 'unconfigured'),
+                'id': db_row['id'] if db_row else None,
             })
 
         total = len(result)
