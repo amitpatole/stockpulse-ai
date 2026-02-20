@@ -1,110 +1,56 @@
-# VO-025: Null Reference in Settings Page — Technical Design
+# VO-025: Memory leak in export feature after prolonged usage
 
-## Approach
+## Technical Design
 
-Two-layer fix: (1) harden the data path from API response through the frontend
-so a zero-data user never causes a JS crash, and (2) add an error-state render
-path so a fetch failure degrades gracefully rather than leaving the page blank.
-No schema changes, no new endpoints.
+Here is the design spec I've written to `docs/tasks/BUG-040/design.md`:
 
 ---
 
-## Root Cause
+## Technical Design: BUG-040 — Memory Leak in Export Feature
 
-`useApi` exposes an `error` field, but the settings page destructures only
-`data` and `loading`. When the fetch fails or the backend returns a malformed
-body, `providers` stays `null` and `error` is silently swallowed. Three
-compounding gaps:
+### Root Cause
 
-1. **`frontend/src/lib/api.ts` — `getAIProviders`**: no guard on the parsed
-   JSON. If the backend returns a non-array (e.g. a `{"error": "..."}` 500
-   body), the caller receives it as `AIProvider[]`, and any downstream
-   `.map()` call throws a runtime null/type error.
+Two confirmed leak sources in the codebase:
 
-2. **`frontend/src/app/settings/page.tsx`**: `error` from both `useApi` calls
-   is never captured. A fetch failure produces `providers === null`,
-   `loading === false`, `error !== null` — and none of the three conditional
-   branches (`loading && !providers`, `providers && (...)`,
-   `providers && providers.length === 0`) fire, so the entire AI Providers
-   section renders blank with no user feedback.
+**1. Unmanaged `requests.Session` objects.** Six providers create `self.session = requests.Session()` in `__init__` and never call `.close()`:
+- `backend/data_providers/{alpha_vantage,yfinance,polygon,finnhub}_provider.py`
+- `backend/core/{ai_analytics,stock_monitor}.py`
 
-3. **`backend/api/settings.py` — `get_ai_providers_endpoint`**: the body is
-   not wrapped in try/except. If `get_all_ai_providers()` raises despite its
-   internal guard (e.g., during a DB migration state), Flask returns a 500
-   with an HTML error page, not JSON, which crashes `response.json()` in the
-   frontend fetcher.
+`reddit_scanner.py:_scan()` also instantiates a local `session` without a `finally` close — leaks on every exception path.
+
+**2. CrewAI `Crew` object accumulation.** `crewai_engine.py` (lines 224–231) constructs a `Crew` with `memory=True` per agent on every `run_crew()` call. CrewAI's internal vector store holds back-references that block GC, compounding across repeated export cycles.
 
 ---
 
-## Files to Modify
+### Approach
+
+Entirely mechanical — no architectural changes.
+
+1. **Providers:** Add `close()`, `__del__`, and `__enter__`/`__exit__` to all six provider classes. This is the same pattern already used by `openclaw_engine.py`.
+2. **Reddit scanner:** Wrap the local `session` in `try/finally: session.close()` inside `_scan()`.
+3. **CrewAI engine:** Set `memory=False` on `CrewAgent` construction (not used by export flows). Add `del crew; gc.collect()` immediately after `kickoff()`.
+
+### Files to Modify
 
 | File | Change |
 |---|---|
-| `frontend/src/lib/api.ts` | Add array guard in `getAIProviders`; add null guard in `getHealth` |
-| `frontend/src/app/settings/page.tsx` | Capture `error` from both `useApi` calls; add error-state render for AI Providers section |
-| `backend/api/settings.py` | Wrap `get_ai_providers_endpoint` body in try/except; return `[]` on error |
-| `backend/tests/test_settings_api.py` | New file — regression tests for zero-data user |
+| `backend/data_providers/alpha_vantage_provider.py` | Add `close()`, `__del__`, `__enter__`/`__exit__` |
+| `backend/data_providers/yfinance_provider.py` | Same |
+| `backend/data_providers/polygon_provider.py` | Same |
+| `backend/data_providers/finnhub_provider.py` | Same |
+| `backend/core/ai_analytics.py` | Add `close()` + `__del__` |
+| `backend/core/stock_monitor.py` | Add `close()` + `__del__` |
+| `backend/agents/tools/reddit_scanner.py` | `try/finally: session.close()` in `_scan()` |
+| `backend/agents/crewai_engine.py` | `memory=False` on agents; `del crew; gc.collect()` post-kickoff |
 
----
+### Data Model / API / Frontend Changes
 
-## Data Model Changes
+None — purely backend resource management.
 
-None.
+### Testing Strategy
 
----
-
-## API Changes
-
-None. `GET /api/settings/ai-providers` already returns a valid 4-element array
-for a zero-data user (all providers marked `configured: false`). The only
-change is adding a top-level try/except so a DB exception yields
-`jsonify([]), 200` instead of a 500.
-
----
-
-## Frontend Changes
-
-**`src/lib/api.ts`** — `getAIProviders` return guard:
-```ts
-const data = await res.json();
-return Array.isArray(data) ? data : [];
-```
-
-**`src/app/settings/page.tsx`** — capture error and render it:
-```tsx
-const { data: providers, loading: providersLoading, error: providersError } =
-  useApi<AIProvider[]>(getAIProviders, []);
-```
-Add a third branch in the AI Providers section (after the empty-state check):
-```tsx
-{!providersLoading && !providers && providersError && (
-  <div className="rounded-xl border border-dashed border-slate-700 ...">
-    <p className="text-sm text-slate-500">
-      Could not load provider configuration.
-    </p>
-  </div>
-)}
-```
-No visible error detail surfaced to the user — matches AC "silent graceful
-degradation."
-
----
-
-## Testing Strategy
-
-**New file: `backend/tests/test_settings_api.py`**
-
-- `test_ai_providers_zero_data_user` — call `GET /api/settings/ai-providers`
-  with a fresh empty SQLite DB; assert HTTP 200 and a 4-element JSON array
-  with all providers having `configured: false`.
-- `test_ai_providers_returns_array_on_db_error` — mock
-  `settings_manager.get_all_ai_providers` to raise `sqlite3.OperationalError`;
-  assert the endpoint still returns HTTP 200 with `[]` (not a 500).
-
-Existing pytest fixture pattern from `test_agents_api.py` applies directly
-(`create_app()` + `app.test_client()`).
-
-Frontend: no test framework is currently configured. Per the acceptance
-criteria, a backend regression test is the non-negotiable deliverable; a
-frontend Playwright/Jest smoke test can follow in a separate ticket once the
-test harness is set up.
+- **Unit:** Mock `requests.Session`; assert `.close()` is called on both happy and exception paths for each provider and the scanner.
+- **Unit:** Context manager protocol — `with AlphaVantageProvider(...) as p: pass` → assert session is closed.
+- **Integration (memory):** Run `run_crew()` 50× in a loop; snapshot RSS via `resource.getrusage()` before/after; assert growth < 50 MB.
+- **Integration (sockets):** Run a full download tracker job; assert `psutil.Process().connections()` count returns to baseline.
+- **QA manual:** 50 consecutive export cycles via `POST /api/jobs/download-tracker/trigger`; observe RSS with `ps` between cycles.

@@ -1,40 +1,40 @@
-# VO-025: Null reference in settings page when user has no data
+# VO-025: Memory leak in export feature after prolonged usage
 
 ## User Story
 
-**VO-025 | Settings Page | P1**
+---
+
+## User Story: Memory Leak in Export Feature
+
+**Story ID:** BUG-040
 
 ---
 
 ### User Story
 
-As a **new user with no existing data**, I want the settings page to load and display correctly, so that I can configure my account without hitting a crash on my very first visit.
+> As a **power user running the platform for extended sessions**, I want the **export/download tracking feature to release memory properly after each operation**, so that **the application remains stable and performant without requiring restarts**.
 
 ---
 
 ### Acceptance Criteria
 
-- [ ] Settings page renders without error when user has no trades, watchlists, alerts, or profile data
-- [ ] All settings sections show a graceful empty/default state — no null reference exceptions thrown
-- [ ] No blank screen or unhandled crash occurs for any valid account state (new user, partial data, full data)
-- [ ] Null or undefined user data fields fall back to safe defaults, not to a thrown exception
-- [ ] The error is never surfaced to the user — failure is silent and graceful
-- [ ] A regression test is added covering the zero-data user scenario to prevent recurrence
+- [ ] `requests.Session()` objects in all data providers are closed after use (via context managers or explicit `.close()`)
+- [ ] CrewAI `Crew` objects are explicitly destroyed after `kickoff()` completes — no lingering agent memory accumulation
+- [ ] Memory usage does not grow unboundedly during repeated export/download tracking operations over a 4+ hour session
+- [ ] QA can confirm stable RSS memory after 50+ consecutive export cycles
+- [ ] No open socket/file descriptor leaks detectable via `lsof` or equivalent tooling
+- [ ] Exception paths close resources the same as happy paths (no leak on failure)
 
 ---
 
 ### Priority Reasoning
 
-**P1 — High.** This is a crash-level bug caught by QA, which means real users will hit it. The settings page is a high-traffic destination — especially during onboarding, when new users are most likely to have no data. A crash on first visit destroys trust immediately and creates unnecessary support load. Fix it this sprint.
+**High.** This is a QA-confirmed bug with a clear reproduction path. Memory leaks degrade reliability over time and will hit production users running long sessions — exactly the power users we can't afford to lose. The root causes are well-identified (unmanaged HTTP sessions, CrewAI object accumulation) and scoped. Fix it before it becomes a customer complaint.
 
 ---
 
-### Complexity Estimate
+### Estimated Complexity
 
 **2 / 5**
 
-Null reference bugs in settings pages are almost always a missing guard on a data access path. Low surface area, well-understood fix pattern. The regression test adds minor overhead but is non-negotiable given QA already caught this once.
-
----
-
-**Next step:** Assign to a dev. Point them at the settings page component. Close it this sprint — no reason this lingers.
+Root causes are already identified. The fix is largely mechanical — wrap sessions in context managers, add explicit cleanup after crew execution. No architectural changes needed. Risk of regression is low if changes are localized to resource management code.
