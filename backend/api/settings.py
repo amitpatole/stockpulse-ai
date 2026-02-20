@@ -51,25 +51,29 @@ def get_ai_providers_endpoint():
         },
     }
 
-    # Get configured providers from DB
-    configured_rows = get_all_ai_providers()
-    configured_map = {row['provider_name']: row for row in configured_rows}
+    try:
+        # Get configured providers from DB
+        configured_rows = get_all_ai_providers()
+        configured_map = {row['provider_name']: row for row in configured_rows}
 
-    # Build response with all providers
-    result = []
-    for provider_id, info in SUPPORTED_PROVIDERS.items():
-        db_row = configured_map.get(provider_id)
-        result.append({
-            'name': provider_id,
-            'display_name': info['display_name'],
-            'configured': db_row is not None,
-            'models': info['models'],
-            'default_model': db_row['model'] if db_row else info['models'][0],
-            'is_active': bool(db_row['is_active']) if db_row else False,
-            'status': 'active' if db_row and db_row['is_active'] else ('configured' if db_row else 'unconfigured'),
-        })
+        # Build response with all providers
+        result = []
+        for provider_id, info in SUPPORTED_PROVIDERS.items():
+            db_row = configured_map.get(provider_id)
+            result.append({
+                'name': provider_id,
+                'display_name': info['display_name'],
+                'configured': db_row is not None,
+                'models': info['models'],
+                'default_model': db_row['model'] if db_row else info['models'][0],
+                'is_active': bool(db_row['is_active']) if db_row else False,
+                'status': 'active' if db_row and db_row['is_active'] else ('configured' if db_row else 'unconfigured'),
+            })
 
-    return jsonify(result)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error fetching AI providers: {e}")
+        return jsonify([])
 
 
 @settings_bp.route('/settings/ai-provider', methods=['POST'])

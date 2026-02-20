@@ -188,7 +188,7 @@ export async function getAIProviders(): Promise<AIProvider[]> {
     '/api/settings/ai-providers'
   );
   if (Array.isArray(data)) return data;
-  return data.providers || [];
+  return Array.isArray(data.providers) ? data.providers : [];
 }
 
 // ---- Health ----
