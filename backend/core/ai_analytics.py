@@ -469,12 +469,12 @@ class StockAnalytics:
         # Try to use real AI if configured
         try:
             from settings_manager import get_active_ai_provider
-            from ai_providers import AIProviderFactory
+            from backend.core.ai_providers import AIProviderFactory
 
             provider_config = get_active_ai_provider()
 
             if provider_config:
-                logger.info(f"Using AI provider: {provider_config['provider_name']} - {provider_config['model']}")
+                logger.info("Generating AI-powered analysis summary")
 
                 # Create AI provider
                 provider = AIProviderFactory.create_provider(

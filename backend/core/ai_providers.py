@@ -13,6 +13,13 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+def mask_secret(value: str, show: int = 4) -> str:
+    """Return a masked credential string, showing only the last `show` chars."""
+    if not value or len(value) <= show:
+        return "****"
+    return f"****{value[-show:]}"
+
+
 class AIProvider(ABC):
     """Base class for AI providers"""
 
@@ -135,16 +142,17 @@ class GoogleProvider(AIProvider):
             }
 
             response = requests.post(
-                f"{self.base_url}?key={self.api_key}",
+                self.base_url,
                 headers=headers,
                 json=data,
+                params={"key": self.api_key},
                 timeout=30
             )
 
             # Log error details if request fails
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
+                logger.error(f"Google API error: HTTP {response.status_code}")
                 return f"Error: {error_msg}"
 
             response.raise_for_status()
@@ -185,9 +193,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, API Key: {mask_secret(self.api_key)}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
@@ -243,7 +249,7 @@ class AIProviderFactory:
             else:
                 return provider_class(api_key)
         except Exception as e:
-            logger.error(f"Error creating provider {provider_name}: {e}")
+            logger.error(f"Error creating provider {provider_name}: {type(e).__name__}")
             return None
 
     @classmethod
