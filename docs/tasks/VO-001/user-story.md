@@ -2,37 +2,22 @@
 
 ## User Story
 
-Note: The code confirms this task is **already shipped** (commit `7d1eb49`). I'm writing the user story retrospectively to close it out properly.
+Here's the user story I wrote for VO-025:
 
 ---
 
-## User Story: Wire Real Agents into Agents API
+**User Story**
 
-**As a** product owner reviewing the AI Agents dashboard,
-**I want** the agent run metrics (tokens, duration, cost) to reflect actual execution data from real agent calls,
-**so that** I can make informed decisions about agent performance, reliability, and AI spend.
+> As a **power user monitoring my AI agent fleet**, I want the agents dashboard to show real execution metrics — actual token counts, costs, and durations — so that I can make informed decisions about which agents to run and how much they're costing me.
 
----
+**Key acceptance criteria:**
+- `POST /api/agents/<name>/run` dispatches to the real CrewAI/OpenClaw path — no random values
+- All six stub agent IDs (e.g. `sentiment_analyst`, `news_scanner`) resolve via `AGENT_ID_MAP` without 404s
+- Each run persists exactly one row to `agent_runs` with a valid status and non-zero duration
+- Cost/run endpoints reflect real DB data, not fabricated numbers
+- OpenClaw fallback to native CrewAI works cleanly when the bridge is unavailable
+- Existing tests updated to assert real response structure, not stub random ranges
 
-### Acceptance Criteria
+**Priority: P1.** Fake metrics on a metrics dashboard is a trust killer. This is foundational correctness — has to ship before we surface the agents feature to external users.
 
-- [ ] `POST /api/agents/<name>/run` dispatches to the real agent implementation via `AgentRegistry`, not a fake simulation
-- [ ] Run records in `agent_runs` DB table contain actual `tokens_input`, `tokens_output`, `duration_ms`, and `estimated_cost` from the live execution
-- [ ] OpenClaw bridge is attempted first when `OPENCLAW_ENABLED=true`; native `agent.run()` is the fallback
-- [ ] A pre-inserted `running` row is created before the thread starts so the UI can show in-progress state immediately
-- [ ] On completion, an SSE `agent_status` event fires with real result data
-- [ ] `GET /api/agents/costs` returns cost aggregates sourced from real DB rows, not random values
-- [ ] No stub imports or `random` calls remain in `backend/api/agents.py`
-- [ ] Existing API response shape is preserved (no frontend contract breakage)
-
----
-
-### Priority Reasoning
-
-**P0 — Blocker.** Stub data makes the entire Agents dashboard untrustworthy. Costs, run counts, and durations shown to users are fabricated, meaning any decisions based on agent ROI or performance are invalid. This undermines core product value.
-
----
-
-### Complexity: 3 / 5
-
-The agent implementations already existed in `backend/agents/`. The work was wiring the API layer to call them correctly — threading, DB row lifecycle, SSE events, and the OpenClaw/native dispatch fallback chain — without double-writing run records. Non-trivial but well-scoped.
+**Complexity: 3/5.** The engines are already built (`crewai_engine.py`, `openclaw_engine.py`). This is a wiring task. Main risk is the stub-to-real name mapping, double-write prevention in DB persistence, and mocking LLM calls in CI to avoid live API costs.

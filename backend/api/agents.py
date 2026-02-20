@@ -168,53 +168,6 @@ def _get_latest_run_id(agent_name: str) -> int:
         return 0
 
 
-def _dispatch(registry, agent_name: str, params: dict):
-    """Route execution: OpenClaw (if enabled/reachable) → direct agent.run().
-
-    Returns an AgentResult regardless of path taken.  The result is NOT
-    persisted here — callers are responsible for DB persistence so that a
-    single row is written (no duplicate INSERTs).
-
-    Resolution order
-    ----------------
-    1. OpenClaw gateway — only attempted when ``Config.OPENCLAW_ENABLED`` is
-       True **and** ``OpenClawBridge.is_available()`` returns True.
-    2. Native CrewAI path — calls ``agent_obj.run()`` directly (not
-       ``registry.run_agent()``) to avoid a second ``_persist_result`` call.
-    """
-    if Config.OPENCLAW_ENABLED:
-        try:
-            from backend.agents.openclaw_engine import OpenClawBridge
-            bridge = OpenClawBridge()
-            if bridge.is_available():
-                logger.info("Dispatching %s via OpenClaw", agent_name)
-                return bridge.run_task(
-                    agent_name=agent_name,
-                    task_description=f"Run {agent_name} agent",
-                    inputs=params or {},
-                )
-        except Exception as e:
-            logger.warning(
-                "OpenClaw dispatch failed for %s, falling back to native: %s",
-                agent_name, e,
-            )
-
-    # Native path: call agent.run() directly so the caller controls persistence
-    agent_obj = registry.get(agent_name)
-    if agent_obj is not None:
-        return agent_obj.run(params or {})
-
-    # Should not be reachable (caller already validated the agent exists)
-    from backend.agents.base import AgentResult
-    return AgentResult(
-        agent_name=agent_name,
-        framework='native',
-        status='error',
-        output='',
-        error=f'Agent {agent_name} not found in registry',
-    )
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -396,11 +349,58 @@ def trigger_agent_run(name):
     data = request.get_json(silent=True) or {}
     params = data.get('params', {})
 
-    # Dispatch: OpenClaw → native agent.run() fallback.
-    # _dispatch() returns the AgentResult without persisting; we persist once
-    # here so the DB always contains exactly one row per trigger call.
-    result = _dispatch(registry, real_name, params)
-    registry._persist_result(result, params)
+    # OpenClaw path: try first when the gateway is configured and reachable.
+    # Persists the result directly then returns early so the native path is
+    # skipped and no double-write occurs.
+    if Config.OPENCLAW_ENABLED:
+        try:
+            from backend.agents.openclaw_engine import OpenClawBridge
+            bridge = OpenClawBridge()
+            if bridge.is_available():
+                logger.info("Dispatching %s via OpenClaw", real_name)
+                result = bridge.run_task(
+                    agent_name=real_name,
+                    task_description=f"Run {real_name} agent",
+                    inputs=params or {},
+                )
+                registry._persist_result(result, params)
+                run_id = _get_latest_run_id(real_name)
+                success = result.status == 'success'
+                logger.info(
+                    "Agent run finished (OpenClaw): %s (real=%s), run_id=%s, status=%s, duration=%dms",
+                    name, real_name, run_id, result.status, result.duration_ms,
+                )
+                return jsonify({
+                    'success': success,
+                    'run_id': run_id,
+                    'agent': name,
+                    'status': 'completed' if success else result.status,
+                    'framework': result.framework,
+                    'message': (
+                        f'Agent "{name}" completed successfully'
+                        if success
+                        else f'Agent "{name}" failed: {result.error}'
+                    ),
+                    'tokens_input': result.tokens_input,
+                    'tokens_output': result.tokens_output,
+                    'estimated_cost': result.estimated_cost,
+                    'duration_ms': result.duration_ms,
+                    'started_at': result.started_at,
+                    'completed_at': result.completed_at,
+                    'error': result.error,
+                })
+        except Exception as e:
+            logger.warning(
+                "OpenClaw dispatch failed for %s, falling back to native: %s",
+                real_name, e,
+            )
+
+    # Native path: registry.run_agent() calls agent.run() and persists the
+    # result in a single operation — exactly one row written to agent_runs.
+    result = registry.run_agent(real_name, params)
+    if result is None:
+        return jsonify({'error': f'Agent {real_name} execution failed internally'}), 500
+
     run_id = _get_latest_run_id(real_name)
     success = result.status == 'success'
 
