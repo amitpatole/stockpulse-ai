@@ -187,6 +187,45 @@ export interface StockDetail {
   news: StockNewsItem[];
 }
 
+// Agent Analytics Types
+
+export interface RunsPerDay {
+  date: string;
+  agent_name: string;
+  count: number;
+}
+
+export interface AvgDurationMs {
+  agent_name: string;
+  avg_ms: number;
+}
+
+export interface CostPerAgent {
+  agent_name: string;
+  total_cost: number;
+  total_tokens: number;
+}
+
+export interface SuccessRate {
+  agent_name: string;
+  success: number;
+  failed: number;
+  rate: number;
+}
+
+export interface CostTrendPoint {
+  date: string;
+  cumulative_cost: number;
+}
+
+export interface AgentAnalytics {
+  runs_per_day: RunsPerDay[];
+  avg_duration_ms: AvgDurationMs[];
+  cost_per_agent: CostPerAgent[];
+  success_rate: SuccessRate[];
+  cost_trend: CostTrendPoint[];
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
 

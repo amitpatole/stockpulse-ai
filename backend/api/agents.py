@@ -497,6 +497,161 @@ def list_recent_runs():
     })
 
 
+@agents_bp.route('/agents/analytics', methods=['GET'])
+def get_agent_analytics():
+    """Get aggregated performance analytics for all agents.
+
+    Query Parameters:
+        start_date (str, optional): ISO date string YYYY-MM-DD. Defaults to 30 days ago.
+        end_date (str, optional): ISO date string YYYY-MM-DD. Defaults to today.
+
+    Returns:
+        JSON object with:
+        - runs_per_day: Array of {date, agent_name, count} grouped by day and agent.
+        - avg_duration_ms: Array of {agent_name, avg_ms} average run duration per agent.
+        - cost_per_agent: Array of {agent_name, total_cost, total_tokens} totals per agent.
+        - success_rate: Array of {agent_name, success, failed, rate} per agent.
+        - cost_trend: Array of {date, cumulative_cost} running total over the period.
+
+    Errors:
+        400: Invalid date format.
+        500: Database query failure.
+    """
+    now = datetime.utcnow()
+    default_start = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+    default_end = now.strftime('%Y-%m-%d')
+
+    start_date = request.args.get('start_date', default_start)
+    end_date = request.args.get('end_date', default_end)
+
+    try:
+        start_dt = datetime.fromisoformat(start_date.split('T')[0])
+        end_dt = datetime.fromisoformat(end_date.split('T')[0])
+        # Include the full end day by querying up to midnight of the next day
+        end_dt_exclusive = end_dt + timedelta(days=1)
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    start_iso = start_dt.isoformat()
+    end_iso = end_dt_exclusive.isoformat()
+
+    result = {
+        'runs_per_day': [],
+        'avg_duration_ms': [],
+        'cost_per_agent': [],
+        'success_rate': [],
+        'cost_trend': [],
+    }
+
+    try:
+        conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+
+        # 1. Runs per day grouped by agent
+        rows = conn.execute(
+            '''
+            SELECT date(started_at) AS date, agent_name, COUNT(*) AS count
+            FROM agent_runs
+            WHERE started_at >= ? AND started_at < ?
+            GROUP BY date(started_at), agent_name
+            ORDER BY date ASC
+            ''',
+            (start_iso, end_iso),
+        ).fetchall()
+        result['runs_per_day'] = [
+            {'date': r['date'], 'agent_name': r['agent_name'], 'count': r['count']}
+            for r in rows
+        ]
+
+        # 2. Average duration per agent (exclude NULL durations)
+        rows = conn.execute(
+            '''
+            SELECT agent_name, AVG(duration_ms) AS avg_ms
+            FROM agent_runs
+            WHERE started_at >= ? AND started_at < ? AND duration_ms IS NOT NULL
+            GROUP BY agent_name
+            ORDER BY agent_name
+            ''',
+            (start_iso, end_iso),
+        ).fetchall()
+        result['avg_duration_ms'] = [
+            {'agent_name': r['agent_name'], 'avg_ms': round(r['avg_ms'] or 0)}
+            for r in rows
+        ]
+
+        # 3. Total cost and tokens per agent
+        rows = conn.execute(
+            '''
+            SELECT agent_name,
+                   COALESCE(SUM(estimated_cost), 0) AS total_cost,
+                   COALESCE(SUM(tokens_input), 0) + COALESCE(SUM(tokens_output), 0) AS total_tokens
+            FROM agent_runs
+            WHERE started_at >= ? AND started_at < ?
+            GROUP BY agent_name
+            ORDER BY total_cost DESC
+            ''',
+            (start_iso, end_iso),
+        ).fetchall()
+        result['cost_per_agent'] = [
+            {
+                'agent_name': r['agent_name'],
+                'total_cost': round(r['total_cost'], 6),
+                'total_tokens': r['total_tokens'],
+            }
+            for r in rows
+        ]
+
+        # 4. Success rate per agent
+        rows = conn.execute(
+            '''
+            SELECT agent_name,
+                   SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+                   SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) AS failed,
+                   COUNT(*) AS total
+            FROM agent_runs
+            WHERE started_at >= ? AND started_at < ?
+            GROUP BY agent_name
+            ORDER BY agent_name
+            ''',
+            (start_iso, end_iso),
+        ).fetchall()
+        result['success_rate'] = [
+            {
+                'agent_name': r['agent_name'],
+                'success': r['success'],
+                'failed': r['failed'],
+                'rate': round(r['success'] / r['total'], 4) if r['total'] > 0 else 0.0,
+            }
+            for r in rows
+        ]
+
+        # 5. Cumulative cost trend (daily running total)
+        rows = conn.execute(
+            '''
+            SELECT date(started_at) AS date,
+                   SUM(COALESCE(estimated_cost, 0)) AS daily_cost
+            FROM agent_runs
+            WHERE started_at >= ? AND started_at < ?
+            GROUP BY date(started_at)
+            ORDER BY date ASC
+            ''',
+            (start_iso, end_iso),
+        ).fetchall()
+        cumulative = 0.0
+        cost_trend = []
+        for r in rows:
+            cumulative += r['daily_cost'] or 0.0
+            cost_trend.append({'date': r['date'], 'cumulative_cost': round(cumulative, 6)})
+        result['cost_trend'] = cost_trend
+
+        conn.close()
+    except Exception as e:
+        logger.error("Failed to compute agent analytics: %s", e)
+        return jsonify({'error': 'Failed to compute analytics'}), 500
+
+    return jsonify(result)
+
+
 @agents_bp.route('/agents/costs', methods=['GET'])
 def get_cost_summary():
     """Get cost summary for agent runs (AI API usage).
