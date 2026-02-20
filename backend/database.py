@@ -274,6 +274,18 @@ _NEW_TABLES_SQL = [
         PRIMARY KEY (watchlist_id, ticker)
     )
     """,
+    # --- price_alerts: user-defined price condition alerts ---
+    """
+    CREATE TABLE IF NOT EXISTS price_alerts (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker         TEXT NOT NULL,
+        condition_type TEXT NOT NULL,
+        threshold      REAL NOT NULL,
+        enabled        INTEGER NOT NULL DEFAULT 1,
+        triggered_at   TIMESTAMP,
+        created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 ]
 
 # Useful indices for the new tables
@@ -294,6 +306,7 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wl    ON watchlist_stocks (watchlist_id)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_tk    ON watchlist_stocks (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_price_alerts_enabled   ON price_alerts (enabled, ticker)",
 ]
 
 

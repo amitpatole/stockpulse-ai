@@ -1,34 +1,42 @@
-# VO-003: Add pagination to news and research list endpoints
+# VO-003: Build price alert system with notification UI
 
 ## User Story
 
-**As a** frontend developer consuming the news and research APIs,
-**I want** `GET /api/news` and `GET /api/research/briefs` to support `page` and `page_size` query parameters,
-**so that** the UI can load data incrementally and avoid stalling on large payloads as the database grows.
+## User Story: Price Alert System
 
 ---
 
-## Acceptance Criteria
-
-- [ ] `GET /api/news` accepts `page` (default: 1) and `page_size` (default: 25, max: 100) query parameters
-- [ ] `GET /api/research/briefs` accepts the same `page` / `page_size` parameters; the existing `limit` parameter is removed or deprecated
-- [ ] Both endpoints return a wrapper object with `data` (the result array), `page`, `page_size`, and `total` (total row count for that filter)
-- [ ] Invalid parameter values (non-integer, `page < 1`, `page_size < 1`) return HTTP 400 with a descriptive error message
-- [ ] `page_size` is capped server-side at 100; requesting a higher value silently clamps to 100 (no error)
-- [ ] SQL queries use `LIMIT ? OFFSET ?` with bound parameters — no string interpolation
-- [ ] Ticker-filtered requests (`?ticker=AAPL&page=2`) paginate correctly within the filtered set
-- [ ] `total` reflects the count for the active filter (ticker-scoped or global), not the entire table
-- [ ] Existing hardcoded `LIMIT 50` / `LIMIT 100` in `news.py` are replaced; no magic numbers remain
-- [ ] API contract change is documented in the endpoint docstrings
+**As a** trader using the platform, **I want** to set price alerts on stocks and receive real-time notifications when conditions are met, **so that** I can act on market movements without watching charts all day.
 
 ---
 
-## Priority Reasoning
+### Acceptance Criteria
 
-**P2 — Medium.** Both endpoints currently return unbounded or loosely bounded result sets (hardcoded `LIMIT 100` in news, `LIMIT 200` max in research). This is fine today but becomes a real problem as data accumulates — slow queries, large JSON payloads, and potential UI freezes. It also blocks building any "load more" or infinite-scroll UX. Not a blocker for current functionality, but a prerequisite for any serious data volume.
+**Alert Management**
+- User can create an alert by specifying: ticker, condition type (price above / price below / % change from close), and threshold value
+- Alerts are listed on `/alerts` with active/inactive status and a toggle to enable/disable each
+- User can delete an alert; deleted alerts are removed immediately from the list
+- Form validates that ticker exists and threshold is a valid number before saving
+
+**Backend / Data**
+- `alerts` table exists with columns: `id`, `ticker`, `condition_type`, `threshold`, `enabled`, `triggered_at`
+- `GET /api/alerts` returns all alerts for the session; `POST /api/alerts` creates one; `DELETE /api/alerts/:id` removes one
+- Alert evaluation runs inside the existing scheduler job on each stock data refresh — no separate polling loop
+- `triggered_at` is stamped when an alert fires; a triggered alert is auto-disabled to prevent repeat fires
+
+**Notifications**
+- Bell icon in the global header displays a badge with the count of unread triggered alerts
+- When an alert triggers, the browser receives the event via SSE through the existing event bus — no page refresh needed
+- Clicking the bell opens a dropdown listing recent triggers (ticker, condition, time); marking as read clears the badge
 
 ---
 
-## Complexity: 2 / 5
+### Priority Reasoning
 
-Both endpoints are simple SELECT queries in Flask. Adding `LIMIT`/`OFFSET` with a companion `COUNT(*)` query is mechanical work. The only meaningful decisions are the response envelope shape (must not silently break existing clients) and input validation. No schema migrations required.
+High priority. This is a core retention feature — users who set alerts have a concrete reason to return to the app daily. It also leverages infrastructure already in place (scheduler, event bus, SSE), so the marginal cost is low relative to the user value delivered.
+
+---
+
+### Complexity: **4 / 5**
+
+The DB schema and REST endpoints are straightforward. Complexity comes from three intersecting pieces: wiring alert evaluation cleanly into the scheduler without degrading its performance, the SSE push path from event bus to browser, and the real-time badge/dropdown state on the frontend. Each piece is manageable, but the integration surface is non-trivial.
