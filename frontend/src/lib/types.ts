@@ -119,6 +119,8 @@ export interface AIProvider {
   models: string[];
   default_model?: string;
   status?: string;
+  is_active?: boolean;
+  id?: number;
 }
 
 export interface HealthCheck {
