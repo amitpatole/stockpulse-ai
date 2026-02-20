@@ -143,9 +143,8 @@ class GoogleProvider(AIProvider):
 
             # Log error details if request fails
             if response.status_code != 200:
-                error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
-                return f"Error: {error_msg}"
+                logger.error(f"Google API error: HTTP {response.status_code}")
+                return f"Error: HTTP {response.status_code}: {response.text}"
 
             response.raise_for_status()
 
@@ -185,9 +184,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
@@ -203,15 +200,7 @@ class GrokProvider(AIProvider):
             return result['choices'][0]['message']['content'].strip()
 
         except Exception as e:
-            error_msg = f"Grok API error: {str(e)}"
-            logger.error(error_msg)
-            # Include detailed error info for debugging
-            if hasattr(e, 'response'):
-                try:
-                    error_detail = e.response.json()
-                    logger.error(f"Grok API response detail: {error_detail}")
-                except Exception as je:
-                    logger.error(f"Could not parse response JSON: {str(je)}")
+            logger.error(f"Grok API error: {type(e).__name__}")
             return f"Error: {str(e)}"
 
     def get_provider_name(self) -> str:
@@ -243,7 +232,7 @@ class AIProviderFactory:
             else:
                 return provider_class(api_key)
         except Exception as e:
-            logger.error(f"Error creating provider {provider_name}: {e}")
+            logger.error(f"Error creating provider {provider_name}: {type(e).__name__}")
             return None
 
     @classmethod
