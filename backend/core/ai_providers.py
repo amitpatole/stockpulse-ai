@@ -10,6 +10,8 @@ import logging
 from typing import Dict, Optional, List
 from abc import ABC, abstractmethod
 
+from .utils import mask_secret
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,7 +146,7 @@ class GoogleProvider(AIProvider):
             # Log error details if request fails
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
+                logger.error(f"Google API error: HTTP {response.status_code}")
                 return f"Error: {error_msg}"
 
             response.raise_for_status()
