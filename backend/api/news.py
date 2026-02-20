@@ -4,6 +4,7 @@ Blueprint for news articles, alerts, and statistics endpoints.
 """
 
 from flask import Blueprint, jsonify, request
+import html
 import logging
 
 from backend.database import get_db_connection
@@ -115,13 +116,13 @@ def get_alerts():
 
     return jsonify([{
         'id': alert['id'],
-        'ticker': alert['ticker'],
-        'alert_type': alert['alert_type'],
-        'message': alert['message'],
+        'ticker': html.escape(alert['ticker'] or ''),
+        'alert_type': html.escape(alert['alert_type'] or ''),
+        'message': html.escape(alert['message'] or ''),
         'created_at': alert['created_at'],
-        'title': alert['title'],
+        'title': html.escape(alert['title']) if alert['title'] else None,
         'url': alert['url'],
-        'source': alert['source'],
+        'source': html.escape(alert['source']) if alert['source'] else None,
         'sentiment_score': alert['sentiment_score']
     } for alert in alerts])
 

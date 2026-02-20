@@ -57,6 +57,24 @@ REDDIT_SUBREDDITS = [
 ]
 
 
+def sanitize_alert_text(text: str) -> str:
+    """Strip HTML tags and neutralize XSS vectors from alert message text.
+
+    Removes HTML/XML tags, ``javascript:`` URI schemes, and inline event-handler
+    attributes (``onclick=``, ``onerror=``, etc.) before the text is stored as
+    an alert message.  Acts as the first line of defence at the point of
+    ingestion so that malicious content from external news titles cannot reach
+    the database unsanitized.
+    """
+    # Remove all HTML/XML tags
+    text = re.sub(r'<[^>]*>', '', text)
+    # Remove javascript: URI scheme (handles whitespace and case variations)
+    text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
+    # Remove inline event-handler attributes (onclick=, onerror=, onload=, …)
+    text = re.sub(r'\bon\w+\s*=', '', text, flags=re.IGNORECASE)
+    return text
+
+
 class EnhancedStockNewsMonitor:
     def __init__(self, db_path='stock_news.db'):
         self.db_path = db_path
@@ -600,8 +618,10 @@ class EnhancedStockNewsMonitor:
 
             # Create alert if sentiment is positive
             if sentiment_label == 'positive' and sentiment_score > 0.3:
-                self.create_alert(cursor, article['ticker'], news_id, 'POSITIVE_NEWS',
-                                f"Positive news detected for {article['ticker']}: {article['title'][:100]}")
+                alert_msg = sanitize_alert_text(
+                    f"Positive news detected for {article['ticker']}: {article['title'][:100]}"
+                )
+                self.create_alert(cursor, article['ticker'], news_id, 'POSITIVE_NEWS', alert_msg)
                 conn.commit()
 
             conn.close()

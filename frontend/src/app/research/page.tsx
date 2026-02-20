@@ -1,5 +1,6 @@
 'use client';
 
+import DOMPurify from 'dompurify';
 import { useState, useMemo } from 'react';
 import { FileText, Loader2, Calendar, Bot, Filter, Play } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -19,9 +20,21 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 function MarkdownContent({ content }: { content: string }) {
-  // Simple markdown-to-HTML rendering for common patterns
-  const html = content
+  // Escape HTML special characters first so that any injected markup in the
+  // AI-generated content cannot survive into the rendered output.  The markdown
+  // regex transforms below only produce safe, known HTML patterns.
+  const escaped = escapeHtml(content);
+  const rawHtml = escaped
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-white mt-4 mb-2">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-white mt-5 mb-2">$1</h2>')
     .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-white mt-6 mb-3">$1</h1>')
@@ -33,10 +46,13 @@ function MarkdownContent({ content }: { content: string }) {
     .replace(/\n\n/g, '</p><p class="text-sm text-slate-300 leading-relaxed mb-3">')
     .replace(/\n/g, '<br />');
 
+  // DOMPurify requires a browser DOM — guard for the SSR pass.
+  const sanitized = typeof window !== 'undefined' ? DOMPurify.sanitize(rawHtml) : rawHtml;
+
   return (
     <div
       className="prose prose-invert max-w-none text-sm text-slate-300 leading-relaxed"
-      dangerouslySetInnerHTML={{ __html: `<p class="text-sm text-slate-300 leading-relaxed mb-3">${html}</p>` }}
+      dangerouslySetInnerHTML={{ __html: `<p class="text-sm text-slate-300 leading-relaxed mb-3">${sanitized}</p>` }}
     />
   );
 }
