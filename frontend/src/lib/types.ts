@@ -141,6 +141,52 @@ export interface ResearchBrief {
   model_used?: string;
 }
 
+// Stock Detail Page Types
+
+export interface CandleDataPoint {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface TechnicalIndicators {
+  rsi: number | null;
+  macd_signal: 'bullish' | 'bearish' | 'neutral';
+  bb_position: 'upper' | 'mid' | 'lower';
+}
+
+export interface StockQuote {
+  price: number;
+  change_pct: number;
+  volume: number;
+  market_cap: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  pe_ratio: number | null;
+  eps: number | null;
+  name: string;
+  currency: string;
+}
+
+export interface StockNewsItem {
+  title: string;
+  source: string;
+  published_date: string | null;
+  url: string;
+  sentiment_label: string;
+  sentiment_score: number;
+}
+
+export interface StockDetail {
+  quote: StockQuote;
+  candles: CandleDataPoint[];
+  indicators: TechnicalIndicators;
+  news: StockNewsItem[];
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
 

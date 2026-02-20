@@ -530,6 +530,45 @@ Be direct and actionable. Avoid disclaimers."""
 
         return prompt
 
+    def get_technical_indicators(self, ticker: str) -> Dict:
+        """Return current RSI, MACD signal, and Bollinger Band position for ticker.
+
+        Returns a dict with:
+            rsi (float | None): 0–100 RSI value, or None if insufficient data.
+            macd_signal (str): 'bullish', 'bearish', or 'neutral'.
+            bb_position (str): 'upper', 'lower', or 'mid' relative to 20-period Bollinger Bands.
+        """
+        price_data = self.get_stock_price_data(ticker)
+        if not price_data or not price_data.get('close'):
+            return {'rsi': None, 'macd_signal': 'neutral', 'bb_position': 'mid'}
+
+        closes = [p for p in price_data['close'] if p is not None]
+        if not closes:
+            return {'rsi': None, 'macd_signal': 'neutral', 'bb_position': 'mid'}
+
+        rsi = self.calculate_rsi(closes)
+        _, _, macd_signal = self.calculate_macd(closes)
+
+        # Bollinger Bands (20-period, 2 standard deviations)
+        bb_position = 'mid'
+        if len(closes) >= 20:
+            sma_20 = sum(closes[-20:]) / 20
+            variance = sum((p - sma_20) ** 2 for p in closes[-20:]) / 20
+            std_20 = variance ** 0.5
+            upper = sma_20 + 2 * std_20
+            lower = sma_20 - 2 * std_20
+            price = closes[-1]
+            if price >= upper:
+                bb_position = 'upper'
+            elif price <= lower:
+                bb_position = 'lower'
+
+        return {
+            'rsi': round(rsi, 2),
+            'macd_signal': macd_signal,
+            'bb_position': bb_position,
+        }
+
     def get_all_ratings(self) -> List[Dict]:
         """Get AI ratings for all active stocks"""
         conn = sqlite3.connect(self.db_path)

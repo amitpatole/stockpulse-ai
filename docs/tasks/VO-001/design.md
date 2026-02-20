@@ -1,70 +1,87 @@
-# VO-001: Wire real agents into agents API (remove stubs)
+# VO-001: Watchlist Portfolio Groups with CRUD
 
-## Technical Design
+## Technical Design Spec
 
-Now I have enough context to write a precise spec. Let me put it together.
+### Approach
 
----
-
-## VO-025 Technical Design Spec: Wire Real Agents into Agents API
-
-### 1. Approach
-
-The engines and persistence layer are complete. This is a **wiring task** in three parts:
-
-1. **Replace the stub run dispatcher** in `POST /api/agents/<name>/run` — swap the fake `_simulate_run()` call with `registry.run_agent(resolved_name, inputs)` from `AgentRegistry`
-2. **Bootstrap the registry** in Flask app startup so the singleton is ready before any request hits the agents blueprint
-3. **Update read endpoints** (`GET /api/agents`, `GET /api/agents/costs`, `GET /api/agents/runs`) to pull live data from the DB via `AgentRegistry` methods instead of fabricating values
-
-The OpenClaw → native fallback path already exists in `base.py`'s `run()` method. The API layer just needs to stop short-circuiting it.
+Introduce watchlists as a thin layer over the existing `stocks` table. The `stocks` table becomes a global ticker registry; named watchlists are tracked via two new tables. The active watchlist is persisted in `localStorage` — no session changes needed. Drag-and-drop is deferred to v2 per the user story guidance.
 
 ---
 
-### 2. Files to Modify / Create
+### Files to Modify / Create
 
-| File | Change |
-|---|---|
-| `backend/api/agents.py` | Primary target — remove stub dispatcher, call `registry.run_agent()`, read metrics from DB |
-| `backend/agents/__init__.py` | Verify `create_default_agents()` is called at app init; expose registry getter |
-| `backend/app.py` | Call `create_default_agents(db_path)` during `create_app()` so registry is populated before requests |
-| `backend/tests/test_agents_api.py` | Replace random-range assertions; mock `BaseAgent.execute()` or `litellm.completion` for CI |
+**Backend**
+- `backend/database.py` — add `watchlists` + `watchlist_stocks` table creation and migration in `init_all_tables()`
+- `backend/api/watchlists.py` — new blueprint with all 8 watchlist endpoints
+- `backend/app.py` — register `watchlists_bp` in `_register_blueprints()`
 
-No new files needed.
+**Frontend — Create**
+- `frontend/src/components/dashboard/WatchlistSelector.tsx` — dropdown + "+ New Watchlist" button
+- `frontend/src/hooks/useWatchlists.ts` — CRUD hook wrapping watchlist API calls
 
----
-
-### 3. Data Model Changes
-
-**None.** The `agent_runs` table schema is correct and complete. The `tokens_input`/`tokens_output` split migration already exists in `database.py`. No DDL changes required.
-
----
-
-### 4. API Changes
-
-No new endpoints. Changes are behavioral:
-
-- **`POST /api/agents/<name>/run`**: Remove stub path. Resolve name via `AGENT_ID_MAP`, call `registry.run_agent(resolved_name, inputs)`. Return the `AgentResult` fields directly (`status`, `tokens_input`, `tokens_output`, `estimated_cost`, `duration_ms`). The registry's `_persist_result()` handles the DB write — no double-write risk since it's called inside `run_agent()`.
-- **`GET /api/agents`**: Replace in-memory stub status with `registry.get_run_history()` per agent to derive last run time, real cost totals, run counts.
-- **`GET /api/agents/costs`**: Replace fabricated breakdown with `registry.get_cost_summary(days=30)`.
-- **`GET /api/agents/runs`**: Already queries DB in the real implementation — verify it does, no change if so.
+**Frontend — Modify**
+- `frontend/src/lib/types.ts` — add `Watchlist`, `WatchlistDetail` interfaces
+- `frontend/src/lib/api.ts` — add all watchlist API functions
+- `frontend/src/components/dashboard/StockGrid.tsx` — accept `watchlistId` prop; route add/remove through watchlist endpoints instead of `/api/stocks`
+- `frontend/src/app/page.tsx` — compose `WatchlistSelector` above `StockGrid`, pass active watchlist state
 
 ---
 
-### 5. Frontend Changes
+### Data Model Changes
 
-**None.** The response shape from `AgentResult` matches what `AgentCard.tsx` and `page.tsx` already consume (`status`, `duration_ms`, `estimated_cost`, `tokens_input`, `tokens_output`). The `AGENT_ID_MAP` already handles the six legacy IDs → five real names.
+```sql
+CREATE TABLE IF NOT EXISTS watchlists (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS watchlist_stocks (
+    watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
+    ticker       TEXT NOT NULL,
+    added_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (watchlist_id, ticker)
+);
+```
+
+**Migration** (runs once in `init_all_tables()`): if no rows exist in `watchlists`, insert `"My Watchlist"` and populate `watchlist_stocks` from all `active = 1` rows in `stocks`.
 
 ---
 
-### 6. Testing Strategy
+### API Changes
 
-**Unit tests** (`test_agents_api.py`):
-- Patch `BaseAgent.execute()` to return a deterministic `AgentResult` (fixed token counts, cost, duration) — keeps tests fast, no live LLM calls
-- Assert response fields match the mocked `AgentResult` exactly (not random ranges)
-- Assert one row written to `agent_runs` per run call (use in-memory SQLite fixture)
-- Assert all six stub IDs resolve without 404 via `AGENT_ID_MAP` parametrized test
+| Method | Path | Action |
+|--------|------|--------|
+| `GET` | `/api/watchlists` | List all watchlists with `stock_count` |
+| `POST` | `/api/watchlists` | Create (enforces unique name, max 20) |
+| `GET` | `/api/watchlists/<id>` | Return watchlist + ticker array |
+| `PUT` | `/api/watchlists/<id>` | Rename |
+| `DELETE` | `/api/watchlists/<id>` | Delete (cascades to junction table) |
+| `POST` | `/api/watchlists/<id>/stocks` | Add ticker (also inserts into `stocks` if new) |
+| `DELETE` | `/api/watchlists/<id>/stocks/<ticker>` | Remove ticker from this watchlist only |
 
-**Integration smoke test** (manual / CI with `ANTHROPIC_API_KEY` secret):
-- Single `POST /api/agents/scanner/run` against a real DB; assert `duration_ms > 0` and `tokens_output > 0`
+Existing `/api/stocks` and `/api/ai/ratings` endpoints are unchanged. `StockGrid` fetches `GET /api/watchlists/<id>` to get the active ticker list, then filters the ratings array client-side.
 
-**CI guard**: Gate live LLM tests behind `@pytest.mark.integration` and skip by default. Mock path must cover all six agent IDs.
+---
+
+### Frontend Changes
+
+- **`WatchlistSelector`**: dropdown of watchlist names with inline rename (double-click), delete (with `window.confirm`), and "+ New Watchlist" button. Active watchlist ID stored in `localStorage` key `activeWatchlistId`.
+- **`useWatchlists`**: manages watchlist list state, exposes `create`, `rename`, `remove`, `addStock`, `removeStock`. Uses `useApi` pattern.
+- **`StockGrid`**: receives `watchlistId: number` and `tickers: string[]` props. Filters `AIRating[]` to only tickers in the active watchlist. Add/remove calls hit watchlist-scoped endpoints.
+- **Empty state**: when `tickers.length === 0`, render a prompt: *"No stocks yet — search above to add one."*
+
+---
+
+### Testing Strategy
+
+**Backend**
+- Unit: migration idempotency (run `init_all_tables()` twice, assert one default watchlist)
+- Unit: max-20 watchlist limit returns 400
+- Unit: `DELETE /api/watchlists/<id>` cascades — ticker absent from `watchlist_stocks`, present in `stocks`
+- Unit: duplicate ticker in same watchlist returns 409
+
+**Frontend**
+- Component test `WatchlistSelector`: renders watchlist names, calls `onCreate` on submit
+- Component test `StockGrid`: with `tickers=["AAPL"]` filters ratings to only AAPL card
+- Integration (manual): create watchlist → add stock → refresh page → active watchlist restored from `localStorage`

@@ -1,23 +1,58 @@
-# VO-001: Wire real agents into agents API (remove stubs)
+# VO-001: Add stock detail page with multi-timeframe charts
 
 ## User Story
 
-Here's the user story I wrote for VO-025:
+# User Story: Stock Detail Page
+
+## User Story
+As a **trader using the Virtual Office dashboard**, I want a **dedicated stock detail page with charts, key stats, and news**, so that I can **do deep-dive analysis on any stock without leaving the app**.
 
 ---
 
-**User Story**
+## Acceptance Criteria
 
-> As a **power user monitoring my AI agent fleet**, I want the agents dashboard to show real execution metrics — actual token counts, costs, and durations — so that I can make informed decisions about which agents to run and how much they're costing me.
+**Navigation**
+- [ ] Stock name/ticker in `StockGrid.tsx` is clickable and routes to `/stock/[ticker]`
+- [ ] Page loads with ticker from URL, handles invalid tickers with a clear error state
 
-**Key acceptance criteria:**
-- `POST /api/agents/<name>/run` dispatches to the real CrewAI/OpenClaw path — no random values
-- All six stub agent IDs (e.g. `sentiment_analyst`, `news_scanner`) resolve via `AGENT_ID_MAP` without 404s
-- Each run persists exactly one row to `agent_runs` with a valid status and non-zero duration
-- Cost/run endpoints reflect real DB data, not fabricated numbers
-- OpenClaw fallback to native CrewAI works cleanly when the bridge is unavailable
-- Existing tests updated to assert real response structure, not stub random ranges
+**Chart**
+- [ ] TradingView Lightweight candlestick chart renders OHLCV data
+- [ ] Timeframe selector (1D, 1W, 1M, 3M, 1Y) updates chart data on click
+- [ ] Active timeframe is visually highlighted
 
-**Priority: P1.** Fake metrics on a metrics dashboard is a trust killer. This is foundational correctness — has to ship before we surface the agents feature to external users.
+**Key Stats Sidebar**
+- [ ] Displays: current price, % change, volume, market cap, 52w high/low, P/E ratio, EPS
+- [ ] Data sourced from yfinance via new backend endpoint
+- [ ] Values update on page load (no stale data)
 
-**Complexity: 3/5.** The engines are already built (`crewai_engine.py`, `openclaw_engine.py`). This is a wiring task. Main risk is the stub-to-real name mapping, double-write prevention in DB persistence, and mocking LLM calls in CI to avoid live API costs.
+**Technical Indicators**
+- [ ] Shows current RSI value with overbought/oversold callout (>70 / <30)
+- [ ] Shows MACD signal (bullish/bearish)
+- [ ] Shows Bollinger Band position (upper/mid/lower band proximity)
+
+**News Feed**
+- [ ] Displays recent news filtered to the viewed ticker
+- [ ] Uses existing news API — no new integration required
+- [ ] Shows headline, source, and timestamp
+
+**Backend**
+- [ ] `GET /api/stocks/<ticker>/detail` returns quote + indicators + news in a single aggregated response
+- [ ] Returns meaningful error for unknown tickers (404)
+
+---
+
+## Priority Reasoning
+
+**High priority.** The stock grid is currently a dead end — users see data but can't drill in. This closes the loop on the core workflow: *scan → investigate → decide*. It's the feature most likely to drive daily active usage and session depth.
+
+---
+
+## Estimated Complexity
+
+**4 / 5**
+
+Multiple moving parts: new frontend route + layout, TradingView chart integration, aggregated backend endpoint, yfinance data mapping, and wiring three distinct data sources (quote, indicators, news) into one cohesive page. Individually straightforward; coordination cost is the risk.
+
+---
+
+**Suggested scope cut if needed:** Ship without technical indicators in v1 — chart + stats + news delivers 80% of the value. Indicators can follow in a fast-follow.

@@ -3,10 +3,14 @@ TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, and search stocks.
 """
 
-from flask import Blueprint, jsonify, request
+import math
 import logging
 
+from flask import Blueprint, jsonify, request
+
 from backend.core.stock_manager import get_all_stocks, add_stock, remove_stock, search_stock_ticker
+from backend.core.ai_analytics import StockAnalytics
+from backend.database import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,138 @@ def remove_stock_endpoint(ticker):
     """
     success = remove_stock(ticker)
     return jsonify({'success': success})
+
+
+_TIMEFRAME_MAP = {
+    '1D': ('1d', '5m'),
+    '1W': ('5d', '15m'),
+    '1M': ('1mo', '1d'),
+    '3M': ('3mo', '1d'),
+    '1Y': ('1y', '1d'),
+}
+
+
+@stocks_bp.route('/stocks/<ticker>/detail', methods=['GET'])
+def get_stock_detail(ticker):
+    """Aggregate quote, candlestick data, technical indicators, and news for a single ticker.
+
+    Path Parameters:
+        ticker (str): Stock ticker symbol (e.g. 'AAPL', 'RELIANCE.NS').
+
+    Query Parameters:
+        timeframe (str, optional): One of 1D, 1W, 1M, 3M, 1Y. Default 1M.
+
+    Returns:
+        JSON with quote, candles, indicators, and news. Returns 404 for invalid tickers.
+    """
+    ticker = ticker.upper().strip()
+    timeframe = request.args.get('timeframe', '1M')
+    period, interval = _TIMEFRAME_MAP.get(timeframe, ('1mo', '1d'))
+
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
+        hist = tk.history(period=period, interval=interval)
+
+        if hist.empty:
+            return jsonify({'error': 'ticker not found'}), 404
+
+        candles = []
+        for ts, row in hist.iterrows():
+            try:
+                close = float(row['Close'])
+                if math.isnan(close):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            candles.append({
+                'time': int(ts.timestamp()),
+                'open': round(float(row['Open']), 4),
+                'high': round(float(row['High']), 4),
+                'low': round(float(row['Low']), 4),
+                'close': round(close, 4),
+                'volume': int(row.get('Volume', 0) or 0),
+            })
+
+        if not candles:
+            return jsonify({'error': 'ticker not found'}), 404
+
+        # Fast quote fields
+        fast_info = tk.fast_info
+        last_price = getattr(fast_info, 'last_price', None)
+        price = float(last_price) if last_price is not None else candles[-1]['close']
+        prev_close_raw = getattr(fast_info, 'previous_close', None)
+        prev_close = float(prev_close_raw) if prev_close_raw is not None else price
+        change = price - prev_close
+        change_pct = (change / prev_close * 100) if prev_close else 0.0
+        market_cap = getattr(fast_info, 'market_cap', None)
+        week_52_high = getattr(fast_info, 'fifty_two_week_high', None)
+        week_52_low = getattr(fast_info, 'fifty_two_week_low', None)
+        currency = getattr(fast_info, 'currency', 'USD') or 'USD'
+        volume = int(getattr(fast_info, 'last_volume', 0) or 0)
+
+        # Extended info for P/E, EPS, and name (best-effort)
+        pe_ratio = None
+        eps = None
+        name = ticker
+        try:
+            info = tk.info
+            pe_ratio = info.get('trailingPE')
+            eps = info.get('trailingEps')
+            name = info.get('shortName') or info.get('longName') or ticker
+        except Exception:
+            pass
+
+        quote = {
+            'price': round(price, 2),
+            'change_pct': round(change_pct, 2),
+            'volume': volume,
+            'market_cap': market_cap,
+            'week_52_high': week_52_high,
+            'week_52_low': week_52_low,
+            'pe_ratio': pe_ratio,
+            'eps': eps,
+            'name': name,
+            'currency': currency,
+        }
+
+    except ImportError:
+        logger.error("yfinance is not installed")
+        return jsonify({'error': 'data provider unavailable'}), 503
+    except Exception as e:
+        logger.error(f"Error fetching stock detail for {ticker}: {e}")
+        return jsonify({'error': 'ticker not found'}), 404
+
+    # Technical indicators via ai_analytics
+    analytics = StockAnalytics()
+    indicators = analytics.get_technical_indicators(ticker)
+
+    # Recent news from database
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        '''SELECT title, source, published_date, url, sentiment_label, sentiment_score
+           FROM news WHERE ticker = ? ORDER BY created_at DESC LIMIT 10''',
+        (ticker,)
+    )
+    news_rows = cursor.fetchall()
+    conn.close()
+
+    news = [{
+        'title': row['title'],
+        'source': row['source'],
+        'published_date': row['published_date'],
+        'url': row['url'],
+        'sentiment_label': row['sentiment_label'],
+        'sentiment_score': row['sentiment_score'],
+    } for row in news_rows]
+
+    return jsonify({
+        'quote': quote,
+        'candles': candles,
+        'indicators': indicators,
+        'news': news,
+    })
 
 
 @stocks_bp.route('/stocks/search', methods=['GET'])
