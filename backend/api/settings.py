@@ -212,8 +212,8 @@ def test_stored_ai_provider(provider_name):
         result = test_provider_connection(provider_name, row['api_key'], row['model'])
         return jsonify(result)
     except Exception as e:
-        logger.error(f"Error testing provider {provider_name}: {e}")
-        return jsonify({'success': False, 'error': str(e)})
+        logger.exception(f"Error testing provider {provider_name}: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
 
 
 @settings_bp.route('/settings/test-ai', methods=['POST'])
