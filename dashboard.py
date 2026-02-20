@@ -358,7 +358,7 @@ def delete_ai_provider_endpoint(provider_id):
 def test_ai_provider_endpoint():
     """Test AI provider connection"""
     data = request.json
-    from ai_providers import test_provider_connection
+    from backend.core.ai_providers import test_provider_connection
     result = test_provider_connection(
         data['provider'],
         data['api_key'],
@@ -385,7 +385,7 @@ def ask_chat_endpoint():
     try:
         from settings_manager import get_active_ai_provider
         from ai_providers import AIProviderFactory
-        from ai_analytics import StockAnalytics
+        from backend.core.ai_analytics import StockAnalytics
 
         # Get active AI provider
         provider_config = get_active_ai_provider()

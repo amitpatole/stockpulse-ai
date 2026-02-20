@@ -469,7 +469,7 @@ class StockAnalytics:
         # Try to use real AI if configured
         try:
             from settings_manager import get_active_ai_provider
-            from ai_providers import AIProviderFactory
+            from backend.core.ai_providers import AIProviderFactory
 
             provider_config = get_active_ai_provider()
 
