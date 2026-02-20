@@ -1,38 +1,60 @@
-# VO-002: Add integration tests for data provider fallback chain
+# VO-002: Add watchlist portfolio groups with CRUD
 
 ## User Story
 
-**As a** backend engineer maintaining the pluggable data layer,
-**I want** a comprehensive integration test suite for `DataProviderRegistry` fallback behaviour,
-**so that** I can refactor or add providers with confidence that the fallback chain always delivers data to users even when upstream APIs fail.
+# User Story: Watchlist Portfolio Groups
+
+## User Story
+
+As a **stock trader**, I want to organize my stocks into named watchlists, so that I can track different investment strategies or sectors without a cluttered, undifferentiated list.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Test: primary provider succeeds → no fallback provider is called
-- [ ] Test: primary raises an exception → next provider in chain is called and its data is returned
-- [ ] Test: primary returns `None` → next provider in chain is called
-- [ ] Test: primary returns `PriceHistory` with `bars=[]` → treated as empty and falls back
-- [ ] Test: all providers raise → `get_quote` / `get_historical` return `None` (no crash)
-- [ ] Test: provider with `is_available() = False` is skipped entirely (no call made)
-- [ ] Test: full four-provider chain (Polygon → Finnhub → Alpha Vantage → yfinance) resolves via last resort
-- [ ] Test: `set_primary()` overrides registration order for quote resolution
-- [ ] Test: `create_registry()` with no API keys registers only yfinance and selects it as primary
-- [ ] Test: `create_registry(finnhub_key=...)` registers finnhub + yfinance; finnhub becomes primary
-- [ ] Test: `create_registry(primary='alpha_vantage')` with all keys overrides auto-selection
-- [ ] Test: provider constructor raises during `create_registry()` → provider is skipped gracefully; yfinance remains primary
-- [ ] All tests use `unittest.mock` — zero real HTTP calls
-- [ ] Test file runnable standalone: `pytest backend/tests/test_data_provider_fallback.py -v`
+**Watchlist Management**
+- [ ] A default watchlist named "My Watchlist" is auto-created for new and existing users
+- [ ] Users can create a new watchlist via a "+ New Watchlist" button (requires a unique, non-empty name)
+- [ ] Users can rename an existing watchlist inline
+- [ ] Users can delete a watchlist (with confirmation prompt); stocks are not deleted globally
+- [ ] Maximum of 20 watchlists per user
+
+**Navigation**
+- [ ] A dropdown or tab selector above `StockGrid` lets users switch between watchlists
+- [ ] Active watchlist persists across page refresh (stored in localStorage or user session)
+- [ ] Empty watchlist shows an empty state with a prompt to add stocks
+
+**Stock Assignment**
+- [ ] Users can add a stock to any watchlist (from search or existing list)
+- [ ] Users can remove a stock from a watchlist without deleting it from others
+- [ ] Users can drag a stock from one watchlist and drop it into another
+- [ ] A stock can exist in multiple watchlists simultaneously
+
+**API**
+- [ ] `GET /api/watchlists` returns all watchlists with stock counts
+- [ ] `POST /api/watchlists` creates a new watchlist
+- [ ] `GET /PUT /DELETE /api/watchlists/<id>` reads, renames, or deletes a watchlist
+- [ ] `POST /DELETE /api/watchlists/<id>/stocks` adds or removes a stock ticker
+
+**Data Integrity**
+- [ ] Deleting a watchlist does not affect stocks in other watchlists
+- [ ] Junction table enforces no duplicate tickers per watchlist
 
 ---
 
 ## Priority Reasoning
 
-**P1 — High.** The fallback chain is the core reliability guarantee of the data layer. Without tests, any change to `DataProviderRegistry` or `create_registry()` (adding a new provider, changing priority order, handling a new error type) risks silently breaking the chain. Users would see missing quotes or empty charts with no obvious cause. Given that real API keys are environment-dependent and unavailable in CI, mock-based integration tests are the only practical safety net.
+**High priority.** The current flat list is a known retention friction point — power users managing multiple strategies abandon the product for tools that support organization. This is table-stakes functionality for anyone tracking more than ~10 tickers. Unblocks future features (portfolio performance comparison, alerts per watchlist).
 
 ---
 
-## Complexity: 2 / 5
+## Estimated Complexity: **4 / 5**
 
-The registry logic is already written and the `DataProvider` interface is well-defined. The work is entirely in test setup: building mock providers, wiring them into a registry, and asserting call sequences. No production code changes required. The main subtlety is correctly testing the `create_registry()` factory via constructor-level mocks rather than instance-level mocks.
+| Area | Complexity Driver |
+|---|---|
+| Backend | New tables + 8 endpoints, migration safety for existing users |
+| Frontend | Tab/dropdown UI, drag-and-drop between lists, empty states |
+| Data | Junction table logic, default watchlist migration for existing data |
+| Edge cases | Multi-list membership, delete cascades, name uniqueness |
+
+Drag-and-drop alone adds ~1 point of complexity. If timeline is tight, ship without drag-and-drop as v1 — add it in a follow-up.
