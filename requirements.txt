@@ -1,10 +1,10 @@
 # TickerPulse AI - Python Dependencies
 
 # Web Framework
-flask==3.0.0
+flask>=3.1.0
 
 # HTTP Requests
-requests==2.31.0
+requests>=2.32.0
 
 # RSS Feed Parsing
 feedparser==6.0.10
