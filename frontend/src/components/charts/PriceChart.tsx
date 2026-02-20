@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { createChart, AreaSeries, ColorType, type IChartApi, type Time } from 'lightweight-charts';
+import { createChart, AreaSeries, ColorType, type IChartApi, type Time, type UTCTimestamp } from 'lightweight-charts';
 
 interface PriceDataPoint {
-  time: string;
+  time: string | number;
   value: number;
 }
 
@@ -24,8 +24,16 @@ export default function PriceChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
+  const usesTimestamps = data.length > 0 && typeof data[0].time === 'number';
+  const browserTimezone = usesTimestamps
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : null;
+
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const hasTimestamps = data.length > 0 && typeof data[0].time === 'number';
 
     const chart = createChart(containerRef.current, {
       height,
@@ -50,6 +58,19 @@ export default function PriceChart({
         borderColor: '#334155',
         timeVisible: true,
       },
+      localization: {
+        timeFormatter: (time: Time) => {
+          if (typeof time === 'number') {
+            return new Intl.DateTimeFormat(undefined, {
+              timeZone: tz,
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            }).format(new Date((time as number) * 1000));
+          }
+          return String(time);
+        },
+      },
     });
 
     chartRef.current = chart;
@@ -63,7 +84,7 @@ export default function PriceChart({
 
     if (data.length > 0) {
       const chartData = data.map((d) => ({
-        time: d.time as Time,
+        time: (hasTimestamps ? d.time as UTCTimestamp : d.time as Time),
         value: d.value,
       }));
       areaSeries.setData(chartData);
@@ -92,6 +113,11 @@ export default function PriceChart({
         <h3 className="mb-3 text-sm font-semibold text-white">{title}</h3>
       )}
       <div ref={containerRef} className="w-full" />
+      {usesTimestamps && browserTimezone && (
+        <p className="mt-2 text-right text-[10px] text-slate-500">
+          All times in {browserTimezone}
+        </p>
+      )}
       {data.length === 0 && (
         <div className="flex items-center justify-center py-12">
           <p className="text-sm text-slate-500">No chart data available</p>

@@ -161,7 +161,7 @@ def get_chart_data(ticker):
         if closes[i] is not None:
             data_points.append({
                 'timestamp': timestamps[i],
-                'date': datetime.fromtimestamp(timestamps[i]).strftime('%Y-%m-%d'),
+                'date': datetime.utcfromtimestamp(timestamps[i]).strftime('%Y-%m-%d'),
                 'open': opens[i],
                 'high': highs[i],
                 'low': lows[i],
