@@ -16,6 +16,12 @@ from backend.config import Config
 logger = logging.getLogger(__name__)
 
 
+def _mask_key(value: Optional[str]) -> str:
+    if not value:
+        return "****"
+    return f"****{value[-4:]}" if len(value) > 4 else "****"
+
+
 class StockAnalytics:
     def __init__(self, db_path=None):
         if db_path is None:
@@ -495,7 +501,7 @@ class StockAnalytics:
                         logger.info("AI analysis generated successfully")
                         return (ai_summary, True)
         except Exception as e:
-            logger.error(f"Error generating AI summary: {e}")
+            logger.error(f"Error generating AI summary: {type(e).__name__}")
 
         # Fallback to basic summary if AI is not available
         summaries = {
