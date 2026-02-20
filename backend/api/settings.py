@@ -19,6 +19,25 @@ logger = logging.getLogger(__name__)
 settings_bp = Blueprint('settings', __name__, url_prefix='/api')
 
 
+def _parse_pagination(args):
+    """Parse and validate page/page_size query parameters.
+
+    Returns (page, page_size, error_response). On success, error_response is None.
+    On validation failure, page and page_size are None and error_response is a
+    (response, status_code) tuple ready to return from a Flask view.
+    """
+    try:
+        page = int(args.get('page', 1))
+        page_size = int(args.get('page_size', 25))
+    except (ValueError, TypeError):
+        return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+
+    if not (1 <= page_size <= 100):
+        return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
+
+    return page, page_size, None
+
+
 # ---------------------------------------------------------------------------
 # AI Provider endpoints (migrated from dashboard.py)
 # ---------------------------------------------------------------------------
@@ -27,10 +46,19 @@ settings_bp = Blueprint('settings', __name__, url_prefix='/api')
 def get_ai_providers_endpoint():
     """Get all supported AI providers with configuration status.
 
+    Query Parameters:
+        page (int, optional): Page number, 1-based. Default 1.
+        page_size (int, optional): Results per page, 1-100. Default 25.
+
     Returns:
-        JSON array of provider objects with name, display_name, configured,
-        models list, and default_model. API keys are never exposed.
+        JSON envelope with data array and pagination metadata. Provider objects
+        include name, display_name, configured, models list, and default_model.
+        API keys are never exposed.
     """
+    page, page_size, err = _parse_pagination(request.args)
+    if err:
+        return err
+
     # All supported providers with their available models
     SUPPORTED_PROVIDERS = {
         'anthropic': {
@@ -56,7 +84,7 @@ def get_ai_providers_endpoint():
         configured_rows = get_all_ai_providers()
         configured_map = {row['provider_name']: row for row in configured_rows}
 
-        # Build response with all providers
+        # Build full result list by merging SUPPORTED_PROVIDERS with DB rows
         result = []
         for provider_id, info in SUPPORTED_PROVIDERS.items():
             db_row = configured_map.get(provider_id)
@@ -70,10 +98,20 @@ def get_ai_providers_endpoint():
                 'status': 'active' if db_row and db_row['is_active'] else ('configured' if db_row else 'unconfigured'),
             })
 
-        return jsonify(result)
+        total = len(result)
+        offset = (page - 1) * page_size
+        page_data = result[offset:offset + page_size]
+
+        return jsonify({
+            'data': page_data,
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'has_next': (page * page_size) < total,
+        })
     except Exception as e:
         logger.error(f"Error fetching AI providers: {e}")
-        return jsonify([])
+        return jsonify({'data': [], 'page': page, 'page_size': page_size, 'total': 0, 'has_next': False})
 
 
 @settings_bp.route('/settings/ai-provider', methods=['POST'])

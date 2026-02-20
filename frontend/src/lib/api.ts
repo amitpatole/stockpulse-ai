@@ -184,11 +184,11 @@ export async function resumeJob(id: string): Promise<{ message: string }> {
 // ---- Settings ----
 
 export async function getAIProviders(): Promise<AIProvider[]> {
-  const data = await request<{ providers: AIProvider[] } | AIProvider[]>(
+  const data = await request<{ data: AIProvider[] } | AIProvider[]>(
     '/api/settings/ai-providers'
   );
   if (Array.isArray(data)) return data;
-  return Array.isArray(data.providers) ? data.providers : [];
+  return (data as { data: AIProvider[] }).data || [];
 }
 
 // ---- Health ----
