@@ -19,6 +19,12 @@ class AIProvider(ABC):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
+    def _mask_key(self) -> str:
+        """Return masked API key for safe logging (last 4 chars only)."""
+        if len(self.api_key) <= 4:
+            return "****"
+        return f"...{self.api_key[-4:]}"
+
     @abstractmethod
     def generate_analysis(self, prompt: str, max_tokens: int = 500) -> str:
         """Generate AI analysis from prompt"""

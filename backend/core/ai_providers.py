@@ -19,6 +19,12 @@ class AIProvider(ABC):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
+    def _mask_key(self) -> str:
+        """Return masked API key for safe logging (last 4 chars only)."""
+        if len(self.api_key) <= 4:
+            return "****"
+        return f"...{self.api_key[-4:]}"
+
     @abstractmethod
     def generate_analysis(self, prompt: str, max_tokens: int = 500) -> str:
         """Generate AI analysis from prompt"""
@@ -135,7 +141,8 @@ class GoogleProvider(AIProvider):
             }
 
             response = requests.post(
-                f"{self.base_url}?key={self.api_key}",
+                self.base_url,
+                params={"key": self.api_key},
                 headers=headers,
                 json=data,
                 timeout=30
@@ -144,7 +151,7 @@ class GoogleProvider(AIProvider):
             # Log error details if request fails
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
+                logger.error(f"Google API error: HTTP {response.status_code}")  # nosec — status code only, not response body or key
                 return f"Error: {error_msg}"
 
             response.raise_for_status()
@@ -185,9 +192,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, API Key: {self._mask_key()}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
@@ -234,7 +239,7 @@ class AIProviderFactory:
         provider_class = cls.PROVIDERS.get(provider_name.lower())
 
         if not provider_class:
-            logger.error(f"Unknown provider: {provider_name}")
+            logger.error(f"Unknown provider: {provider_name}")  # nosec — provider name is not sensitive
             return None
 
         try:
@@ -243,7 +248,7 @@ class AIProviderFactory:
             else:
                 return provider_class(api_key)
         except Exception as e:
-            logger.error(f"Error creating provider {provider_name}: {e}")
+            logger.error(f"Error creating provider {provider_name}: {type(e).__name__}")  # nosec — exception type only, not message
             return None
 
     @classmethod
