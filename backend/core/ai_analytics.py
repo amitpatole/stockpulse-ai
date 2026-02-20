@@ -474,7 +474,9 @@ class StockAnalytics:
             provider_config = get_active_ai_provider()
 
             if provider_config:
-                logger.info(f"Using AI provider: {provider_config['provider_name']} - {provider_config['model']}")
+                provider_name_log = provider_config['provider_name']
+                model_log = provider_config['model']
+                logger.info(f"Using AI provider: {provider_name_log} - {model_log}")
 
                 # Create AI provider
                 provider = AIProviderFactory.create_provider(
