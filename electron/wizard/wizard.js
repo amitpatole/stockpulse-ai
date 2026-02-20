@@ -192,15 +192,23 @@ function buildSummary() {
     { label: 'Agent Framework', value: config.default_agent_framework === 'crewai' ? 'CrewAI' : 'OpenClaw' },
   ];
 
-  grid.innerHTML = items
-    .map(
-      (item) =>
-        `<div class="summary-item">
-          <span class="label">${item.label}</span>
-          <span class="value">${item.value}</span>
-        </div>`
-    )
-    .join('');
+  grid.innerHTML = '';
+  items.forEach((item) => {
+    const div = document.createElement('div');
+    div.className = 'summary-item';
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'label';
+    labelSpan.textContent = item.label;
+
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'value';
+    valueSpan.textContent = item.value;
+
+    div.appendChild(labelSpan);
+    div.appendChild(valueSpan);
+    grid.appendChild(div);
+  });
 }
 
 // ─── Save & Launch ───────────────────────────────────────────
