@@ -258,6 +258,23 @@ _NEW_TABLES_SQL = [
         PRIMARY KEY (repo_owner, repo_name, date)
     )
     """,
+    # --- watchlists: named stock groups (portfolios) ---
+    """
+    CREATE TABLE IF NOT EXISTS watchlists (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT    NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- watchlist_stocks: junction table linking watchlists to tickers ---
+    """
+    CREATE TABLE IF NOT EXISTS watchlist_stocks (
+        watchlist_id INTEGER NOT NULL,
+        ticker       TEXT    NOT NULL,
+        PRIMARY KEY (watchlist_id, ticker),
+        FOREIGN KEY (watchlist_id) REFERENCES watchlists (id) ON DELETE CASCADE
+    )
+    """,
 ]
 
 # Useful indices for the new tables
@@ -276,6 +293,8 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_download_stats_repo    ON download_stats (repo_owner, repo_name)",
     "CREATE INDEX IF NOT EXISTS idx_download_stats_date    ON download_stats (recorded_at)",
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wl    ON watchlist_stocks (watchlist_id)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_tick  ON watchlist_stocks (ticker)",
 ]
 
 
