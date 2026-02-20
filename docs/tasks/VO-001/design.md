@@ -2,64 +2,69 @@
 
 ## Technical Design
 
-## Technical Design Spec: Wire Real Agents into Agents API
+Now I have enough context to write a precise spec. Let me put it together.
 
 ---
+
+## VO-025 Technical Design Spec: Wire Real Agents into Agents API
 
 ### 1. Approach
 
-Replace the stub layer in `backend/api/agents.py` with a three-tier dispatch chain: **pre-insert → async thread → OpenClaw-or-native fallback → UPDATE row**. The key insight is separating the DB row lifecycle from execution: a `running` placeholder is written synchronously before the thread starts (giving the UI immediate feedback), then `UPDATE`d with real metrics on completion. The `AgentRegistry` singleton, already defined in `backend/agents/`, is fetched via `current_app.extensions` inside the request context.
+The engines and persistence layer are complete. This is a **wiring task** in three parts:
+
+1. **Replace the stub run dispatcher** in `POST /api/agents/<name>/run` — swap the fake `_simulate_run()` call with `registry.run_agent(resolved_name, inputs)` from `AgentRegistry`
+2. **Bootstrap the registry** in Flask app startup so the singleton is ready before any request hits the agents blueprint
+3. **Update read endpoints** (`GET /api/agents`, `GET /api/agents/costs`, `GET /api/agents/runs`) to pull live data from the DB via `AgentRegistry` methods instead of fabricating values
+
+The OpenClaw → native fallback path already exists in `base.py`'s `run()` method. The API layer just needs to stop short-circuiting it.
 
 ---
 
-### 2. Files Modified
+### 2. Files to Modify / Create
 
 | File | Change |
 |---|---|
-| `backend/api/agents.py` | Full rewrite — removed all `random` imports/calls, replaced stub `simulate_agent_run()` with `_dispatch()`, `_insert_running_row()`, `_update_run_row()`, `_execute_agent_async()` |
-| `backend/agents/__init__.py` | Added `get_registry()` singleton factory with double-checked locking; no agent logic changed |
-| `backend/agents/base.py` | Pre-existing — `AgentRegistry`, `AgentResult`, `AgentStatus`, `BaseAgent` already defined |
+| `backend/api/agents.py` | Primary target — remove stub dispatcher, call `registry.run_agent()`, read metrics from DB |
+| `backend/agents/__init__.py` | Verify `create_default_agents()` is called at app init; expose registry getter |
+| `backend/app.py` | Call `create_default_agents(db_path)` during `create_app()` so registry is populated before requests |
+| `backend/tests/test_agents_api.py` | Replace random-range assertions; mock `BaseAgent.execute()` or `litellm.completion` for CI |
 
-No new files created.
+No new files needed.
 
 ---
 
 ### 3. Data Model Changes
 
-**No schema changes.** The existing `agent_runs` table already had all required columns:
-
-```
-id, agent_name, framework, status, input_data, output_data,
-tokens_input, tokens_output, estimated_cost, duration_ms,
-error, started_at, completed_at
-```
-
-The behavioral change: rows are now written twice — `INSERT` with `status='running'` before execution, `UPDATE` with real values after. Previously the stub did a single `INSERT` with fabricated values.
+**None.** The `agent_runs` table schema is correct and complete. The `tokens_input`/`tokens_output` split migration already exists in `database.py`. No DDL changes required.
 
 ---
 
 ### 4. API Changes
 
-**No endpoint signature changes** — contract fully preserved. Internal behavior changed:
+No new endpoints. Changes are behavioral:
 
-- `POST /api/agents/<name>/run` — now dispatches via `_dispatch()` (OpenClaw → `agent_obj.run()`) instead of `simulate_agent_run()`
-- `GET /api/agents/costs` — now calls `registry.get_cost_summary(days=N)` instead of computing random totals
-- `GET /api/agents` and `GET /api/agents/<name>` — now enriched with real DB aggregates (`SUM(estimated_cost)`, `COUNT(*)`)
+- **`POST /api/agents/<name>/run`**: Remove stub path. Resolve name via `AGENT_ID_MAP`, call `registry.run_agent(resolved_name, inputs)`. Return the `AgentResult` fields directly (`status`, `tokens_input`, `tokens_output`, `estimated_cost`, `duration_ms`). The registry's `_persist_result()` handles the DB write — no double-write risk since it's called inside `run_agent()`.
+- **`GET /api/agents`**: Replace in-memory stub status with `registry.get_run_history()` per agent to derive last run time, real cost totals, run counts.
+- **`GET /api/agents/costs`**: Replace fabricated breakdown with `registry.get_cost_summary(days=30)`.
+- **`GET /api/agents/runs`**: Already queries DB in the real implementation — verify it does, no change if so.
 
 ---
 
 ### 5. Frontend Changes
 
-**None.** Response shapes are identical. The dashboard benefits automatically: real `duration_ms`, `tokens_used`, and `estimated_cost` values flow through the same JSON keys the frontend already consumes.
+**None.** The response shape from `AgentResult` matches what `AgentCard.tsx` and `page.tsx` already consume (`status`, `duration_ms`, `estimated_cost`, `tokens_input`, `tokens_output`). The `AGENT_ID_MAP` already handles the six legacy IDs → five real names.
 
 ---
 
 ### 6. Testing Strategy
 
-**Unit tests** — mock `AgentRegistry.get()` to return a fake agent whose `.run()` returns a controlled `AgentResult`; assert that `_update_run_row` receives the exact fields from that result.
+**Unit tests** (`test_agents_api.py`):
+- Patch `BaseAgent.execute()` to return a deterministic `AgentResult` (fixed token counts, cost, duration) — keeps tests fast, no live LLM calls
+- Assert response fields match the mocked `AgentResult` exactly (not random ranges)
+- Assert one row written to `agent_runs` per run call (use in-memory SQLite fixture)
+- Assert all six stub IDs resolve without 404 via `AGENT_ID_MAP` parametrized test
 
-**Integration tests** — spin up a test Flask app with an in-memory SQLite DB, call `POST /api/agents/scanner/run`, poll `GET /api/agents/runs` and assert the returned row has non-null `tokens_input`, `duration_ms`, and `estimated_cost` (not random values).
+**Integration smoke test** (manual / CI with `ANTHROPIC_API_KEY` secret):
+- Single `POST /api/agents/scanner/run` against a real DB; assert `duration_ms > 0` and `tokens_output > 0`
 
-**OpenClaw fallback** — set `OPENCLAW_ENABLED=true` with a mock `OpenClawBridge.is_available()` returning `False`; verify execution falls through to native `agent_obj.run()`.
-
-**Duplicate-write guard** — assert `agent_runs` contains exactly **one** row per trigger call (the pre-inserted row updated in-place, not two rows).
+**CI guard**: Gate live LLM tests behind `@pytest.mark.integration` and skip by default. Mock path must cover all six agent IDs.
