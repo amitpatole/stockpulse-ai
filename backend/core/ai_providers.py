@@ -13,6 +13,13 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+def mask_secret(secret: str) -> str:
+    """Return a masked version of a secret showing only the last 4 characters."""
+    if not secret or len(secret) <= 4:
+        return "****"
+    return "****" + secret[-4:]
+
+
 class AIProvider(ABC):
     """Base class for AI providers"""
 
@@ -144,7 +151,7 @@ class GoogleProvider(AIProvider):
             # Log error details if request fails
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
+                logger.error("Google API error: HTTP %s", response.status_code)
                 return f"Error: {error_msg}"
 
             response.raise_for_status()
@@ -153,7 +160,7 @@ class GoogleProvider(AIProvider):
             return result['candidates'][0]['content']['parts'][0]['text'].strip()
 
         except Exception as e:
-            logger.error(f"Google API error: {e}")
+            logger.error("Google API error: %s", type(e).__name__)
             return f"Error: {str(e)}"
 
     def get_provider_name(self) -> str:
@@ -185,9 +192,8 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug("Grok API request - Model: %s, API Key: %s, URL: %s",
+                         self.model, mask_secret(self.api_key), self.base_url)
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
@@ -234,7 +240,7 @@ class AIProviderFactory:
         provider_class = cls.PROVIDERS.get(provider_name.lower())
 
         if not provider_class:
-            logger.error(f"Unknown provider: {provider_name}")
+            logger.error("Unknown provider: %s", provider_name)
             return None
 
         try:
@@ -243,7 +249,7 @@ class AIProviderFactory:
             else:
                 return provider_class(api_key)
         except Exception as e:
-            logger.error(f"Error creating provider {provider_name}: {e}")
+            logger.error("Error creating provider %s: %s", provider_name, type(e).__name__)
             return None
 
     @classmethod
