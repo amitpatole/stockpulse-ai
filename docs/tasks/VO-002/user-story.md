@@ -1,38 +1,56 @@
-# VO-002: Add integration tests for data provider fallback chain
+# VO-002: Keyboard Shortcuts for Power Users
 
 ## User Story
 
-**As a** backend engineer maintaining the pluggable data layer,
-**I want** a comprehensive integration test suite for `DataProviderRegistry` fallback behaviour,
-**so that** I can refactor or add providers with confidence that the fallback chain always delivers data to users even when upstream APIs fail.
+**Story**
+
+As a power user monitoring markets throughout the trading day, I want keyboard shortcuts for navigation and search, so that I can move through the app and pull up stock data without lifting my hands off the keyboard — keeping me in flow when speed matters.
 
 ---
 
-## Acceptance Criteria
+### Acceptance Criteria
 
-- [ ] Test: primary provider succeeds → no fallback provider is called
-- [ ] Test: primary raises an exception → next provider in chain is called and its data is returned
-- [ ] Test: primary returns `None` → next provider in chain is called
-- [ ] Test: primary returns `PriceHistory` with `bars=[]` → treated as empty and falls back
-- [ ] Test: all providers raise → `get_quote` / `get_historical` return `None` (no crash)
-- [ ] Test: provider with `is_available() = False` is skipped entirely (no call made)
-- [ ] Test: full four-provider chain (Polygon → Finnhub → Alpha Vantage → yfinance) resolves via last resort
-- [ ] Test: `set_primary()` overrides registration order for quote resolution
-- [ ] Test: `create_registry()` with no API keys registers only yfinance and selects it as primary
-- [ ] Test: `create_registry(finnhub_key=...)` registers finnhub + yfinance; finnhub becomes primary
-- [ ] Test: `create_registry(primary='alpha_vantage')` with all keys overrides auto-selection
-- [ ] Test: provider constructor raises during `create_registry()` → provider is skipped gracefully; yfinance remains primary
-- [ ] All tests use `unittest.mock` — zero real HTTP calls
-- [ ] Test file runnable standalone: `pytest backend/tests/test_data_provider_fallback.py -v`
+**Navigation (Ctrl+1–5)**
+- [ ] `Ctrl+1` navigates to Dashboard
+- [ ] `Ctrl+2` navigates to Agents
+- [ ] `Ctrl+3` navigates to Research
+- [ ] `Ctrl+4` navigates to News
+- [ ] `Ctrl+5` navigates to Settings
+- [ ] `event.preventDefault()` is called on all Ctrl+number bindings to avoid browser tab switching
+
+**Search**
+- [ ] `Ctrl+K` opens the stock search modal and focuses the input
+- [ ] `/` focuses the search input when no text field is active; `event.preventDefault()` prevents browser find-in-page
+- [ ] `Escape` closes any open modal or dismisses focused search input
+
+**Help Modal (`?`)**
+- [ ] Pressing `?` (when no input is focused) opens a keyboard shortcut reference modal
+- [ ] Modal displays all registered shortcuts in a clean two-column layout (key → action)
+- [ ] Modal is dismissible via `Escape` or clicking outside
+
+**Implementation**
+- [ ] A `useKeyboardShortcuts` hook encapsulates all shortcut registration and teardown
+- [ ] Hook is registered once in the root layout — no per-page duplication
+- [ ] Shortcuts are suppressed when focus is inside `<input>`, `<textarea>`, or `[contenteditable]` (except `Escape` and `Ctrl+*`)
+- [ ] No shortcut conflicts with standard browser behavior (Ctrl+W, Ctrl+T, etc.)
+
+**Edge Cases**
+- [ ] Shortcuts do not fire during IME composition (CJK input)
+- [ ] Disabled or visually hidden routes still accept navigation shortcuts (graceful no-op if route doesn't exist)
 
 ---
 
-## Priority Reasoning
+### Priority Reasoning
 
-**P1 — High.** The fallback chain is the core reliability guarantee of the data layer. Without tests, any change to `DataProviderRegistry` or `create_registry()` (adding a new provider, changing priority order, handling a new error type) risks silently breaking the chain. Users would see missing quotes or empty charts with no obvious cause. Given that real API keys are environment-dependent and unavailable in CI, mock-based integration tests are the only practical safety net.
+**Medium-High.** This is pure power-user polish — zero backend work, low risk. Traders who live in this app all day will notice immediately. The `useKeyboardShortcuts` hook also becomes infrastructure: once it exists, adding future shortcuts costs near zero. Ship it as a self-contained sprint item.
 
 ---
 
-## Complexity: 2 / 5
+### Complexity: 2 / 5
 
-The registry logic is already written and the `DataProvider` interface is well-defined. The work is entirely in test setup: building mock providers, wiring them into a registry, and asserting call sequences. No production code changes required. The main subtlety is correctly testing the `create_registry()` factory via constructor-level mocks rather than instance-level mocks.
+Entirely frontend. The hook pattern is well-established and the scope is tightly bounded:
+- `useKeyboardShortcuts` hook with event listener lifecycle management
+- Help modal component (static content, no state complexity)
+- Root layout wiring
+
+The only non-trivial decision is the focus-guard logic (suppressing shortcuts in text inputs). That's ~10 lines of well-understood DOM logic. No backend, no data model changes.

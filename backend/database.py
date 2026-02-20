@@ -258,6 +258,22 @@ _NEW_TABLES_SQL = [
         PRIMARY KEY (repo_owner, repo_name, date)
     )
     """,
+    # --- watchlists: named portfolio groups ---
+    """
+    CREATE TABLE IF NOT EXISTS watchlists (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- watchlist_stocks: junction table linking watchlists to tickers ---
+    """
+    CREATE TABLE IF NOT EXISTS watchlist_stocks (
+        watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
+        ticker       TEXT NOT NULL REFERENCES stocks(ticker),
+        PRIMARY KEY (watchlist_id, ticker)
+    )
+    """,
 ]
 
 # Useful indices for the new tables
@@ -276,6 +292,8 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_download_stats_repo    ON download_stats (repo_owner, repo_name)",
     "CREATE INDEX IF NOT EXISTS idx_download_stats_date    ON download_stats (recorded_at)",
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wl    ON watchlist_stocks (watchlist_id)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_tk    ON watchlist_stocks (ticker)",
 ]
 
 
@@ -343,6 +361,13 @@ def init_all_tables(db_path: str | None = None) -> None:
 
         for sql in _INDEXES_SQL:
             cursor.execute(sql)
+
+        # Seed default watchlist idempotently
+        cursor.execute("INSERT OR IGNORE INTO watchlists (id, name) VALUES (1, 'My Watchlist')")
+        cursor.execute(
+            "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) "
+            "SELECT 1, ticker FROM stocks WHERE active = 1"
+        )
 
         conn.commit()
         logger.info("All database tables and indexes initialised successfully")
