@@ -13,6 +13,13 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+def _mask_key(key: str) -> str:
+    """Return a masked version of a sensitive key, showing only the last 4 characters."""
+    if not key or len(key) < 4:
+        return "****"
+    return f"****{key[-4:]}"
+
+
 class AIProvider(ABC):
     """Base class for AI providers"""
 
@@ -143,9 +150,8 @@ class GoogleProvider(AIProvider):
 
             # Log error details if request fails
             if response.status_code != 200:
-                error_msg = f"HTTP {response.status_code}: {response.text}"
-                logger.error(f"Google API error: {error_msg}")
-                return f"Error: {error_msg}"
+                logger.error(f"Google API error: HTTP {response.status_code}")
+                return f"Error: HTTP {response.status_code}: {response.text[:200]}"
 
             response.raise_for_status()
 
@@ -185,9 +191,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, API Key: {_mask_key(self.api_key)}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
@@ -229,12 +233,22 @@ class AIProviderFactory:
     }
 
     @classmethod
-    def create_provider(cls, provider_name: str, api_key: str, model: Optional[str] = None) -> Optional[AIProvider]:
-        """Create an AI provider instance"""
-        provider_class = cls.PROVIDERS.get(provider_name.lower())
+    def _lookup_provider_class(cls, provider_name: str):
+        """Return provider class for name, or None (with error logged) if unknown.
 
+        Kept separate from create_provider so that api_key is not in scope when
+        the 'unknown provider' log statement executes.
+        """
+        provider_class = cls.PROVIDERS.get(provider_name.lower())
         if not provider_class:
             logger.error(f"Unknown provider: {provider_name}")
+        return provider_class
+
+    @classmethod
+    def create_provider(cls, provider_name: str, api_key: str, model: Optional[str] = None) -> Optional[AIProvider]:
+        """Create an AI provider instance"""
+        provider_class = cls._lookup_provider_class(provider_name)
+        if not provider_class:
             return None
 
         try:
@@ -243,7 +257,8 @@ class AIProviderFactory:
             else:
                 return provider_class(api_key)
         except Exception as e:
-            logger.error(f"Error creating provider {provider_name}: {e}")
+            # Log only the exception type to avoid leaking api_key via exception message
+            logger.error(f"Error creating provider {provider_name}: {type(e).__name__}")
             return None
 
     @classmethod
