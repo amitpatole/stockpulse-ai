@@ -1,84 +1,74 @@
-# VO-003 Technical Design: Pagination for News & Research Endpoints
+# VO-003: Keyboard Shortcuts for Power Users
 
-## Approach
+## Technical Design
 
-Add `page` / `page_size` query parameters to both list endpoints using a paired COUNT + paginated SELECT pattern. A shared helper validates and parses pagination params to keep both handlers consistent. Response shape changes from a bare array to a wrapper envelope — the only breaking change.
+---
 
-## Files to Modify
+## Technical Design Spec: Keyboard Shortcuts
 
-| File | Change |
-|---|---|
-| `backend/api/news.py` | Paginate `GET /api/news`; replace hardcoded `LIMIT 50`/`LIMIT 100` |
-| `backend/api/research.py` | Paginate `GET /api/research/briefs`; retire the `limit` param |
-| `backend/tests/test_news_research_api.py` | **Create** — new test file (no existing coverage) |
+### Approach
+Pure frontend — no backend or data model changes. A `KeyboardShortcutsProvider` Client Component wraps the root layout children, holding `showHelpModal` state and a `searchInputRef` shared via React context. `Header.tsx` registers its search `<input>` ref on mount. The `useKeyboardShortcuts` hook lives inside the provider, attaches a single `keydown` listener on `window`, and is the sole registration point. Guards prevent shortcut firing inside text inputs (except `Ctrl+*` and `Escape`) and during IME composition for CJK users. `Ctrl+1–5` and `/` call `event.preventDefault()` to suppress browser defaults.
 
-No new files in production code. No schema migrations.
+---
 
-## Data Model Changes
+### Files to Modify / Create
 
-None. Both tables (`news`, `research_briefs`) already have an indexed `created_at` column that drives the `ORDER BY`. The `COUNT(*)` companion queries read the same columns already queried.
+| File | Action |
+|------|--------|
+| `frontend/src/hooks/useKeyboardShortcuts.ts` | **New** — keydown listener, all shortcut logic, input + IME guards |
+| `frontend/src/components/layout/KeyboardShortcutsProvider.tsx` | **New** — `'use client'` wrapper; holds modal state + searchRef; runs the hook |
+| `frontend/src/components/layout/KeyboardShortcutsModal.tsx` | **New** — help modal triggered by `?`; shortcut reference table; closes on `Escape` or backdrop click |
+| `frontend/src/app/layout.tsx` | Wrap `<main>` children in `<KeyboardShortcutsProvider>` — root layout stays a Server Component |
+| `frontend/src/components/layout/Header.tsx` | Consume context to register `searchInputRef`; remove static `"/"` hint (now functional) |
 
-## API Changes
+---
 
-### Shared validation logic (inline helper in each file)
+### Data Model Changes
+None.
 
-```
-def _parse_pagination(args) -> tuple[int, int] | Response:
-    page      = args.get('page', 1)
-    page_size = args.get('page_size', 25)
-    # coerce to int; raise 400 on ValueError
-    # clamp page_size to [1, 100]; raise 400 if page < 1
-```
+---
 
-### `GET /api/news`
+### API Changes
+None.
 
-**Before:** returns `[{...}, ...]` — hardcoded `LIMIT 50` or `LIMIT 100`
+---
 
-**After:** returns `{ "data": [...], "page": 1, "page_size": 25, "total": 312 }`
+### Frontend Changes
 
-SQL pattern (both ticker-filtered and global):
-```sql
--- count
-SELECT COUNT(*) FROM news [WHERE ticker = ?]
+**`useKeyboardShortcuts(opts)`**
+- Accepts: `searchInputRef`, `onOpenHelp`, `onCloseModal`, `router`
+- Attaches/removes `keydown` on `window` via `useEffect` cleanup
+- **Input guard**: `const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable` — skips all non-`Ctrl` shortcuts when true; `Escape` still fires
+- **IME guard**: skip if `event.isComposing`
+- Shortcut table:
 
--- data
-SELECT * FROM news [WHERE ticker = ?]
-ORDER BY created_at DESC
-LIMIT ? OFFSET ?
-```
+| Key | Action | `preventDefault` |
+|-----|--------|-----------------|
+| `Ctrl+K` | `searchInputRef.current?.focus()` | Yes |
+| `/` | `searchInputRef.current?.focus()` (not in input) | Yes |
+| `Ctrl+1–5` | `router.push(ROUTES[digit])` where `ROUTES = ['/', '/agents', '/research', '/scheduler', '/settings']` | Yes |
+| `Escape` | `onCloseModal()` | No |
+| `?` | `onOpenHelp()` (not in input) | No |
 
-### `GET /api/research/briefs`
+**`KeyboardShortcutsProvider`**
+- `'use client'` — sole client boundary introduced at layout level
+- State: `showHelp: boolean`, `searchInputRef: RefObject<HTMLInputElement>`
+- Exposes context: `{ searchInputRef, setShowHelp }`
+- Instantiates `useKeyboardShortcuts` with `useRouter()` from `next/navigation`
+- Renders `<KeyboardShortcutsModal open={showHelp} onClose={() => setShowHelp(false)} />`
 
-**Before:** returns `[{...}, ...]` — accepts `limit` param (default 50, max 200)
+**`KeyboardShortcutsModal`**
+- `fixed inset-0 bg-black/60 z-50` backdrop; centered card
+- Two-column shortcut table (Action / Keys) grouped by category: Navigation, Search, General
+- Styled to match existing dark slate palette (`bg-slate-900 border-slate-700`)
+- Closes on backdrop click or `Escape` (via the global hook)
 
-**After:** same envelope as news; `limit` param removed.
+---
 
-```sql
-SELECT COUNT(*) FROM research_briefs [WHERE ticker = ?]
+### Testing Strategy
 
-SELECT * FROM research_briefs [WHERE ticker = ?]
-ORDER BY created_at DESC
-LIMIT ? OFFSET ?
-```
+**Unit — `useKeyboardShortcuts`**: Dispatch synthetic `KeyboardEvent`s via `fireEvent`; assert `router.push` receives correct path for `Ctrl+1–5`; assert `focus()` called for `Ctrl+K` and `/`; assert shortcuts suppressed when `target` is an `<input>`; assert IME events (`isComposing: true`) are ignored.
 
-Note: `research.py` currently opens its own `sqlite3.connect(Config.DB_PATH)` rather than using `get_db_connection()`. Leave that as-is to avoid scope creep; it works correctly.
+**Component — `KeyboardShortcutsModal`**: Renders full shortcut table; closes on `Escape` keydown and backdrop click; does not close on card click.
 
-## Frontend Changes
-
-None required by this task. The response envelope is additive — existing consumers reading the top-level object will see the array under `data` rather than at root. Frontend teams should update news/research data-fetching hooks to read `response.data` and store `total` for future "load more" UI, but that is out of scope for VO-003.
-
-## Testing Strategy
-
-Create `backend/tests/test_news_research_api.py` following the Flask test client pattern used in `test_agents_api.py`.
-
-**Cases to cover:**
-
-- Default params → page 1, page_size 25, `total` matches seeded row count
-- Explicit `?page=2&page_size=10` → correct OFFSET slice returned
-- Ticker filter + pagination → `total` is ticker-scoped, not global
-- `page_size=200` → silently clamped to 100
-- `page=0` → 400
-- `page_size=0` → 400
-- `page=abc` → 400
-- Empty result set → `{ data: [], page: 1, page_size: 25, total: 0 }`
-- `research.py`: `limit` param ignored / not recognized (backwards compat check)
+**E2E (Playwright)**: `Ctrl+2` → URL is `/agents`; `?` → modal visible; `Escape` → modal gone; `/` → Header search input has focus.
