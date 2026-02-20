@@ -2,12 +2,12 @@
 # ==========================================
 
 # Web Framework
-flask==3.0.0
+flask>=3.1.0
 flask-cors>=4.0.0
 flask-apscheduler>=1.13.0
 
 # HTTP Requests
-requests==2.31.0
+requests>=2.32.0
 
 # RSS Feed Parsing
 feedparser==6.0.10
@@ -24,6 +24,10 @@ yfinance==0.2.33
 
 # Agent Framework - CrewAI (MIT licensed, free)
 crewai[anthropic,tools]>=0.100.0
+langchain-core>=0.3.0
+
+# PDF parsing (transitive via yfinance/crewai; pinned to patched version, CVE: DoS/infinite loop/memory exhaustion)
+pypdf>=4.0.0
 
 # OpenClaw bridge (WebSocket client)
 websocket-client>=1.7.0
