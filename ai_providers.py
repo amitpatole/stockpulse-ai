@@ -119,7 +119,8 @@ class GoogleProvider(AIProvider):
     def generate_analysis(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             headers = {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.api_key
             }
 
             data = {
@@ -135,7 +136,7 @@ class GoogleProvider(AIProvider):
             }
 
             response = requests.post(
-                f"{self.base_url}?key={self.api_key}",
+                self.base_url,
                 headers=headers,
                 json=data,
                 timeout=30
@@ -185,9 +186,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
@@ -243,7 +242,7 @@ class AIProviderFactory:
             else:
                 return provider_class(api_key)
         except Exception as e:
-            logger.error(f"Error creating provider {provider_name}: {e}")
+            logger.error(f"Error creating provider {provider_name}: {type(e).__name__}")
             return None
 
     @classmethod

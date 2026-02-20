@@ -396,8 +396,6 @@ class StockAnalytics:
             provider_config = get_active_ai_provider()
 
             if provider_config:
-                logger.info(f"Using AI provider: {provider_config['provider_name']} - {provider_config['model']}")
-
                 # Create AI provider
                 provider = AIProviderFactory.create_provider(
                     provider_config['provider_name'],
@@ -406,6 +404,7 @@ class StockAnalytics:
                 )
 
                 if provider:
+                    logger.info(f"Using AI provider: {provider.get_provider_name()}")
                     # Create detailed prompt for AI
                     prompt = self._create_ai_prompt(rating, score, technical_signals, sentiment_signals)
 
