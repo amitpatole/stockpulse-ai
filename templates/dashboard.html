@@ -1795,18 +1795,40 @@
                         return;
                     }
 
-                    searchResults.innerHTML = results.map(stock => `
-                        <div class="search-result-item">
-                            <div class="stock-info">
-                                <div class="ticker">${stock.ticker}</div>
-                                <div class="name">${stock.name}</div>
-                                <div style="font-size: 0.8em; color: #999;">${stock.exchange} • ${stock.type}</div>
-                            </div>
-                            <button class="btn btn-primary" onclick="addStock('${stock.ticker}', '${stock.name.replace(/'/g, "\\'")}')">
-                                Add
-                            </button>
-                        </div>
-                    `).join('');
+                    searchResults.innerHTML = '';
+                    results.forEach(stock => {
+                        const item = document.createElement('div');
+                        item.className = 'search-result-item';
+
+                        const stockInfo = document.createElement('div');
+                        stockInfo.className = 'stock-info';
+
+                        const tickerDiv = document.createElement('div');
+                        tickerDiv.className = 'ticker';
+                        tickerDiv.textContent = stock.ticker;
+
+                        const nameDiv = document.createElement('div');
+                        nameDiv.className = 'name';
+                        nameDiv.textContent = stock.name;
+
+                        const metaDiv = document.createElement('div');
+                        metaDiv.style.fontSize = '0.8em';
+                        metaDiv.style.color = '#999';
+                        metaDiv.textContent = stock.exchange + ' \u2022 ' + stock.type;
+
+                        stockInfo.appendChild(tickerDiv);
+                        stockInfo.appendChild(nameDiv);
+                        stockInfo.appendChild(metaDiv);
+
+                        const btn = document.createElement('button');
+                        btn.className = 'btn btn-primary';
+                        btn.textContent = 'Add';
+                        btn.addEventListener('click', () => addStock(stock.ticker, stock.name));
+
+                        item.appendChild(stockInfo);
+                        item.appendChild(btn);
+                        searchResults.appendChild(item);
+                    });
                     searchResults.classList.add('active');
                 })
                 .catch(error => {
@@ -1921,7 +1943,11 @@
             }
 
             hint.textContent = 'Analyzing ' + ticker + '...';
-            container.innerHTML = '<div class="loading-spinner">Analyzing ' + ticker + ' with AI...</div>';
+            const spinnerEl = document.createElement('div');
+            spinnerEl.className = 'loading-spinner';
+            spinnerEl.textContent = 'Analyzing ' + ticker + ' with AI...';
+            container.innerHTML = '';
+            container.appendChild(spinnerEl);
 
             fetch('/api/ai/rating/' + ticker)
                 .then(response => response.json())
@@ -2735,14 +2761,16 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-message ${sender}`;
 
-            let contentHTML;
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'chat-message-content';
             if (sender === 'ai' && isPowered) {
-                contentHTML = `<div class="chat-message-content"><span class="ai-badge">🤖 AI</span>${text}</div>`;
-            } else {
-                contentHTML = `<div class="chat-message-content">${text}</div>`;
+                const badge = document.createElement('span');
+                badge.className = 'ai-badge';
+                badge.textContent = '🤖 AI';
+                contentDiv.appendChild(badge);
             }
-
-            messageDiv.innerHTML = contentHTML;
+            contentDiv.appendChild(document.createTextNode(text));
+            messageDiv.appendChild(contentDiv);
             messagesContainer.appendChild(messageDiv);
 
             // Auto-scroll to bottom
