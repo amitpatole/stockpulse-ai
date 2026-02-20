@@ -1,41 +1,45 @@
-# VO-036: Infra: LXC exception — provisioning (VO-002)
+# VO-036: Fix Dependabot: upgrade vulnerable dependencies
 
 ## User Story
 
-## User Story: VO-002 — LXC Provisioning Lock Timeout
+**As a** developer shipping the Virtual Office platform,
+**I want** all flagged Dependabot vulnerabilities resolved by pinning dependencies to patched versions,
+**so that** the application is not exposed to known CVEs for DoS attacks, credential leaks, session bypass, SSRF, or ASAR injection.
 
 ---
 
-**As a** DevOps engineer,
-**I want** the container provisioning system to detect and resolve stale LXC lock files automatically,
-**so that** container creation failures due to lock timeouts are self-healing and don't require manual intervention.
+## Acceptance Criteria
+
+**Backend (`backend/requirements.txt`)**
+- [ ] `pypdf` pinned to `>=4.0.0` (resolves 10 CVEs: DoS via infinite loop, memory exhaustion, malformed PDF crashes); remove if confirmed unused after audit
+- [ ] `requests` pinned to `>=2.32.0` (resolves credential leak via `.netrc` and session `verify=False` bypass)
+- [ ] `flask` pinned to `>=3.1.0` (resolves session cookie signing vulnerability)
+- [ ] `langchain-core` pinned to latest patched version resolving SSRF via prompt-injectable URLs (verify against PyPI advisory at time of merge)
+- [ ] `pip install -r requirements.txt` succeeds with no dependency conflicts
+- [ ] Backend starts and all existing API endpoints respond normally after upgrade
+
+**Frontend (`electron/package.json`)**
+- [ ] `electron` updated to the latest stable version resolving the ASAR integrity bypass CVE
+- [ ] `npm install` succeeds in `electron/`
+- [ ] Electron app builds and launches without regression
+
+**Verification**
+- [ ] Dependabot alerts for all 16 flagged vulnerabilities show as resolved after merging
+- [ ] No new Dependabot alerts introduced by the version bumps
+- [ ] Existing test suite passes (backend pytest + any frontend tests)
 
 ---
 
-### Acceptance Criteria
+## Priority Reasoning
 
-- [ ] Before provisioning CT 300 (or any VMID), the system checks for the existence of `/run/lock/lxc/pve-config-<VMID>.lock`
-- [ ] If a stale lock is detected (no active process holding it), the system removes it automatically and logs the action
-- [ ] If a valid lock is held by an active process, provisioning is queued or aborted with a clear error — never silently fails
-- [ ] Retry logic includes a pre-flight lock check before each attempt (not just on failure)
-- [ ] Lock resolution attempts are bounded (max 3 retries, with backoff) to avoid infinite loops
-- [ ] All lock events (detected, cleared, blocked) are emitted to the incident log with timestamp and VMID
-- [ ] If the Proxmox LXC daemon is unresponsive, the system escalates to a PagerDuty/alerting channel rather than silently destroying the container
+**High.** These are known CVEs with public exploits, not theoretical risks. The `requests` credential leak and `flask` session issue directly affect production auth integrity. The `pypdf` DoS vectors are exploitable by any user who can upload a PDF. `langchain-core` SSRF is a high-severity server-side risk given the AI pipeline. The Electron ASAR bypass matters for desktop distribution integrity. Version bumps are low-risk mechanical changes — delaying this is unjustifiable.
 
 ---
 
-### Priority Reasoning
+## Estimated Complexity: **2 / 5**
 
-**High.** This is a provisioning blocker — every failed container creation wastes infrastructure resources, generates noise in incident logs, and delays feature work (in this case, VO-002 was blocked entirely). Stale lock files are a predictable, recurring failure mode in Proxmox environments. This is low-hanging fruit with high reliability ROI.
-
----
-
-### Estimated Complexity: **2 / 5**
-
-Lock detection and cleanup is well-understood. The main work is integrating the pre-flight check into the provisioning pipeline and wiring up alerting for the daemon-unresponsive edge case. No architectural changes needed.
+Pure version-bump work. No logic changes, no schema migrations, no new features. Main risk is transitive dependency conflicts (especially with `crewai` pinning its own versions of `langchain-core` and `requests`). Resolve with `pip-compile` or manual conflict resolution if needed. Frontend Electron bump may require minor build config updates if breaking changes exist in the release notes.
 
 ---
 
-**Owner:** DevOps / Infra team
-**Linked incident:** VO-002
-**Retry recommended:** Yes — after lock check logic is in place.
+**Files to touch:** `backend/requirements.txt`, `electron/package.json`

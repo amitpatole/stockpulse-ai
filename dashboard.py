@@ -450,12 +450,12 @@ Focus on being informative and actionable."""
                     'error': error_msg
                 }), 500
         except Exception as e:
-            logger.error(f"Error calling AI provider: {e}")
-            return jsonify({'success': False, 'error': f'AI Provider Error: {str(e)}'}), 500
+            logger.exception(f"Error calling AI provider: {e}")
+            return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
 
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
-        return jsonify({'success': False, 'error': f'Server Error: {str(e)}'}), 500
+        logger.exception(f"Error in chat endpoint: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
 
 
 if __name__ == '__main__':
