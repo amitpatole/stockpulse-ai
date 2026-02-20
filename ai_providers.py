@@ -13,6 +13,15 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+def mask_secret(value):
+    """Return a masked version of a secret for safe logging."""
+    if not value:
+        return "****"
+    if len(value) >= 8:
+        return f"****{value[-4:]}"
+    return "****"
+
+
 class AIProvider(ABC):
     """Base class for AI providers"""
 
@@ -185,9 +194,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, API Key: {mask_secret(self.api_key)}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 

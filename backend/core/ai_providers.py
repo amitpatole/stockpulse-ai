@@ -10,6 +10,8 @@ import logging
 from typing import Dict, Optional, List
 from abc import ABC, abstractmethod
 
+from backend.core.utils import mask_secret
+
 logger = logging.getLogger(__name__)
 
 
@@ -185,9 +187,7 @@ class GrokProvider(AIProvider):
                 "temperature": 0.7
             }
 
-            # Log debug info (API key first 10 chars only for security)
-            api_key_preview = self.api_key[:10] + "..." if len(self.api_key) > 10 else "***"
-            logger.debug(f"Grok API request - Model: {self.model}, API Key: {api_key_preview}, URL: {self.base_url}")
+            logger.debug(f"Grok API request - Model: {self.model}, API Key: {mask_secret(self.api_key)}, URL: {self.base_url}")
 
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
 
