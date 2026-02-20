@@ -258,6 +258,24 @@ _NEW_TABLES_SQL = [
         PRIMARY KEY (repo_owner, repo_name, date)
     )
     """,
+    # --- watchlists: named portfolio groups ---
+    """
+    CREATE TABLE IF NOT EXISTS watchlists (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- watchlist_stocks: junction table linking watchlists to tickers ---
+    """
+    CREATE TABLE IF NOT EXISTS watchlist_stocks (
+        watchlist_id INTEGER NOT NULL,
+        ticker       TEXT NOT NULL,
+        added_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (watchlist_id, ticker),
+        FOREIGN KEY (watchlist_id) REFERENCES watchlists (id) ON DELETE CASCADE
+    )
+    """,
 ]
 
 # Useful indices for the new tables
@@ -276,6 +294,8 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_download_stats_repo    ON download_stats (repo_owner, repo_name)",
     "CREATE INDEX IF NOT EXISTS idx_download_stats_date    ON download_stats (recorded_at)",
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wid   ON watchlist_stocks (watchlist_id)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_ticker ON watchlist_stocks (ticker)",
 ]
 
 
@@ -322,6 +342,35 @@ def _migrate_news(cursor) -> None:
         logger.info("Migration applied: added engagement_score to news table")
 
 
+def _migrate_watchlists(cursor) -> None:
+    """Create default 'My Watchlist' and seed it with all active stocks if no watchlists exist.
+
+    Safe to call multiple times — skips entirely when at least one watchlist is present.
+    """
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(watchlists)").fetchall()}
+    if not cols:
+        return  # table doesn't exist yet
+
+    count = cursor.execute("SELECT COUNT(*) FROM watchlists").fetchone()[0]
+    if count > 0:
+        return  # already seeded
+
+    cursor.execute("INSERT INTO watchlists (name) VALUES ('My Watchlist')")
+    watchlist_id = cursor.lastrowid
+
+    stocks = cursor.execute("SELECT ticker FROM stocks WHERE active = 1").fetchall()
+    for row in stocks:
+        cursor.execute(
+            "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) VALUES (?, ?)",
+            (watchlist_id, row[0]),
+        )
+    logger.info(
+        "Created default 'My Watchlist' (id=%d) seeded with %d active stocks",
+        watchlist_id,
+        len(stocks),
+    )
+
+
 def init_all_tables(db_path: str | None = None) -> None:
     """Create every table (existing + new v3.0) and apply indexes.
 
@@ -340,6 +389,8 @@ def init_all_tables(db_path: str | None = None) -> None:
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)
+
+        _migrate_watchlists(cursor)
 
         for sql in _INDEXES_SQL:
             cursor.execute(sql)
