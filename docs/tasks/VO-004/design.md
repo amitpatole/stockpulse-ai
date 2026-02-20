@@ -1,80 +1,79 @@
-# VO-004: Add integration tests for data provider fallback chain
+# VO-004: Research Brief Export (PDF & Markdown)
 
 ## Technical Design
-
-## Technical Design Spec: Integration Tests for Data Provider Fallback Chain
-
-**Status note:** `backend/tests/test_data_provider_fallback.py` already exists and is fully implemented (426 lines). This spec documents what's there and what remains.
 
 ---
 
 ### 1. Approach
 
-Pure test authorship — no production code changes. Tests directly instantiate `DataProviderRegistry`, register `MagicMock` providers via `make_provider()`, then assert call order and return values. `create_registry()` tests use `unittest.mock.patch` to intercept provider class constructors, keeping all tests hermetic.
+Add a single new route to the existing `research.py` blueprint. For Markdown, return `content` directly with appropriate headers — no library needed. For PDF, use `reportlab` (pure Python, no system-level Cairo/Pango deps that would complicate Docker) to build a styled document with TickerPulse header, brief body, and metadata footer.
 
-The fallback chain under test (`base.py:148–186`) iterates `_fallback_order`, skipping unavailable providers (`is_available() == False`) and falling through on both exceptions and falsy results. For `get_historical`, the additional guard at line 181 (`result and result.bars`) makes empty-bars a distinct failure mode requiring its own test case.
+Frontend adds two action buttons per brief card in the existing detail-pane. "Copy as Markdown" uses the browser Clipboard API directly — no fetch required. "Download PDF" triggers a `fetch` to the export endpoint, receives the blob, and uses an ephemeral `<a>` to initiate the download. Per-brief loading state via `useState<number | null>` tracks which brief is in-flight.
+
+No schema changes. All required fields (`content`, `agent_name`, `model_used`, `created_at`, `ticker`, `title`) already exist in `research_briefs`.
 
 ---
 
-### 2. Files to Modify/Create
+### 2. Files to Modify / Create
 
 | Action | Path |
-|--------|------|
-| **Already created** | `backend/tests/test_data_provider_fallback.py` |
-| No changes needed | `backend/data_providers/base.py` |
-| No changes needed | `backend/data_providers/__init__.py` |
-
-No `conftest.py` or `pytest.ini` required — tests are self-contained.
+|---|---|
+| **Modify** | `backend/api/research.py` — add `GET /api/research/briefs/<id>/export` route |
+| **Modify** | `backend/requirements.txt` — add `reportlab>=4.0` |
+| **Modify** | `frontend/src/app/research/page.tsx` — add export buttons + clipboard/download handlers |
+| **Modify** | `frontend/src/lib/api.ts` — add `exportResearchBriefUrl(id, format)` helper |
+| **Create** | `backend/tests/test_research_export.py` — backend export tests |
 
 ---
 
 ### 3. Data Model Changes
 
-None. Tests use in-memory `DataProvider` mocks and the existing `Quote`, `PriceBar`, `PriceHistory` dataclasses.
+**None.** `research_briefs` already stores `content`, `agent_name`, `model_used`, `created_at`, `ticker`, and `title` — everything required for both export formats.
 
 ---
 
 ### 4. API Changes
 
-None.
+**New endpoint:** `GET /api/research/briefs/<int:id>/export`
+
+Query params: `format` — `md` or `pdf` (required; 400 otherwise)
+
+| Format | Content-Type | Content-Disposition |
+|---|---|---|
+| `md` | `text/markdown` | `attachment; filename="<ticker>-brief-<id>.md"` |
+| `pdf` | `application/pdf` | `attachment; filename="<ticker>-brief-<id>.pdf"` |
+
+Error responses: `400 {"error": "format must be md or pdf"}`, `404 {"error": "Brief not found"}`.
+
+PDF layout via `reportlab` (three sections): TickerPulse header bar with ticker + title, body text with heading styles parsed from Markdown `##` markers, footer line with `agent_name | model_used | created_at`.
+
+Authentication follows the same pattern as existing `/api/research/` routes.
 
 ---
 
 ### 5. Frontend Changes
 
-None.
+**`research/page.tsx`:** In the selected-brief detail pane (below the title/metadata row), add two `<button>` elements:
+
+- **"Copy as Markdown"** — calls `navigator.clipboard.writeText(brief.content)`, then sets a `copied` state that shows a "Copied!" label for 2s. No fetch needed.
+- **"Download PDF"** — sets `downloadingId` state to `brief.id`, fetches `/api/research/briefs/<id>/export?format=pdf`, creates a blob URL, clicks an ephemeral `<a download>`, then clears state. Button shows `<Loader2>` icon while in-flight.
+
+Buttons use `lucide-react` icons (`Copy`, `Download`, `Loader2`) matching existing icon usage. Both have `aria-label` attributes for screen-reader accessibility and are keyboard-navigable as native `<button>` elements.
+
+**`api.ts`:** Add `exportResearchBriefUrl(id: number, format: 'md' | 'pdf'): string` — a simple URL builder (not a fetch wrapper) used by the download handler.
 
 ---
 
 ### 6. Testing Strategy
 
-**`TestDataProviderRegistryFallback`** (8 cases) — tests the registry directly:
+**Backend (`test_research_export.py`):**
+- Seed a row into in-memory SQLite; assert `?format=md` returns 200, correct `Content-Type`, brief content in body
+- Assert `?format=pdf` returns 200, `application/pdf` content-type, non-empty bytes starting with `%PDF`
+- Assert `?format=csv` returns 400 with error message
+- Assert unknown `id` returns 404
+- Assert PDF contains ticker and agent_name strings (parse with `pypdf`, already a dependency)
 
-| Test | Verifies |
-|------|----------|
-| `test_primary_succeeds_no_fallback` | Chain stops at first success |
-| `test_primary_raises_falls_back` | Exception triggers next provider |
-| `test_primary_returns_none_falls_back` | `None` result triggers fallback |
-| `test_historical_empty_bars_falls_back` | `bars=[]` triggers fallback (`base.py:181`) |
-| `test_all_fail_returns_none` | Exhausted chain returns `None`, no crash |
-| `test_unavailable_provider_skipped` | `is_available()==False` → no `get_quote` call |
-| `test_full_chain_last_resort` | Full 4-provider chain, last-resort wins |
-| `test_set_primary_changes_order` | `set_primary()` puts provider first |
-| `test_set_primary_fails_then_falls_back` | Overridden primary fails, fallback resumes |
-
-**`TestCreateRegistry`** (5 cases) — tests the factory function with patched constructors:
-
-| Test | Verifies |
-|------|----------|
-| `test_create_registry_no_keys` | Only yfinance registered, premium ctors not called |
-| `test_create_registry_with_finnhub_key` | Finnhub registered with correct key, becomes primary |
-| `test_create_registry_explicit_primary` | `primary=` kwarg overrides auto-selection |
-| `test_create_registry_all_keys_polygon_is_primary` | Polygon wins auto-selection (highest priority) |
-| `test_create_registry_provider_init_failure` | Constructor `RuntimeError` → provider skipped, yfinance fallback |
-
-**Run command:**
-```
-python -m pytest backend/tests/test_data_provider_fallback.py -v
-```
-
-No environment variables required; all tests pass with zero real API calls.
+**Frontend (manual / Playwright):**
+- "Copy as Markdown" → clipboard contains full `content` string; "Copied!" label appears then disappears
+- "Download PDF" → file download dialog triggered; button enters and exits loading state
+- Keyboard: Tab to button, Enter activates; aria-labels present in DOM
