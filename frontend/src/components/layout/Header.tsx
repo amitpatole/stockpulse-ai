@@ -3,6 +3,7 @@
 import { Bell, Wifi, WifiOff, Search } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useSSE } from '@/hooks/useSSE';
+import { useKeyboardShortcutsContext } from '@/components/layout/KeyboardShortcutsProvider';
 
 interface HeaderProps {
   title: string;
