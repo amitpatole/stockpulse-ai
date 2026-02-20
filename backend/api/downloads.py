@@ -73,7 +73,7 @@ def get_download_stats():
         logger.exception(f"Failed to get download stats: {e}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'An internal error occurred'
         }), 500
 
 
@@ -134,7 +134,7 @@ def get_daily_downloads():
         logger.exception(f"Failed to get daily downloads: {e}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'An internal error occurred'
         }), 500
 
 
@@ -245,5 +245,5 @@ def get_download_summary():
         logger.exception(f"Failed to get download summary: {e}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'An internal error occurred'
         }), 500
