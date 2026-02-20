@@ -156,7 +156,7 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
 }
 
 export default function SettingsPage() {
-  const { data: providers, loading: providersLoading } = useApi<AIProvider[]>(getAIProviders, []);
+  const { data: providers, loading: providersLoading, error: providersError } = useApi<AIProvider[]>(getAIProviders, []);
   const { data: health } = useApi<HealthCheck>(getHealth, [], { refreshInterval: 30000 });
 
   const [framework, setFramework] = useState<'crewai' | 'openclaw'>('crewai');
@@ -175,6 +175,12 @@ export default function SettingsPage() {
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-56 animate-pulse rounded-xl border border-slate-700/50 bg-slate-800/30" />
               ))}
+            </div>
+          )}
+
+          {providersError && !providersLoading && (
+            <div className="rounded-xl border border-dashed border-red-700/50 bg-red-900/10 p-6 text-center">
+              <p className="text-sm text-red-400">Failed to load AI providers. Check backend connection.</p>
             </div>
           )}
 
