@@ -218,4 +218,25 @@ export async function generateResearchBrief(ticker?: string): Promise<ResearchBr
   });
 }
 
+// ---- Chat ----
+
+export interface ChatResponse {
+  success: boolean;
+  answer: string;
+  ai_powered: boolean;
+  ticker: string;
+}
+
+export async function askChat(
+  ticker: string,
+  question: string,
+  thinking_level?: string
+): Promise<ChatResponse | null> {
+  if (!ticker.trim() || !question.trim()) return null;
+  return request<ChatResponse>('/api/chat/ask', {
+    method: 'POST',
+    body: JSON.stringify({ ticker: ticker.trim(), question: question.trim(), thinking_level }),
+  });
+}
+
 export { ApiError };
