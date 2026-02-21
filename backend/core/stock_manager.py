@@ -182,6 +182,8 @@ def search_stock_ticker(query: str) -> List[Dict]:
 
             return results[:10]  # Return top 10 matches
 
+        return []
+
     except Exception as e:
         logger.error(f"Error searching for ticker '{query}': {e}")
         raise
