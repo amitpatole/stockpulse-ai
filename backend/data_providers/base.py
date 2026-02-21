@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import Callable, List, Optional, Dict, Any
 from datetime import datetime
 import logging
 
@@ -119,6 +119,7 @@ class DataProviderRegistry:
         self._providers: Dict[str, DataProvider] = {}
         self._fallback_order: List[str] = []
         self._primary: Optional[str] = None
+        self.on_fallback: Optional[Callable[[str, str, str], None]] = None
 
     def register(self, name: str, provider: DataProvider):
         self._providers[name] = provider
@@ -152,6 +153,9 @@ class DataProviderRegistry:
             providers_to_try.append(self._primary)
         providers_to_try.extend([n for n in self._fallback_order if n != self._primary])
 
+        failed_from: Optional[str] = None
+        failed_reason: str = 'exception'
+
         for name in providers_to_try:
             provider = self._providers[name]
             if not provider.is_available():
@@ -159,9 +163,18 @@ class DataProviderRegistry:
             try:
                 result = provider.get_quote(ticker)
                 if result:
+                    if failed_from is not None and self.on_fallback is not None:
+                        self.on_fallback(failed_from, name, failed_reason)
                     return result
+                else:
+                    if failed_from is None:
+                        failed_from = name
+                        failed_reason = 'no_data'
             except Exception as e:
                 logger.warning(f"Provider {name} failed for {ticker}: {e}")
+                if failed_from is None:
+                    failed_from = name
+                    failed_reason = 'exception'
                 continue
         return None
 
@@ -172,6 +185,9 @@ class DataProviderRegistry:
             providers_to_try.append(self._primary)
         providers_to_try.extend([n for n in self._fallback_order if n != self._primary])
 
+        failed_from: Optional[str] = None
+        failed_reason: str = 'exception'
+
         for name in providers_to_try:
             provider = self._providers[name]
             if not provider.is_available():
@@ -179,9 +195,18 @@ class DataProviderRegistry:
             try:
                 result = provider.get_historical(ticker, period)
                 if result and result.bars:
+                    if failed_from is not None and self.on_fallback is not None:
+                        self.on_fallback(failed_from, name, failed_reason)
                     return result
+                else:
+                    if failed_from is None:
+                        failed_from = name
+                        failed_reason = 'no_data'
             except Exception as e:
                 logger.warning(f"Provider {name} failed historical for {ticker}: {e}")
+                if failed_from is None:
+                    failed_from = name
+                    failed_reason = 'exception'
                 continue
         return None
 

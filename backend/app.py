@@ -89,6 +89,32 @@ def create_app() -> Flask:
     except Exception as exc:
         logger.warning("Could not initialise agent registry: %s", exc)
 
+    # -- Data Provider Registry ----------------------------------------------
+    try:
+        from backend.data_providers import create_registry as create_data_registry
+
+        data_registry = create_data_registry()
+
+        def _on_provider_fallback(from_name: str, to_name: str, reason: str) -> None:
+            from_provider = data_registry.get_provider(from_name)
+            to_provider = data_registry.get_provider(to_name)
+            from_display = from_provider.get_provider_info().display_name if from_provider else from_name
+            to_display = to_provider.get_provider_info().display_name if to_provider else to_name
+            tier = to_provider.get_provider_info().tier if to_provider else 'free'
+            send_sse_event('provider_fallback', {
+                'from_provider': from_display,
+                'to_provider': to_display,
+                'tier': tier,
+                'reason': reason,
+                'timestamp': datetime.utcnow().isoformat() + 'Z',
+            })
+
+        data_registry.on_fallback = _on_provider_fallback
+        app.extensions['data_registry'] = data_registry
+        logger.info("Data provider registry initialised")
+    except Exception as exc:
+        logger.warning("Could not initialise data provider registry: %s", exc)
+
     # -- Register API blueprints ---------------------------------------------
     _register_blueprints(app)
 
