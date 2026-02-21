@@ -243,5 +243,16 @@ def search_stocks():
     if not query:
         return jsonify([])
 
-    results = search_stock_ticker(query)
-    return jsonify(results)
+    query = query.strip()
+    if not query:
+        return jsonify({'error': 'Search query cannot be whitespace only'}), 400
+
+    if len(query) > 100:
+        return jsonify({'error': 'Search query is too long (max 100 characters)'}), 400
+
+    try:
+        results = search_stock_ticker(query)
+        return jsonify(results)
+    except Exception:
+        logger.error(f"Stock search service failure for query: {query!r}")
+        return jsonify({'error': 'Search service unavailable'}), 500

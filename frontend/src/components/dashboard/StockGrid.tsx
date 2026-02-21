@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, Plus, Loader2, X } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
-import { getRatings, addStock, deleteStock, searchStocks } from '@/lib/api';
+import { getRatings, addStock, deleteStock, searchStocks, ApiError } from '@/lib/api';
 import type { AIRating, StockSearchResult } from '@/lib/types';
 import StockCard from './StockCard';
 
@@ -17,6 +17,7 @@ export default function StockGrid() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -39,13 +40,20 @@ export default function StockGrid() {
       return;
     }
     setSearching(true);
+    setSearchError(null);
     try {
       const data = await searchStocks(q);
       setResults(data);
       setShowDropdown(data.length > 0);
       setHighlightIdx(-1);
-    } catch {
+    } catch (err) {
       setResults([]);
+      setShowDropdown(false);
+      if (err instanceof ApiError && err.status === 400) {
+        setSearchError('Invalid search query');
+      } else {
+        setSearchError('Search unavailable, try again');
+      }
     } finally {
       setSearching(false);
     }
@@ -54,6 +62,7 @@ export default function StockGrid() {
   const handleInputChange = (value: string) => {
     setQuery(value);
     setAddError(null);
+    setSearchError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(value), 300);
   };
@@ -155,6 +164,12 @@ export default function StockGrid() {
           </div>
         )}
       </div>
+
+      {searchError && (
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+          {searchError}
+        </div>
+      )}
 
       {addError && (
         <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
