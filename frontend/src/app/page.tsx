@@ -4,6 +4,7 @@ import Header from '@/components/layout/Header';
 import KPICards from '@/components/dashboard/KPICards';
 import StockGrid from '@/components/dashboard/StockGrid';
 import NewsFeed from '@/components/dashboard/NewsFeed';
+import EarningsCalendar from '@/components/dashboard/EarningsCalendar';
 
 export default function DashboardPage() {
   return (
@@ -14,7 +15,7 @@ export default function DashboardPage() {
         {/* KPI Cards Row */}
         <KPICards />
 
-        {/* Main Content: Stock Grid + News Feed */}
+        {/* Main Content: Stock Grid + News Feed + Earnings */}
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
           {/* Stock Grid - Takes up 2 columns on xl */}
           <div className="xl:col-span-2">
@@ -24,9 +25,10 @@ export default function DashboardPage() {
             <StockGrid />
           </div>
 
-          {/* News Feed - Right sidebar */}
-          <div className="xl:col-span-1">
+          {/* Right sidebar: News Feed + Earnings Calendar */}
+          <div className="xl:col-span-1 flex flex-col gap-6">
             <NewsFeed />
+            <EarningsCalendar />
           </div>
         </div>
       </div>

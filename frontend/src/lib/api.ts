@@ -16,6 +16,10 @@ import type {
   HealthCheck,
   ResearchBrief,
   AlertSoundSettings,
+  EarningsResponse,
+  SentimentData,
+  StockDetail,
+  Timeframe,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -90,6 +94,12 @@ export async function deleteStock(ticker: string): Promise<void> {
   await request<void>(`/api/stocks/${ticker.toUpperCase()}`, {
     method: 'DELETE',
   });
+}
+
+export async function getStockDetail(ticker: string, timeframe: Timeframe): Promise<StockDetail> {
+  return request<StockDetail>(
+    `/api/stocks/${ticker.toUpperCase()}/detail?timeframe=${timeframe}`
+  );
 }
 
 // ---- News ----
@@ -251,6 +261,18 @@ export async function askChat(
     method: 'POST',
     body: JSON.stringify({ ticker: ticker.trim(), question: question.trim(), thinking_level }),
   });
+}
+
+// ---- Earnings Calendar ----
+
+export async function getEarnings(days: number = 14): Promise<EarningsResponse> {
+  return request<EarningsResponse>(`/api/earnings?days=${days}`);
+}
+
+// ---- Sentiment ----
+
+export async function getStockSentiment(ticker: string): Promise<SentimentData> {
+  return request<SentimentData>(`/api/stocks/${encodeURIComponent(ticker)}/sentiment`);
 }
 
 export { ApiError };

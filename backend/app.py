@@ -321,6 +321,7 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.downloads':        'bp',
         'backend.api.alerts':           'alerts_bp',
         'backend.api.earnings':         'earnings_bp',
+        'backend.api.sentiment':        'sentiment_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():
