@@ -4,7 +4,7 @@ Blueprint for AI ratings and chart data endpoints.
 """
 
 from flask import Blueprint, jsonify, request
-from datetime import datetime
+from datetime import datetime, timedelta
 import sqlite3
 import logging
 
@@ -15,15 +15,20 @@ logger = logging.getLogger(__name__)
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api')
 
+AI_RATINGS_CACHE_TTL_SECONDS = 300  # 5 minutes, configurable
+
 
 def _get_cached_ratings():
     """Try to read pre-computed ratings from ai_ratings table."""
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
+        cutoff = datetime.utcnow() - timedelta(seconds=AI_RATINGS_CACHE_TTL_SECONDS)
         rows = conn.execute("""
-            SELECT * FROM ai_ratings ORDER BY ticker
-        """).fetchall()
+            SELECT * FROM ai_ratings
+            WHERE updated_at >= ?
+            ORDER BY ticker
+        """, (cutoff.isoformat(),)).fetchall()
         conn.close()
         if rows:
             return [
