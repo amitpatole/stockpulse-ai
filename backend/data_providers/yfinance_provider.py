@@ -16,6 +16,7 @@ from typing import List, Optional
 
 import requests
 
+from backend.utils.chart_validation import sanitize_price_bar, validate_ohlcv_arrays
 from .base import (
     DataProvider,
     PriceBar,
