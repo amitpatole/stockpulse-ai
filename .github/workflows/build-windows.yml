@@ -118,6 +118,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Derive the version from the git tag (e.g. refs/tags/v3.78.0 -> 3.78.0).
+          # This ensures the installer filename and electron-updater metadata always
+          # match the release tag, regardless of what package.json says.  Using
+          # --config.extraMetadata.version overrides the version for this build only.
+          $TagVersion = ""
+          if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
+            $TagVersion = "${{ github.ref_name }}" -replace "^v", ""
+            Write-Host "Building version from tag: $TagVersion" -ForegroundColor Cyan
+            # Patch package.json in-place so electron-updater embeds the correct version
+            $PkgPath = "package.json"
+            $Pkg = Get-Content $PkgPath | ConvertFrom-Json
+            $Pkg.version = $TagVersion
+            $Pkg | ConvertTo-Json -Depth 10 | Set-Content $PkgPath
+          }
+
           if ("${{ github.ref }}".StartsWith("refs/tags/")) {
             Write-Host "Tag build detected — publishing to GitHub Releases" -ForegroundColor Green
             npx electron-builder --win --config electron-builder.yml --publish always
