@@ -49,13 +49,14 @@ function RunStatusBadge({ status }: { status: string }) {
 
   return (
     <span
+      aria-label={`Status: ${status}`}
       className={clsx(
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
         styles[status] || 'bg-slate-500/10 text-slate-400'
       )}
     >
-      {icons[status]}
-      {status}
+      <span aria-hidden="true">{icons[status]}</span>
+      <span className="sr-only">{status}</span>
     </span>
   );
 }
@@ -180,7 +181,12 @@ export default function AgentsPage() {
             <h2 className="text-sm font-semibold text-white">Run History</h2>
           </div>
 
-          <div className="overflow-x-auto">
+          <div
+            aria-live="polite"
+            aria-atomic="false"
+            aria-busy={runsLoading && !runs}
+            className="overflow-x-auto"
+          >
             {runsLoading && !runs && (
               <div className="p-6 text-center text-sm text-slate-500">Loading runs...</div>
             )}
@@ -191,18 +197,24 @@ export default function AgentsPage() {
 
             {runs && runs.length > 0 && (
               <table className="w-full text-left text-sm">
+                <caption className="sr-only">Agent run history</caption>
                 <thead>
                   <tr className="border-b border-slate-700/50">
-                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Agent</th>
-                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Status</th>
-                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Duration</th>
-                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Cost</th>
-                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Time</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Agent</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Status</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Duration</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Cost</th>
+                    <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-400">Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/30">
                   {runs.map((run, idx) => (
-                    <tr key={run.id ?? idx} className="transition-colors hover:bg-slate-700/20">
+                    <tr
+                      key={run.id ?? idx}
+                      tabIndex={0}
+                      aria-label={`${run.agent_name}, status ${run.status}, duration ${formatDuration(run.duration_ms)}, ${formatDate(run.started_at)}`}
+                      className="transition-colors hover:bg-slate-700/20 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                    >
                       <td className="px-4 py-3 font-medium text-white capitalize">{run.agent_name}</td>
                       <td className="px-4 py-3">
                         <RunStatusBadge status={run.status} />

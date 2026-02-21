@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Bot, AlertTriangle, CheckCircle, Clock, Radio } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useSSE } from '@/hooks/useSSE';
@@ -44,16 +45,43 @@ function formatTimestamp(ts?: string): string {
 
 export default function ActivityFeed() {
   const { connected, eventLog } = useSSE();
+  const [assertiveMessage, setAssertiveMessage] = useState('');
+
+  // Emit critical failure events into the assertive live region
+  useEffect(() => {
+    const latestEvent = eventLog[eventLog.length - 1];
+    if (!latestEvent || latestEvent.type !== 'agent_status') return;
+    const status = latestEvent.data.status as string;
+    if (status === 'failed' || status === 'error') {
+      const agentName = latestEvent.data.agent_name as string;
+      const message = latestEvent.data.message as string | undefined;
+      setAssertiveMessage(`Agent "${agentName}" ${status}${message ? `: ${message}` : ''}`);
+    }
+  }, [eventLog]);
 
   // Filter out heartbeat events for display
   const visibleEvents = eventLog.filter((e) => e.type !== 'heartbeat');
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/50">
+      {/* Assertive live region for critical agent failures */}
+      <div
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {assertiveMessage}
+      </div>
+
       <div className="flex items-center justify-between border-b border-slate-700/50 px-4 py-3">
         <h2 className="text-sm font-semibold text-white">Activity Feed</h2>
-        <div className="flex items-center gap-1.5">
+        <div
+          className="flex items-center gap-1.5"
+          aria-label={connected ? 'Activity feed connected' : 'Activity feed disconnected'}
+        >
           <span
+            aria-hidden="true"
             className={clsx(
               'h-2 w-2 rounded-full',
               connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
@@ -63,7 +91,12 @@ export default function ActivityFeed() {
         </div>
       </div>
 
-      <div className="max-h-96 overflow-y-auto">
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        aria-label="Agent activity feed"
+        className="max-h-96 overflow-y-auto"
+      >
         {visibleEvents.length === 0 ? (
           <div className="p-6 text-center">
             <Radio className="mx-auto h-8 w-8 text-slate-600" />
