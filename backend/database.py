@@ -286,6 +286,17 @@ _NEW_TABLES_SQL = [
         created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    # --- sentiment_cache: aggregated social/news sentiment per ticker ---
+    """
+    CREATE TABLE IF NOT EXISTS sentiment_cache (
+        ticker          TEXT PRIMARY KEY,
+        score           REAL NOT NULL,
+        label           TEXT NOT NULL,
+        signal_count    INTEGER NOT NULL,
+        sources         TEXT NOT NULL,
+        updated_at      TIMESTAMP NOT NULL
+    )
+    """,
 ]
 
 # Useful indices for the new tables
@@ -307,6 +318,7 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wl    ON watchlist_stocks (watchlist_id)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_tk    ON watchlist_stocks (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_price_alerts_enabled   ON price_alerts (enabled, ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_sentiment_ticker       ON sentiment_cache (ticker)",
 ]
 
 
