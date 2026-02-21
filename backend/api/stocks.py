@@ -243,5 +243,16 @@ def search_stocks():
     if not query:
         return jsonify([])
 
-    results = search_stock_ticker(query)
+    query = query.strip()
+    if not query:
+        return jsonify({'error': 'Query must not be whitespace only'}), 400
+
+    if len(query) > 100:
+        return jsonify({'error': 'Query must be 100 characters or fewer'}), 400
+
+    try:
+        results = search_stock_ticker(query)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
     return jsonify(results)
