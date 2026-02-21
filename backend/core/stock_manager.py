@@ -149,6 +149,9 @@ def search_stock_ticker(query: str) -> List[Dict]:
     Search for stock tickers using Yahoo Finance
     Returns list of matching stocks with ticker and name
     """
+    query = query.strip()
+    if not query:
+        return []
     try:
         # Use Yahoo Finance search
         url = f"https://query2.finance.yahoo.com/v1/finance/search"
