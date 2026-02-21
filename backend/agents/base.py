@@ -75,6 +75,7 @@ class BaseAgent(ABC):
         self._status = AgentStatus.IDLE
         self._last_result: Optional[AgentResult] = None
         self._run_count = 0
+        self._lock = threading.Lock()
 
     @property
     def name(self) -> str:
@@ -95,7 +96,8 @@ class BaseAgent(ABC):
 
     def run(self, inputs: Dict[str, Any] = None) -> AgentResult:
         """Run the agent with timing, error handling, and status tracking"""
-        self._status = AgentStatus.RUNNING
+        with self._lock:
+            self._status = AgentStatus.RUNNING
         start_time = time.time()
         started_at = datetime.utcnow().isoformat()
 
@@ -104,9 +106,10 @@ class BaseAgent(ABC):
             result.started_at = started_at
             result.completed_at = datetime.utcnow().isoformat()
             result.duration_ms = int((time.time() - start_time) * 1000)
-            self._status = AgentStatus.SUCCESS if result.status == 'success' else AgentStatus.ERROR
-            self._last_result = result
-            self._run_count += 1
+            with self._lock:
+                self._status = AgentStatus.SUCCESS if result.status == 'success' else AgentStatus.ERROR
+                self._last_result = result
+                self._run_count += 1
             return result
         except Exception as e:
             logger.error(f"Agent {self.name} failed: {e}", exc_info=True)
@@ -120,8 +123,9 @@ class BaseAgent(ABC):
                 completed_at=datetime.utcnow().isoformat(),
                 duration_ms=int((time.time() - start_time) * 1000),
             )
-            self._status = AgentStatus.ERROR
-            self._last_result = result
+            with self._lock:
+                self._status = AgentStatus.ERROR
+                self._last_result = result
             return result
 
     def get_status_dict(self) -> Dict[str, Any]:
@@ -197,12 +201,12 @@ class AgentRegistry:
         """List all agents with their status"""
         return [agent.get_status_dict() for agent in self._agents.values()]
 
-    def run_agent(self, name: str, inputs: Dict[str, Any] = None) -> Optional[AgentResult]:
-        """Run an agent by name and persist the result"""
+    def run_agent(self, name: str, inputs: Dict[str, Any] = None):
+        """Run an agent by name and persist the result. Returns (AgentResult, run_id)."""
         agent = self._agents.get(name)
         if not agent:
             logger.error(f"Agent not found: {name}")
-            return None
+            return None, 0
 
         if not agent.config.enabled:
             logger.warning(f"Agent {name} is disabled")
@@ -212,17 +216,17 @@ class AgentRegistry:
                 status='error',
                 output='',
                 error='Agent is disabled',
-            )
+            ), 0
 
         result = agent.run(inputs)
-        self._persist_result(result, inputs)
-        return result
+        run_id = self._persist_result(result, inputs)
+        return result, run_id
 
-    def _persist_result(self, result: AgentResult, inputs: Dict[str, Any] = None):
-        """Save agent run result to database"""
+    def _persist_result(self, result: AgentResult, inputs: Dict[str, Any] = None) -> int:
+        """Save agent run result to database. Returns the row ID of the new record."""
         try:
             conn = sqlite3.connect(self.db_path)
-            conn.execute('''
+            cursor = conn.execute('''
                 INSERT INTO agent_runs
                 (agent_name, framework, status, input_data, output_data,
                  tokens_input, tokens_output, estimated_cost, duration_ms,
@@ -244,9 +248,12 @@ class AgentRegistry:
                 result.completed_at,
             ))
             conn.commit()
+            run_id = cursor.lastrowid
             conn.close()
+            return run_id
         except Exception as e:
             logger.error(f"Failed to persist agent result: {e}")
+            return 0
 
     def get_run_history(self, agent_name: str = None, limit: int = 50) -> List[Dict]:
         """Get agent run history"""

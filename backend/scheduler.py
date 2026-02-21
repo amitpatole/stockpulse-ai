@@ -3,6 +3,7 @@ APScheduler configuration and management for TickerPulse AI.
 Sets up job store (SQLite), job defaults, and exposes helpers.
 """
 import logging
+import threading
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -43,6 +44,7 @@ class SchedulerManager:
         self.scheduler = None
         self.app = app
         self._job_registry: Dict[str, Dict[str, Any]] = {}  # name -> job metadata
+        self._lock = threading.Lock()
 
     def init_app(self, app):
         """Initialize scheduler with Flask app."""
