@@ -11,6 +11,9 @@ from backend.database import db_session
 
 logger = logging.getLogger(__name__)
 
+# Price data older than this is considered too stale to fire an alert.
+_AI_RATINGS_TTL_SECONDS = 1800  # 30 minutes
+
 
 # ---------------------------------------------------------------------------
 # CRUD helpers
@@ -134,17 +137,18 @@ def evaluate_price_alerts(tickers: list[str]) -> None:
         if not rows:
             return
 
-        # Build a lookup: ticker -> (current_price, price_change_pct)
+        # Build a lookup: ticker -> (current_price, price_change_pct, cached_at)
         price_rows = conn.execute(
-            f'SELECT ticker, current_price, price_change_pct FROM ai_ratings WHERE ticker IN ({placeholders})',
+            f'SELECT ticker, current_price, price_change_pct, updated_at'
+            f' FROM ai_ratings WHERE ticker IN ({placeholders})',
             tickers,
         ).fetchall()
-        prices: dict[str, tuple[float, float]] = {}
+        prices: dict[str, tuple[float, float, str]] = {}
         for pr in price_rows:
             cp = pr['current_price']
             pcp = pr['price_change_pct'] or 0.0
             if cp is not None:
-                prices[pr['ticker']] = (float(cp), float(pcp))
+                prices[pr['ticker']] = (float(cp), float(pcp), pr['updated_at'] or '')
 
         now = datetime.now(timezone.utc).isoformat()
 

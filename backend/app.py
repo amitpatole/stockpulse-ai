@@ -15,7 +15,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, send_from_directory
 
 from backend.config import Config
-from backend.database import init_all_tables
+from backend.database import db_session, init_all_tables
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,51 @@ _ALLOWED_EVENT_TYPES = frozenset({
     'heartbeat', 'alert', 'provider_fallback', 'job_completed',
     'technical_alerts', 'regime_update', 'morning_briefing',
     'daily_summary', 'weekly_review', 'reddit_trending', 'download_tracker',
+    'snapshot',
 })
 _MAX_PAYLOAD_BYTES = 65_536  # 64 KB
+
+
+def _build_snapshot(db_path: str | None = None) -> dict:
+    """Read current state from DB for the connect-time snapshot event.
+
+    Returns a dict with keys: active_alerts, last_regime,
+    last_technical_signal, timestamp.  On any DB error returns a
+    best-effort partial result (empty alerts, null signals).
+    """
+    active_alerts: list = []
+    last_regime = None
+    last_technical_signal = None
+    try:
+        with db_session(db_path) as conn:
+            active_alerts = [
+                dict(row) for row in conn.execute(
+                    'SELECT id, ticker, condition_type, threshold, created_at'
+                    ' FROM price_alerts WHERE enabled = 1'
+                    ' ORDER BY created_at DESC'
+                ).fetchall()
+            ]
+            regime_row = conn.execute(
+                "SELECT result_summary, status, executed_at FROM job_history"
+                " WHERE job_id = 'regime_check' AND status = 'completed'"
+                " ORDER BY executed_at DESC LIMIT 1"
+            ).fetchone()
+            last_regime = dict(regime_row) if regime_row else None
+
+            tech_row = conn.execute(
+                "SELECT result_summary, status, executed_at FROM job_history"
+                " WHERE job_id = 'technical_monitor' AND status = 'completed'"
+                " ORDER BY executed_at DESC LIMIT 1"
+            ).fetchone()
+            last_technical_signal = dict(tech_row) if tech_row else None
+    except Exception as exc:
+        logger.warning("_build_snapshot: DB read failed: %s", exc)
+    return {
+        'active_alerts': active_alerts,
+        'last_regime': last_regime,
+        'last_technical_signal': last_technical_signal,
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+    }
 
 
 def send_sse_event(event_type: str, data: dict) -> None:
@@ -151,6 +194,16 @@ def create_app() -> Flask:
             try:
                 # Send immediate heartbeat so the browser knows we're connected
                 yield "event: heartbeat\ndata: {}\n\n"
+                # Push current state so the UI has initial data without
+                # waiting for the next scheduled job to fire.
+                try:
+                    snapshot_data = _build_snapshot()
+                    yield (
+                        f"event: snapshot\n"
+                        f"data: {json.dumps(snapshot_data)}\n\n"
+                    )
+                except Exception as exc:
+                    logger.warning("event_stream: snapshot build failed: %s", exc)
                 while True:
                     try:
                         event_type, data = q.get(timeout=15)
