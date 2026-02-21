@@ -10,6 +10,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from backend.jobs._helpers import get_job_history
+from backend.api.validators.scheduler_validators import validate_job_id, validate_trigger_args
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,13 @@ def get_job(job_id):
         JSON object with job details.
 
     Errors:
+        400: Invalid job_id format.
         404: Job not found.
     """
+    ok, err = validate_job_id(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+
     sm = _get_scheduler_manager()
     job = sm.get_job(job_id)
     if not job:
@@ -78,7 +84,14 @@ def pause_job(job_id):
 
     Returns:
         JSON object with ``success`` boolean and optional ``error``.
+
+    Errors:
+        400: Invalid job_id format.
     """
+    ok, err = validate_job_id(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+
     sm = _get_scheduler_manager()
     success = sm.pause_job(job_id)
     if success:
@@ -95,7 +108,14 @@ def resume_job(job_id):
 
     Returns:
         JSON object with ``success`` boolean and optional ``error``.
+
+    Errors:
+        400: Invalid job_id format.
     """
+    ok, err = validate_job_id(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+
     sm = _get_scheduler_manager()
     success = sm.resume_job(job_id)
     if success:
@@ -112,7 +132,14 @@ def trigger_job(job_id):
 
     Returns:
         JSON object with ``success`` boolean.
+
+    Errors:
+        400: Invalid job_id format.
     """
+    ok, err = validate_job_id(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+
     sm = _get_scheduler_manager()
     success = sm.trigger_job(job_id)
     if success:
@@ -144,7 +171,14 @@ def update_schedule(job_id):
 
     Returns:
         JSON object with ``success`` boolean.
+
+    Errors:
+        400: Invalid job_id format, missing/invalid trigger, or invalid trigger args.
     """
+    ok, err = validate_job_id(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+
     data = request.get_json(silent=True)
     if not data or 'trigger' not in data:
         return jsonify({
@@ -159,6 +193,10 @@ def update_schedule(job_id):
             'success': False,
             'error': f'Invalid trigger type: {trigger}. Must be one of: {", ".join(valid_triggers)}',
         }), 400
+
+    ok, err = validate_trigger_args(trigger, data)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
 
     sm = _get_scheduler_manager()
     success = sm.update_job_schedule(job_id, trigger, **data)
