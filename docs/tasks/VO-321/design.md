@@ -1,0 +1,5 @@
+# VO-321: Missing input validation in stock detail page allows injection
+
+## Technical Design
+
+Not logged in · Please run /login
