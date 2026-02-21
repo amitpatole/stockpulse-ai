@@ -103,6 +103,7 @@ _TIMEFRAME_MAP = {
     '3M': ('3mo', '1d'),
     '6M': ('6mo', '1d'),
     '1Y': ('1y', '1d'),
+    'All': ('max', '1wk'),
 }
 
 
@@ -121,7 +122,9 @@ def get_stock_detail(ticker):
     """
     ticker = ticker.upper().strip()
     timeframe = request.args.get('timeframe', '1M')
-    period, interval = _TIMEFRAME_MAP.get(timeframe, ('1mo', '1d'))
+    if timeframe not in _TIMEFRAME_MAP:
+        return jsonify({'error': 'Invalid timeframe'}), 400
+    period, interval = _TIMEFRAME_MAP[timeframe]
 
     try:
         import yfinance as yf

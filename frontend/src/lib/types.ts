@@ -143,6 +143,8 @@ export interface ResearchBrief {
   model_used?: string;
 }
 
+export type Timeframe = '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
+
 // Stock Detail Page Types
 
 export interface CandleDataPoint {
