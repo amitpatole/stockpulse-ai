@@ -4,6 +4,7 @@ Blueprint exposing CRUD endpoints for user-defined price alerts.
 """
 
 import logging
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -25,6 +26,9 @@ _SOUND_DEFAULTS = {
 }
 
 _VALID_CONDITION_TYPES = {'price_above', 'price_below', 'pct_change'}
+
+_TICKER_RE = re.compile(r'^[A-Z]{1,5}$')
+_THRESHOLD_MAX = 1_000_000
 
 
 @alerts_bp.route('/alerts', methods=['GET'])
@@ -58,6 +62,8 @@ def create_alert_endpoint():
     # Validate required fields
     if not ticker:
         return jsonify({'error': 'Missing required field: ticker'}), 400
+    if not _TICKER_RE.match(ticker):
+        return jsonify({'error': 'ticker must be 1–5 uppercase letters'}), 400
     if condition_type not in _VALID_CONDITION_TYPES:
         return jsonify({
             'error': f"Invalid condition_type. Must be one of: {', '.join(sorted(_VALID_CONDITION_TYPES))}"
@@ -67,6 +73,12 @@ def create_alert_endpoint():
         threshold = float(threshold_raw)
     except (TypeError, ValueError):
         return jsonify({'error': 'threshold must be a valid number'}), 400
+
+    if not (0 < threshold <= _THRESHOLD_MAX):
+        return jsonify({'error': f'threshold must be > 0 and ≤ {_THRESHOLD_MAX}'}), 400
+
+    if condition_type == 'pct_change' and threshold > 100:
+        return jsonify({'error': 'threshold for pct_change must be ≤ 100'}), 400
 
     # Verify the ticker exists in the stocks table
     with db_session() as conn:

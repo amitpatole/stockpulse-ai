@@ -179,29 +179,34 @@ def evaluate_price_alerts(tickers: list[str]) -> None:
                 # Another thread already claimed this alert; skip notification.
                 continue
 
+            # Sanitise values pulled from DB before building SSE payload; guards
+            # against data that may have been inserted before API validation existed.
+            ticker_sse = str(ticker).strip().upper()
+            threshold_sse = float(threshold)
+
             logger.info(
                 "Price alert %d triggered: %s %s %.4f (current=%.4f)",
-                alert['id'], ticker, condition, threshold, current_price,
+                alert['id'], ticker_sse, condition, threshold_sse, current_price,
             )
 
             # Build human-readable message
             cond_labels = {
-                'price_above': f"price rose above ${threshold:.2f}",
-                'price_below': f"price fell below ${threshold:.2f}",
-                'pct_change': f"moved {pct_change:+.2f}% (threshold ±{threshold:.1f}%)",
+                'price_above': f"price rose above ${threshold_sse:.2f}",
+                'price_below': f"price fell below ${threshold_sse:.2f}",
+                'pct_change': f"moved {pct_change:+.2f}% (threshold ±{threshold_sse:.1f}%)",
             }
-            message = f"{ticker} alert: {cond_labels.get(condition, condition)}"
+            message = f"{ticker_sse} alert: {cond_labels.get(condition, condition)}"
 
             if send_sse_event is not None:
                 try:
                     send_sse_event('alert', {
-                        'ticker': ticker,
+                        'ticker': ticker_sse,
                         'type': 'price_alert',
                         'message': message,
                         'severity': 'high',
                         'alert_id': alert['id'],
                         'condition_type': condition,
-                        'threshold': threshold,
+                        'threshold': threshold_sse,
                         'current_price': current_price,
                     })
                 except Exception as exc:
