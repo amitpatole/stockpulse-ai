@@ -3,6 +3,7 @@ APScheduler configuration and management for TickerPulse AI.
 Sets up job store (SQLite), job defaults, and exposes helpers.
 """
 import logging
+import threading
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 

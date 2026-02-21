@@ -153,21 +153,6 @@ def _format_agent(stub_name: str, agent_obj) -> dict:
     }
 
 
-def _get_latest_run_id(agent_name: str) -> int:
-    """Return the rowid of the most recently persisted run for agent_name."""
-    try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        row = conn.execute(
-            'SELECT MAX(id) FROM agent_runs WHERE agent_name = ?',
-            (agent_name,)
-        ).fetchone()
-        conn.close()
-        return row[0] if row and row[0] is not None else 0
-    except Exception as e:
-        logger.error("Failed to get latest run id for %s: %s", agent_name, e)
-        return 0
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -363,8 +348,7 @@ def trigger_agent_run(name):
                     task_description=f"Run {real_name} agent",
                     inputs=params or {},
                 )
-                registry._persist_result(result, params)
-                run_id = _get_latest_run_id(real_name)
+                run_id = registry._persist_result(result, params)
                 success = result.status == 'success'
                 logger.info(
                     "Agent run finished (OpenClaw): %s (real=%s), run_id=%s, status=%s, duration=%dms",
@@ -397,11 +381,11 @@ def trigger_agent_run(name):
 
     # Native path: registry.run_agent() calls agent.run() and persists the
     # result in a single operation — exactly one row written to agent_runs.
-    result = registry.run_agent(real_name, params)
-    if result is None:
+    run_result = registry.run_agent(real_name, params)
+    if run_result is None:
         return jsonify({'error': f'Agent {real_name} execution failed internally'}), 500
 
-    run_id = _get_latest_run_id(real_name)
+    result, run_id = run_result
     success = result.status == 'success'
 
     logger.info(
