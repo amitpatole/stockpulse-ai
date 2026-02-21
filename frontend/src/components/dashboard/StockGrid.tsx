@@ -27,6 +27,7 @@ export default function StockGrid() {
     function handleClickOutside(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
+        setSearchError(null);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
