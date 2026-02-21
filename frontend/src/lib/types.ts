@@ -143,6 +143,8 @@ export interface ResearchBrief {
   model_used?: string;
 }
 
+export type Timeframe = '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
+
 // Stock Detail Page Types
 
 export interface CandleDataPoint {
@@ -197,6 +199,24 @@ export interface SentimentData {
   sources: { news: number; reddit: number };
   updated_at: string;
   stale: boolean;
+}
+
+export interface EarningsEvent {
+  id: number;
+  ticker: string;
+  company: string;
+  earnings_date: string;
+  time_of_day: 'before_open' | 'after_close' | 'during_trading' | null;
+  eps_estimate: number | null;
+  fiscal_quarter: string | null;
+  fetched_at: string;
+  on_watchlist: boolean;
+}
+
+export interface EarningsResponse {
+  events: EarningsEvent[];
+  stale: boolean;
+  as_of: string;
 }
 
 // SSE Event Types
