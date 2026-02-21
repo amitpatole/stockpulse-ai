@@ -71,8 +71,14 @@ export default function AgentCard({ agent, onRunComplete }: AgentCardProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className={clsx('h-2.5 w-2.5 rounded-full', statusColor, isRunning && 'animate-pulse')} />
-          <span className="text-xs text-slate-400 capitalize">{isRunning ? 'running' : agent.status}</span>
+          <span
+            role="img"
+            aria-label={`Agent status: ${isRunning ? 'running' : agent.status}`}
+            className={clsx('h-2.5 w-2.5 rounded-full', statusColor, isRunning && 'animate-pulse')}
+          >
+            <span className="sr-only">{isRunning ? 'running' : agent.status}</span>
+          </span>
+          <span className="text-xs text-slate-400 capitalize" aria-hidden="true">{isRunning ? 'running' : agent.status}</span>
         </div>
       </div>
 
@@ -136,6 +142,7 @@ export default function AgentCard({ agent, onRunComplete }: AgentCardProps) {
       <button
         onClick={handleRun}
         disabled={isRunning || !agent.enabled}
+        aria-label={isRunning ? `Running ${agent.display_name || agent.name}` : `Run ${agent.display_name || agent.name}`}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isRunning ? (
