@@ -140,6 +140,9 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
                 "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) VALUES (?, ?)",
                 (watchlist_id, ticker),
             )
+        # Invalidate stale cache so next ratings fetch recomputes fresh
+        with db_session() as conn:
+            conn.execute("DELETE FROM ai_ratings WHERE ticker = ?", (ticker,))
         return True
     except Exception as exc:
         logger.error("Error adding %s to watchlist %d: %s", ticker, watchlist_id, exc)
@@ -155,4 +158,7 @@ def remove_stock_from_watchlist(watchlist_id: int, ticker: str) -> bool:
             "DELETE FROM watchlist_stocks WHERE watchlist_id = ? AND ticker = ?",
             (watchlist_id, ticker),
         )
+    # Invalidate stale cache so next ratings fetch recomputes fresh
+    with db_session() as conn:
+        conn.execute("DELETE FROM ai_ratings WHERE ticker = ?", (ticker,))
     return result.rowcount > 0
