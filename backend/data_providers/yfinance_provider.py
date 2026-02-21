@@ -104,6 +104,7 @@ class YFinanceProvider(DataProvider):
             resp = self.session.get(url, params=params, timeout=10)
             self._request_count += 1
             self._last_request_time = datetime.now()
+            self._track_request()
             if resp.status_code == 200:
                 data = resp.json()
                 result = data.get('chart', {}).get('result', [None])[0]
@@ -332,6 +333,7 @@ class YFinanceProvider(DataProvider):
         try:
             resp = self.session.get(url, params=params, timeout=10)
             self._request_count += 1
+            self._track_request()
             if resp.status_code == 200:
                 data = resp.json()
                 for q in data.get('quotes', []):

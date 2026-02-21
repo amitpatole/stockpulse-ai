@@ -112,6 +112,7 @@ class PolygonProvider(DataProvider):
             resp = self.session.get(url, params=params, timeout=10)
             self._request_count += 1
             self._last_request_time = datetime.now()
+            self._track_request()
             if resp.status_code == 200:
                 return resp.json()
             else:

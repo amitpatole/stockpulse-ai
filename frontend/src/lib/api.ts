@@ -20,6 +20,7 @@ import type {
   SentimentData,
   StockDetail,
   Timeframe,
+  ProviderStatusResponse,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -273,6 +274,12 @@ export async function getEarnings(days: number = 14): Promise<EarningsResponse> 
 
 export async function getStockSentiment(ticker: string): Promise<SentimentData> {
   return request<SentimentData>(`/api/stocks/${encodeURIComponent(ticker)}/sentiment`);
+}
+
+// ---- Data Provider Status ----
+
+export async function getProviderStatus(): Promise<ProviderStatusResponse> {
+  return request<ProviderStatusResponse>('/api/providers/status');
 }
 
 export { ApiError };

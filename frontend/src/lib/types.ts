@@ -219,6 +219,19 @@ export interface EarningsResponse {
   as_of: string;
 }
 
+export interface ProviderStatus {
+  id: string;
+  display_name: string;
+  is_active: boolean;
+  rate_limit_used: number;
+  rate_limit_max: number;
+  reset_at: string | null;
+}
+
+export interface ProviderStatusResponse {
+  providers: ProviderStatus[];
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
 
