@@ -427,9 +427,23 @@ def list_recent_runs():
         - runs: Array of run summary objects.
         - total: Total count of runs returned.
     """
-    limit = min(int(request.args.get('limit', 50)), 200)
+    raw_limit = request.args.get('limit', '50')
+    try:
+        limit = int(raw_limit)
+    except ValueError:
+        return jsonify({'error': 'limit must be a positive integer'}), 400
+    if limit <= 0:
+        return jsonify({'error': 'limit must be a positive integer'}), 400
+    limit = min(limit, 200)
+
     agent_filter = request.args.get('agent')
+
+    _VALID_STATUSES = {'running', 'success', 'error'}
     status_filter = request.args.get('status')
+    if status_filter and status_filter not in _VALID_STATUSES:
+        return jsonify({
+            'error': f"Invalid status. Must be one of: {', '.join(sorted(_VALID_STATUSES))}"
+        }), 400
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
