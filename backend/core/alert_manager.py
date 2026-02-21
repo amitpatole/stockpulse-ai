@@ -168,11 +168,17 @@ def evaluate_price_alerts(tickers: list[str]) -> None:
             if not triggered:
                 continue
 
-            # Atomically disable + stamp
-            conn.execute(
-                'UPDATE price_alerts SET enabled = 0, triggered_at = ? WHERE id = ?',
+            # Atomically disable + stamp; AND enabled = 1 ensures exactly one
+            # concurrent thread wins the write (rowcount = 1) while all others
+            # get rowcount = 0 and skip the SSE notification.
+            update_cursor = conn.execute(
+                'UPDATE price_alerts SET enabled = 0, triggered_at = ? WHERE id = ? AND enabled = 1',
                 (now, alert['id']),
             )
+            if update_cursor.rowcount == 0:
+                # Another thread already claimed this alert; skip notification.
+                continue
+
             logger.info(
                 "Price alert %d triggered: %s %s %.4f (current=%.4f)",
                 alert['id'], ticker, condition, threshold, current_price,
