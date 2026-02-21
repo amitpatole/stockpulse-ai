@@ -21,6 +21,7 @@ import type {
   StockDetail,
   Timeframe,
   ProviderStatusResponse,
+  ProviderRateLimitsResponse,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -280,6 +281,10 @@ export async function getStockSentiment(ticker: string): Promise<SentimentData> 
 
 export async function getProviderStatus(): Promise<ProviderStatusResponse> {
   return request<ProviderStatusResponse>('/api/providers/status');
+}
+
+export async function getProviderRateLimits(): Promise<ProviderRateLimitsResponse> {
+  return request<ProviderRateLimitsResponse>('/api/providers/rate-limits');
 }
 
 export { ApiError };

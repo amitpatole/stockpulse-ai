@@ -232,6 +232,22 @@ export interface ProviderStatusResponse {
   providers: ProviderStatus[];
 }
 
+export interface ProviderRateLimit {
+  name: string;
+  display_name: string;
+  requests_used: number;
+  requests_limit: number | null;
+  window_seconds: number;
+  reset_at: string | null;
+  pct_used: number;
+  status: 'ok' | 'warning' | 'critical' | 'unknown';
+}
+
+export interface ProviderRateLimitsResponse {
+  providers: ProviderRateLimit[];
+  polled_at: string;
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
 
