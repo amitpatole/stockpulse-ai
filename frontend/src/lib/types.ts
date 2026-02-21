@@ -189,6 +189,16 @@ export interface StockDetail {
   news: StockNewsItem[];
 }
 
+export interface SentimentData {
+  ticker: string;
+  label: 'bullish' | 'bearish' | 'neutral';
+  score: number | null;
+  signal_count: number;
+  sources: { news: number; reddit: number };
+  updated_at: string;
+  stale: boolean;
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
 
