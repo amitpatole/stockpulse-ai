@@ -11,6 +11,8 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from backend.config import Config
 
@@ -46,11 +48,10 @@ def _extract_trigger_args(trigger) -> dict:
     """
     if trigger is None:
         return {}
-    cls_name = type(trigger).__name__
     try:
-        if cls_name == 'CronTrigger':
+        if isinstance(trigger, CronTrigger):
             return {f.name: str(f) for f in trigger.fields if not f.is_default}
-        if cls_name == 'IntervalTrigger':
+        if isinstance(trigger, IntervalTrigger):
             return {'seconds': int(trigger.interval.total_seconds())}
     except AttributeError:
         pass
