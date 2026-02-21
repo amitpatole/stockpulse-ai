@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import type { SSEEvent, SSEEventType, AgentStatusEvent, AlertEvent, JobCompleteEvent } from '@/lib/types';
+import type { AlertSoundSettings } from '@/lib/types';
+import { getAlertSoundSettings } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 const RECONNECT_DELAY = 5000;
@@ -13,6 +15,17 @@ interface SSEState {
   recentAlerts: AlertEvent[];
   recentJobCompletes: JobCompleteEvent[];
   eventLog: SSEEvent[];
+}
+
+function playAlertSound(settings: AlertSoundSettings): void {
+  if (!settings.enabled) return;
+  if (settings.mute_when_active && document.hasFocus()) return;
+
+  const audio = new Audio(`/sounds/${settings.sound_type}.mp3`);
+  audio.volume = settings.volume / 100;
+  audio.play().catch(() => {
+    // Ignore autoplay errors (e.g. browser policy requires user gesture)
+  });
 }
 
 export function useSSE() {
@@ -28,6 +41,23 @@ export function useSSE() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const soundSettingsRef = useRef<AlertSoundSettings>({
+    enabled: true,
+    sound_type: 'chime',
+    volume: 70,
+    mute_when_active: false,
+  });
+
+  // Fetch sound settings once on mount and keep the ref updated
+  useEffect(() => {
+    getAlertSoundSettings()
+      .then((settings) => {
+        soundSettingsRef.current = settings;
+      })
+      .catch(() => {
+        // Keep defaults on error
+      });
+  }, []);
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -100,6 +130,7 @@ export function useSSE() {
         case 'alert': {
           const alertEvent = event.data as unknown as AlertEvent;
           next.recentAlerts = [alertEvent, ...prev.recentAlerts].slice(0, 50);
+          playAlertSound(soundSettingsRef.current);
           break;
         }
         case 'job_complete': {

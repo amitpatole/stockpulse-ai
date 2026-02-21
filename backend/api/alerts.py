@@ -8,11 +8,21 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from backend.core.alert_manager import create_alert, get_alerts, delete_alert, toggle_alert
+from backend.core.settings_manager import get_setting, set_setting
 from backend.database import db_session
 
 logger = logging.getLogger(__name__)
 
 alerts_bp = Blueprint('alerts', __name__, url_prefix='/api')
+
+_VALID_SOUND_TYPES = {'chime', 'bell', 'beep'}
+
+_SOUND_DEFAULTS = {
+    'alert_sound_enabled': 'true',
+    'alert_sound_type': 'chime',
+    'alert_sound_volume': '70',
+    'alert_mute_when_active': 'false',
+}
 
 _VALID_CONDITION_TYPES = {'price_above', 'price_below', 'pct_change'}
 
@@ -96,3 +106,72 @@ def toggle_alert_endpoint(alert_id: int):
     if updated is None:
         return jsonify({'error': f'Alert {alert_id} not found'}), 404
     return jsonify(updated)
+
+
+@alerts_bp.route('/alerts/sound-settings', methods=['GET'])
+def get_sound_settings():
+    """Return current alert sound settings.
+
+    Returns:
+        JSON with enabled, sound_type, volume, mute_when_active fields.
+    """
+    enabled = get_setting('alert_sound_enabled', _SOUND_DEFAULTS['alert_sound_enabled']) == 'true'
+    sound_type = get_setting('alert_sound_type', _SOUND_DEFAULTS['alert_sound_type'])
+    volume = int(get_setting('alert_sound_volume', _SOUND_DEFAULTS['alert_sound_volume']))
+    mute_when_active = get_setting('alert_mute_when_active', _SOUND_DEFAULTS['alert_mute_when_active']) == 'true'
+    return jsonify({
+        'enabled': enabled,
+        'sound_type': sound_type,
+        'volume': volume,
+        'mute_when_active': mute_when_active,
+    })
+
+
+@alerts_bp.route('/alerts/sound-settings', methods=['PUT'])
+def update_sound_settings():
+    """Update alert sound settings (partial update supported).
+
+    Request Body (JSON, all fields optional):
+        enabled          (bool) : Whether alert sounds are enabled.
+        sound_type       (str)  : One of 'chime', 'bell', 'beep'.
+        volume           (int)  : Volume from 0 to 100.
+        mute_when_active (bool) : Whether to mute when tab is focused.
+
+    Returns:
+        200 with the updated settings, or 400 on validation failure.
+    """
+    data = request.get_json(silent=True) or {}
+
+    if 'sound_type' in data:
+        if data['sound_type'] not in _VALID_SOUND_TYPES:
+            return jsonify({
+                'error': f"Invalid sound_type. Must be one of: {', '.join(sorted(_VALID_SOUND_TYPES))}"
+            }), 400
+
+    if 'volume' in data:
+        try:
+            volume = int(data['volume'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'volume must be an integer'}), 400
+        if not (0 <= volume <= 100):
+            return jsonify({'error': 'volume must be between 0 and 100'}), 400
+
+    if 'enabled' in data:
+        set_setting('alert_sound_enabled', 'true' if data['enabled'] else 'false')
+    if 'sound_type' in data:
+        set_setting('alert_sound_type', data['sound_type'])
+    if 'volume' in data:
+        set_setting('alert_sound_volume', str(int(data['volume'])))
+    if 'mute_when_active' in data:
+        set_setting('alert_mute_when_active', 'true' if data['mute_when_active'] else 'false')
+
+    enabled = get_setting('alert_sound_enabled', _SOUND_DEFAULTS['alert_sound_enabled']) == 'true'
+    sound_type = get_setting('alert_sound_type', _SOUND_DEFAULTS['alert_sound_type'])
+    volume_out = int(get_setting('alert_sound_volume', _SOUND_DEFAULTS['alert_sound_volume']))
+    mute_when_active = get_setting('alert_mute_when_active', _SOUND_DEFAULTS['alert_mute_when_active']) == 'true'
+    return jsonify({
+        'enabled': enabled,
+        'sound_type': sound_type,
+        'volume': volume_out,
+        'mute_when_active': mute_when_active,
+    })
