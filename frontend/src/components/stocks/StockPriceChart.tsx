@@ -72,7 +72,7 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
       )}
 
       {!loading && !error && chartData.length > 0 && (
-        <PriceChart data={chartData} height={320} />
+        <PriceChart data={chartData} height={320} timeframe={timeframe} />
       )}
     </div>
   );

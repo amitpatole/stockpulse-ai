@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef } from 'react';
-import { createChart, AreaSeries, ColorType, type IChartApi, type Time, type UTCTimestamp } from 'lightweight-charts';
+import { createChart, AreaSeries, ColorType, TickMarkType, type IChartApi, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { ChartDataSummary } from './ChartDataSummary';
 
 interface PriceDataPoint {
@@ -14,6 +14,7 @@ interface PriceChartProps {
   title?: string;
   height?: number;
   color?: string;
+  timeframe?: '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
 }
 
 export default function PriceChart({
@@ -21,6 +22,7 @@ export default function PriceChart({
   title,
   height = 300,
   color = '#3b82f6',
+  timeframe,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -38,6 +40,7 @@ export default function PriceChart({
 
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const hasTimestamps = data.length > 0 && typeof data[0].time === 'number';
+    const isIntraday = timeframe === '1D' || timeframe === '1W';
 
     const chart = createChart(containerRef.current, {
       height,
@@ -61,18 +64,34 @@ export default function PriceChart({
       timeScale: {
         borderColor: '#334155',
         timeVisible: true,
+        tickMarkFormatter: (time: UTCTimestamp, tickMarkType: TickMarkType, locale: string) => {
+          const d = new Date((time as number) * 1000);
+          if (tickMarkType === TickMarkType.Time) {
+            return new Intl.DateTimeFormat(locale, {
+              timeZone: tz,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).format(d);
+          }
+          return new Intl.DateTimeFormat(locale, {
+            timeZone: tz,
+            month: 'short',
+            day: 'numeric',
+          }).format(d);
+        },
       },
       localization: {
         timeFormatter: (time: Time) => {
-          if (typeof time === 'number') {
-            return new Intl.DateTimeFormat(undefined, {
-              timeZone: tz,
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-            }).format(new Date((time as number) * 1000));
-          }
-          return String(time);
+          if (typeof time !== 'number') return String(time);
+          return new Intl.DateTimeFormat(undefined, {
+            timeZone: tz,
+            month: 'short',
+            day: 'numeric',
+            ...(isIntraday
+              ? { hour: '2-digit', minute: '2-digit', hour12: false }
+              : { year: 'numeric' }),
+          }).format(new Date((time as number) * 1000));
         },
       },
     });
@@ -109,7 +128,7 @@ export default function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, height, color]);
+  }, [data, height, color, timeframe]);
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
