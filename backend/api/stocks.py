@@ -237,11 +237,18 @@ def search_stocks():
 
     Returns:
         JSON array of matching stocks with ticker, name, exchange, type fields.
-        Returns empty array if query is empty.
+        Returns empty array if query is empty or missing.
+        Returns 400 if query exceeds 100 characters or is whitespace-only.
     """
-    query = request.args.get('q', '')
+    query = request.args.get('q', '').strip()
     if not query:
         return jsonify([])
+    if len(query) > 100:
+        return jsonify({'error': 'Query too long'}), 400
 
-    results = search_stock_ticker(query)
-    return jsonify(results)
+    try:
+        results = search_stock_ticker(query)
+        return jsonify(results)
+    except Exception as e:
+        logger.exception("Unexpected error in stock search")
+        return jsonify({'error': 'Search failed'}), 500
