@@ -27,9 +27,31 @@ logger = logging.getLogger(__name__)
 sse_clients: list[queue.Queue] = []
 sse_lock = threading.Lock()
 
+_ALLOWED_EVENT_TYPES = frozenset({
+    'heartbeat', 'alert', 'provider_fallback', 'job_completed',
+    'technical_alerts', 'regime_update', 'morning_briefing',
+    'daily_summary', 'weekly_review', 'reddit_trending', 'download_tracker',
+})
+_MAX_PAYLOAD_BYTES = 65_536  # 64 KB
+
 
 def send_sse_event(event_type: str, data: dict) -> None:
-    """Push an event to every connected SSE client."""
+    """Push an event to every connected SSE client.
+
+    Validates event_type against an allowlist, rejects non-serializable or
+    oversized payloads, and silently drops invalid events with an error log.
+    """
+    if event_type not in _ALLOWED_EVENT_TYPES:
+        logger.error("SSE blocked: unknown event_type %r", event_type)
+        return
+    try:
+        serialized = json.dumps(data)
+    except (TypeError, ValueError) as exc:
+        logger.error("SSE blocked: non-serializable payload for %r: %s", event_type, exc)
+        return
+    if len(serialized.encode()) > _MAX_PAYLOAD_BYTES:
+        logger.error("SSE blocked: payload for %r exceeds %d bytes", event_type, _MAX_PAYLOAD_BYTES)
+        return
     with sse_lock:
         dead_clients: list[queue.Queue] = []
         for client_queue in sse_clients:
