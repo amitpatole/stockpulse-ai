@@ -216,6 +216,13 @@ export interface JobCompleteEvent {
   duration_ms?: number;
 }
 
+export interface AlertSoundSettings {
+  enabled: boolean;
+  sound_type: 'chime' | 'bell' | 'beep';
+  volume: number;
+  mute_when_active: boolean;
+}
+
 // Rating color mapping
 export const RATING_COLORS: Record<string, string> = {
   STRONG_BUY: '#10b981',

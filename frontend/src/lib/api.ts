@@ -15,6 +15,7 @@ import type {
   AIProvider,
   HealthCheck,
   ResearchBrief,
+  AlertSoundSettings,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -178,6 +179,19 @@ export async function pauseJob(id: string): Promise<{ message: string }> {
 export async function resumeJob(id: string): Promise<{ message: string }> {
   return request<{ message: string }>(`/api/scheduler/jobs/${id}/resume`, {
     method: 'POST',
+  });
+}
+
+// ---- Alert Sound Settings ----
+
+export async function getAlertSoundSettings(): Promise<AlertSoundSettings> {
+  return request<AlertSoundSettings>('/api/alerts/sound-settings');
+}
+
+export async function updateAlertSoundSettings(patch: Partial<AlertSoundSettings>): Promise<AlertSoundSettings> {
+  return request<AlertSoundSettings>('/api/alerts/sound-settings', {
+    method: 'PUT',
+    body: JSON.stringify(patch),
   });
 }
 
