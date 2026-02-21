@@ -3,6 +3,7 @@ APScheduler configuration and management for TickerPulse AI.
 Sets up job store (SQLite), job defaults, and exposes helpers.
 """
 import logging
+import threading
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -43,6 +44,7 @@ class SchedulerManager:
         self.scheduler = None
         self.app = app
         self._job_registry: Dict[str, Dict[str, Any]] = {}  # name -> job metadata
+        self._lock = threading.RLock()
 
     def init_app(self, app):
         """Initialize scheduler with Flask app."""
@@ -94,18 +96,22 @@ class SchedulerManager:
             Keyword arguments forwarded to the APScheduler trigger
             (e.g. ``hour=8, minute=30, day_of_week='mon-fri'``).
         """
-        self._job_registry[job_id] = {
-            'name': name,
-            'description': description,
-            'func': func,
-            'trigger': trigger,
-            'trigger_args': trigger_args,
-            'enabled': True,
-        }
+        with self._lock:
+            self._job_registry[job_id] = {
+                'name': name,
+                'description': description,
+                'func': func,
+                'trigger': trigger,
+                'trigger_args': trigger_args,
+                'enabled': True,
+            }
 
     def start_all_jobs(self):
         """Add all registered jobs to scheduler and start."""
-        for job_id, meta in self._job_registry.items():
+        with self._lock:
+            registry_snapshot = list(self._job_registry.items())
+
+        for job_id, meta in registry_snapshot:
             if meta['enabled']:
                 try:
                     self.scheduler.add_job(
@@ -127,8 +133,11 @@ class SchedulerManager:
 
     def get_all_jobs(self) -> List[Dict]:
         """List all jobs with their status."""
+        with self._lock:
+            registry_snapshot = list(self._job_registry.items())
+
         jobs = []
-        for job_id, meta in self._job_registry.items():
+        for job_id, meta in registry_snapshot:
             sched_job = self.scheduler.get_job(job_id) if self.scheduler else None
             jobs.append({
                 'id': job_id,
@@ -142,7 +151,8 @@ class SchedulerManager:
 
     def get_job(self, job_id: str) -> Optional[Dict]:
         """Get details for a single job by ID."""
-        meta = self._job_registry.get(job_id)
+        with self._lock:
+            meta = self._job_registry.get(job_id)
         if not meta:
             return None
         sched_job = self.scheduler.get_job(job_id) if self.scheduler else None
@@ -157,15 +167,17 @@ class SchedulerManager:
 
     def pause_job(self, job_id: str) -> bool:
         """Pause a job."""
-        if job_id not in self._job_registry:
-            logger.warning("Cannot pause unknown job: %s", job_id)
-            return False
+        with self._lock:
+            if job_id not in self._job_registry:
+                logger.warning("Cannot pause unknown job: %s", job_id)
+                return False
         try:
             if self.scheduler:
                 sched_job = self.scheduler.get_job(job_id)
                 if sched_job:
                     self.scheduler.pause_job(job_id)
-            self._job_registry[job_id]['enabled'] = False
+            with self._lock:
+                self._job_registry[job_id]['enabled'] = False
             logger.info("Paused job: %s", job_id)
             return True
         except Exception as exc:
@@ -174,9 +186,10 @@ class SchedulerManager:
 
     def resume_job(self, job_id: str) -> bool:
         """Resume a paused job."""
-        if job_id not in self._job_registry:
-            logger.warning("Cannot resume unknown job: %s", job_id)
-            return False
+        with self._lock:
+            if job_id not in self._job_registry:
+                logger.warning("Cannot resume unknown job: %s", job_id)
+                return False
         try:
             if self.scheduler:
                 sched_job = self.scheduler.get_job(job_id)
@@ -184,7 +197,8 @@ class SchedulerManager:
                     self.scheduler.resume_job(job_id)
                 else:
                     # Job was removed from scheduler while paused -- re-add it
-                    meta = self._job_registry[job_id]
+                    with self._lock:
+                        meta = self._job_registry[job_id]
                     self.scheduler.add_job(
                         meta['func'],
                         meta['trigger'],
@@ -193,7 +207,8 @@ class SchedulerManager:
                         replace_existing=True,
                         **meta['trigger_args'],
                     )
-            self._job_registry[job_id]['enabled'] = True
+            with self._lock:
+                self._job_registry[job_id]['enabled'] = True
             logger.info("Resumed job: %s", job_id)
             return True
         except Exception as exc:
@@ -202,11 +217,12 @@ class SchedulerManager:
 
     def trigger_job(self, job_id: str) -> bool:
         """Trigger immediate execution of a job."""
-        if job_id not in self._job_registry:
-            logger.warning("Cannot trigger unknown job: %s", job_id)
-            return False
-        try:
+        with self._lock:
+            if job_id not in self._job_registry:
+                logger.warning("Cannot trigger unknown job: %s", job_id)
+                return False
             meta = self._job_registry[job_id]
+        try:
             # Add a one-shot job that runs immediately
             if self.scheduler:
                 self.scheduler.add_job(
@@ -235,14 +251,16 @@ class SchedulerManager:
         **trigger_args
             New trigger keyword arguments.
         """
-        if job_id not in self._job_registry:
-            logger.warning("Cannot update unknown job: %s", job_id)
-            return False
-        try:
+        with self._lock:
+            if job_id not in self._job_registry:
+                logger.warning("Cannot update unknown job: %s", job_id)
+                return False
             # Update the registry
             self._job_registry[job_id]['trigger'] = trigger
             self._job_registry[job_id]['trigger_args'] = trigger_args
+            meta = self._job_registry[job_id]
 
+        try:
             # Reschedule in APScheduler
             if self.scheduler:
                 sched_job = self.scheduler.get_job(job_id)
@@ -250,7 +268,6 @@ class SchedulerManager:
                     self.scheduler.reschedule_job(job_id, trigger=trigger, **trigger_args)
                 else:
                     # Re-add if not currently in scheduler
-                    meta = self._job_registry[job_id]
                     self.scheduler.add_job(
                         meta['func'],
                         trigger,
