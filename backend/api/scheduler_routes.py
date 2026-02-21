@@ -35,6 +35,9 @@ def list_jobs():
     """
     sm = _get_scheduler_manager()
     jobs = sm.get_all_jobs()
+    tz = sm.get_scheduler_timezone()
+    for job in jobs:
+        job['timezone'] = tz
     return jsonify({'jobs': jobs, 'total': len(jobs)})
 
 
@@ -56,8 +59,9 @@ def get_job(job_id):
     if not job:
         return jsonify({'error': f'Job not found: {job_id}'}), 404
 
-    # Attach recent execution history
+    # Attach recent execution history and scheduler timezone
     job['recent_history'] = get_job_history(job_id=job_id, limit=10)
+    job['timezone'] = sm.get_scheduler_timezone()
     return jsonify(job)
 
 
