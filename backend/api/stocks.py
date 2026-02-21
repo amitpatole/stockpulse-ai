@@ -243,5 +243,17 @@ def search_stocks():
     if not query:
         return jsonify([])
 
-    results = search_stock_ticker(query)
+    query = query.strip()
+    if not query:
+        return jsonify({'error': 'Search query must not be blank'}), 400
+
+    if len(query) > 100:
+        return jsonify({'error': 'Search query must be 100 characters or fewer'}), 400
+
+    try:
+        results = search_stock_ticker(query)
+    except Exception as e:
+        logger.error(f"Error searching stock tickers for '{query}': {e}")
+        return jsonify({'error': 'Search service unavailable'}), 500
+
     return jsonify(results)
