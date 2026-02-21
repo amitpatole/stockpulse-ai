@@ -35,6 +35,8 @@ export default function PriceChart({
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const hasTimestamps = data.length > 0 && typeof data[0].time === 'number';
 
+    const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : '#3b82f6';
+
     const chart = createChart(containerRef.current, {
       height,
       layout: {
@@ -76,17 +78,19 @@ export default function PriceChart({
     chartRef.current = chart;
 
     const areaSeries = chart.addSeries(AreaSeries, {
-      lineColor: color,
-      topColor: `${color}33`,
-      bottomColor: `${color}05`,
+      lineColor: safeColor,
+      topColor: `${safeColor}33`,
+      bottomColor: `${safeColor}05`,
       lineWidth: 2,
     });
 
     if (data.length > 0) {
-      const chartData = data.map((d) => ({
-        time: (hasTimestamps ? d.time as UTCTimestamp : d.time as Time),
-        value: d.value,
-      }));
+      const chartData = data
+        .filter((d) => typeof d.value === 'number' && Number.isFinite(d.value))
+        .map((d) => ({
+          time: (hasTimestamps ? d.time as UTCTimestamp : d.time as Time),
+          value: d.value,
+        }));
       areaSeries.setData(chartData);
     }
 
