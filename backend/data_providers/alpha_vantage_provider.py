@@ -107,6 +107,7 @@ class AlphaVantageProvider(DataProvider):
             resp = self.session.get(self._base_url, params=params, timeout=15)
             self._request_count += 1
             self._last_request_time = datetime.now()
+            self._track_request()
             if resp.status_code == 200:
                 data = resp.json()
                 # Alpha Vantage returns an error message inside the JSON on

@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Dict, Any
+from typing import Callable, List, Optional, Dict, Any, Tuple
 from datetime import datetime
 import logging
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,116 @@ class DataProvider(ABC):
         self.api_key = api_key
         self._request_count = 0
         self._last_request_time = None
+        # Rate limit tracking (rolling 60-second window)
+        self._rl_timestamps: deque = deque()
+        self._rl_lock = threading.Lock()
+        self._rl_last_level: int = 0  # last threshold bucket: 0, 70, 90, or 100
+
+    # ------------------------------------------------------------------
+    # Rate limit tracking
+    # ------------------------------------------------------------------
+
+    def _track_request(self) -> None:
+        """Record a request in the rolling per-minute counter.
+
+        Fires an SSE ``rate_limit_update`` event when crossing the 70%, 90%,
+        or 100% thresholds (upward), or when dropping back below 70% (reset).
+        Always flushes the latest counters to the DB.
+        """
+        now = time.time()
+        with self._rl_lock:
+            self._rl_timestamps.append(now)
+            cutoff = now - 60.0
+            while self._rl_timestamps and self._rl_timestamps[0] < cutoff:
+                self._rl_timestamps.popleft()
+
+            used = len(self._rl_timestamps)
+            max_ = self._get_rl_max()
+            reset_at = self._compute_reset_at()
+            new_level = self._pct_level(used, max_)
+
+            # Notify on upward crossings AND on reset (drop to 0)
+            should_notify = new_level != self._rl_last_level and (
+                new_level > self._rl_last_level or new_level == 0
+            )
+            self._rl_last_level = new_level
+
+        if should_notify:
+            self._fire_rate_limit_sse(used, max_, reset_at)
+        self._flush_rate_limit_to_db(used, max_, reset_at)
+
+    def _get_rl_max(self) -> int:
+        try:
+            return self.get_provider_info().rate_limit_per_minute
+        except Exception:
+            return -1
+
+    def _compute_reset_at(self) -> Optional[str]:
+        """Return ISO-8601 UTC timestamp when the oldest request exits the window."""
+        if not self._rl_timestamps:
+            return None
+        reset_ts = self._rl_timestamps[0] + 60.0
+        return datetime.utcfromtimestamp(reset_ts).isoformat() + 'Z'
+
+    @staticmethod
+    def _pct_level(used: int, max_: int) -> int:
+        """Map usage percentage to threshold bucket (0, 70, 90, or 100)."""
+        if max_ <= 0:
+            return 0
+        pct = used / max_ * 100
+        if pct >= 100:
+            return 100
+        if pct >= 90:
+            return 90
+        if pct >= 70:
+            return 70
+        return 0
+
+    def _fire_rate_limit_sse(self, used: int, max_: int, reset_at: Optional[str]) -> None:
+        try:
+            from backend.app import send_sse_event  # lazy to avoid circular import
+            send_sse_event('rate_limit_update', {
+                'provider_id': self.get_provider_info().name,
+                'rate_limit_used': used,
+                'rate_limit_max': max_,
+                'reset_at': reset_at,
+            })
+        except Exception:
+            pass
+
+    def _flush_rate_limit_to_db(self, used: int, max_: int, reset_at: Optional[str]) -> None:
+        try:
+            from backend.database import db_session  # lazy to avoid circular import
+            provider_name = self.get_provider_info().name
+            with db_session() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO data_providers_config (provider_name) VALUES (?)",
+                    (provider_name,),
+                )
+                conn.execute(
+                    """UPDATE data_providers_config
+                          SET rate_limit_used = ?, rate_limit_max = ?, reset_at = ?
+                        WHERE provider_name = ?""",
+                    (used, max_, reset_at, provider_name),
+                )
+        except Exception:
+            pass
+
+    def get_rate_limit_status(self) -> Tuple[int, int, Optional[str]]:
+        """Return ``(rate_limit_used, rate_limit_max, reset_at)`` from in-memory state.
+
+        Prunes expired timestamps before computing the count so callers always
+        see an up-to-date view without waiting for the next tracked request.
+        """
+        now = time.time()
+        with self._rl_lock:
+            cutoff = now - 60.0
+            while self._rl_timestamps and self._rl_timestamps[0] < cutoff:
+                self._rl_timestamps.popleft()
+            used = len(self._rl_timestamps)
+            max_ = self._get_rl_max()
+            reset_at = self._compute_reset_at()
+        return used, max_, reset_at
 
     @abstractmethod
     def get_quote(self, ticker: str) -> Optional[Quote]:

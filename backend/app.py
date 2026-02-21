@@ -31,7 +31,7 @@ _ALLOWED_EVENT_TYPES = frozenset({
     'heartbeat', 'alert', 'provider_fallback', 'job_completed',
     'technical_alerts', 'regime_update', 'morning_briefing',
     'daily_summary', 'weekly_review', 'reddit_trending', 'download_tracker',
-    'snapshot',
+    'snapshot', 'rate_limit_update',
 })
 _MAX_PAYLOAD_BYTES = 65_536  # 64 KB
 
@@ -322,6 +322,7 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.alerts':           'alerts_bp',
         'backend.api.earnings':         'earnings_bp',
         'backend.api.sentiment':        'sentiment_bp',
+        'backend.api.providers':        'providers_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():

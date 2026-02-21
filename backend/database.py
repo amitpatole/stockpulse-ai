@@ -381,6 +381,23 @@ def _migrate_news(cursor) -> None:
         logger.info("Migration applied: added engagement_score to news table")
 
 
+def _migrate_data_providers_config(cursor) -> None:
+    """Add rate limit tracking columns to data_providers_config if missing."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(data_providers_config)").fetchall()}
+    if not cols:
+        return  # table doesn't exist yet; CREATE TABLE will handle it
+    migrations = []
+    if 'rate_limit_used' not in cols:
+        migrations.append("ALTER TABLE data_providers_config ADD COLUMN rate_limit_used INTEGER DEFAULT 0")
+    if 'rate_limit_max' not in cols:
+        migrations.append("ALTER TABLE data_providers_config ADD COLUMN rate_limit_max INTEGER DEFAULT -1")
+    if 'reset_at' not in cols:
+        migrations.append("ALTER TABLE data_providers_config ADD COLUMN reset_at TIMESTAMP")
+    for sql in migrations:
+        cursor.execute(sql)
+        logger.info(f"Migration applied: {sql}")
+
+
 def init_all_tables(db_path: str | None = None) -> None:
     """Create every table (existing + new v3.0) and apply indexes.
 
@@ -396,6 +413,7 @@ def init_all_tables(db_path: str | None = None) -> None:
         # Migrate existing tables before CREATE TABLE (which is a no-op if table exists)
         _migrate_agent_runs(cursor)
         _migrate_news(cursor)
+        _migrate_data_providers_config(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)
