@@ -155,6 +155,7 @@ def evaluate_price_alerts(tickers: list[str]) -> None:
 
             current_price, pct_change = prices[ticker]
             condition = alert['condition_type']
+            ticker = alert['ticker'].strip().upper()
             threshold = float(alert['threshold'])
             triggered = False
 
