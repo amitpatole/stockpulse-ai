@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, X } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Search, Plus, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { getRatings, addStock, deleteStock, searchStocks, ApiError } from '@/lib/api';
 import type { AIRating, StockSearchResult } from '@/lib/types';
@@ -19,8 +19,29 @@ export default function StockGrid() {
   const [addError, setAddError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [highlightIdx, setHighlightIdx] = useState(-1);
+  const [announceMsg, setAnnounceMsg] = useState('');
+  const [order, setOrder] = useState<string[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Sync order when ratings change: preserve custom order, append new, drop removed
+  useEffect(() => {
+    if (!ratings) return;
+    setOrder((prev) => {
+      const tickers = ratings.map((r) => r.ticker);
+      const kept = prev.filter((t) => tickers.includes(t));
+      const added = tickers.filter((t) => !prev.includes(t));
+      return [...kept, ...added];
+    });
+  }, [ratings]);
+
+  // Derive sorted ratings from custom order
+  const sortedRatings = useMemo(() => {
+    if (!ratings) return [];
+    return order
+      .map((ticker) => ratings.find((r) => r.ticker === ticker))
+      .filter((r): r is AIRating => r != null);
+  }, [ratings, order]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -75,6 +96,7 @@ export default function StockGrid() {
     try {
       await addStock(result.ticker, result.name);
       refetch();
+      setAnnounceMsg(`${result.ticker} added to watchlist`);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Failed to add stock');
     } finally {
@@ -99,32 +121,77 @@ export default function StockGrid() {
     }
   };
 
+  function moveUp(ticker: string) {
+    setOrder((prev) => {
+      const idx = prev.indexOf(ticker);
+      if (idx <= 0) return prev;
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      return next;
+    });
+  }
+
+  function moveDown(ticker: string) {
+    setOrder((prev) => {
+      const idx = prev.indexOf(ticker);
+      if (idx >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      return next;
+    });
+  }
+
   return (
     <div>
+      {/* Screen reader live announcement region */}
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announceMsg}
+      </div>
+
       {/* Search & Add Stock Bar */}
       <div ref={wrapperRef} className="relative mb-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <label htmlFor="stock-search-input" className="sr-only">
+              Search stocks to add to watchlist
+            </label>
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
             <input
+              id="stock-search-input"
               type="text"
+              role="combobox"
               value={query}
               onChange={(e) => handleInputChange(e.target.value)}
               onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
               onKeyDown={handleKeyDown}
               placeholder="Search stocks (e.g., AAPL, Tesla, Reliance)..."
+              aria-controls="stock-search-listbox"
+              aria-expanded={showDropdown}
+              aria-haspopup="listbox"
+              aria-autocomplete="list"
+              aria-activedescendant={
+                highlightIdx >= 0 ? `stock-option-${results[highlightIdx]?.ticker}` : undefined
+              }
               className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
               maxLength={40}
             />
             {(searching || adding) && (
-              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
+              <Loader2
+                className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400"
+                aria-hidden="true"
+              />
             )}
             {!searching && !adding && query && (
               <button
                 onClick={() => { setQuery(''); setResults([]); setShowDropdown(false); setAddError(null); }}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -138,10 +205,18 @@ export default function StockGrid() {
 
         {/* Search Results Dropdown */}
         {showDropdown && (
-          <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 shadow-xl">
+          <div
+            id="stock-search-listbox"
+            role="listbox"
+            aria-label="Stock search results"
+            className="absolute z-50 mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 shadow-xl"
+          >
             {results.map((result, idx) => (
               <button
                 key={result.ticker}
+                id={`stock-option-${result.ticker}`}
+                role="option"
+                aria-selected={idx === highlightIdx}
                 onClick={() => handleSelect(result)}
                 className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
                   idx === highlightIdx
@@ -163,7 +238,7 @@ export default function StockGrid() {
                   </div>
                   <p className="mt-0.5 truncate text-xs text-slate-400">{result.name}</p>
                 </div>
-                <Plus className="ml-3 h-4 w-4 flex-shrink-0 text-slate-500" />
+                <Plus className="ml-3 h-4 w-4 flex-shrink-0 text-slate-500" aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -178,7 +253,7 @@ export default function StockGrid() {
 
       {/* Loading State */}
       {loading && !ratings && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading watchlist">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-48 animate-pulse rounded-xl border border-slate-700/50 bg-slate-800/30" />
           ))}
@@ -187,7 +262,7 @@ export default function StockGrid() {
 
       {/* Error State */}
       {error && !ratings && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center" role="alert">
           <p className="text-sm text-red-400">{error}</p>
           <button
             onClick={refetch}
@@ -201,21 +276,45 @@ export default function StockGrid() {
       {/* Stock Cards Grid */}
       {ratings && (
         <>
-          {ratings.length === 0 ? (
+          {sortedRatings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-700 bg-slate-800/20 p-12 text-center">
               <p className="text-sm text-slate-400">No stocks monitored yet.</p>
               <p className="mt-1 text-xs text-slate-500">Search for a stock above to get started.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {ratings.map((rating) => (
-                <StockCard
-                  key={rating.ticker}
-                  rating={rating}
-                  onRemove={handleRemoveStock}
-                />
+            <ul
+              role="list"
+              aria-label="Watchlist stocks"
+              className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+            >
+              {sortedRatings.map((rating, idx) => (
+                <li key={rating.ticker} className="group relative">
+                  <StockCard
+                    rating={rating}
+                    onRemove={handleRemoveStock}
+                  />
+                  {/* Reorder controls — visible on keyboard focus-within */}
+                  <div className="absolute bottom-2 left-2 z-10 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100">
+                    <button
+                      onClick={() => moveUp(rating.ticker)}
+                      disabled={idx === 0}
+                      aria-label={`Move ${rating.ticker} up in watchlist`}
+                      className="flex h-6 w-6 items-center justify-center rounded bg-slate-700/90 text-slate-300 hover:bg-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronUp className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => moveDown(rating.ticker)}
+                      disabled={idx === sortedRatings.length - 1}
+                      aria-label={`Move ${rating.ticker} down in watchlist`}
+                      className="flex h-6 w-6 items-center justify-center rounded bg-slate-700/90 text-slate-300 hover:bg-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </>
       )}
@@ -226,6 +325,7 @@ export default function StockGrid() {
     try {
       await deleteStock(tickerToRemove);
       refetch();
+      setAnnounceMsg(`${tickerToRemove} removed from watchlist`);
     } catch {
       // Silently handle for now
     }
