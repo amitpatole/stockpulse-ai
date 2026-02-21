@@ -70,6 +70,8 @@ export interface ScheduledJob {
   next_run: string | null;
   last_run?: string | null;
   trigger: string;
+  trigger_args: Record<string, unknown>;
+  timezone: string;
   status?: string;
 }
 

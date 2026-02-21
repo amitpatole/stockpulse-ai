@@ -157,6 +157,12 @@ class SchedulerManager:
             logger.info("Scheduler started with %d active jobs",
                         len(self.scheduler.get_jobs()))
 
+    def get_scheduler_timezone(self) -> str:
+        """Return the IANA timezone name of the scheduler's configured timezone."""
+        if self.scheduler:
+            return str(self.scheduler.timezone)
+        return Config.MARKET_TIMEZONE
+
     def get_all_jobs(self) -> List[Dict]:
         """List all jobs with their status."""
         jobs = []
@@ -173,7 +179,7 @@ class SchedulerManager:
                 'name': meta['name'],
                 'description': meta['description'],
                 'enabled': meta['enabled'],
-                'next_run': str(sched_job.next_run_time) if sched_job and sched_job.next_run_time else None,
+                'next_run': sched_job.next_run_time.isoformat() if sched_job and sched_job.next_run_time else None,
                 'trigger': str(sched_job.trigger) if sched_job else meta['trigger'],
                 'trigger_args': trigger_args,
             })
@@ -195,7 +201,7 @@ class SchedulerManager:
                 'name': meta['name'],
                 'description': meta['description'],
                 'enabled': meta['enabled'],
-                'next_run': str(sched_job.next_run_time) if sched_job and sched_job.next_run_time else None,
+                'next_run': sched_job.next_run_time.isoformat() if sched_job and sched_job.next_run_time else None,
                 'trigger': str(sched_job.trigger) if sched_job else meta['trigger'],
                 'trigger_args': trigger_args,
             }

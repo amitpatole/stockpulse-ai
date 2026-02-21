@@ -19,14 +19,11 @@ import { getSchedulerJobs, triggerJob, pauseJob, resumeJob, getAgentRuns } from 
 import type { ScheduledJob, AgentRun } from '@/lib/types';
 
 function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'N/A';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  if (!dateStr) return '—';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(dateStr));
 }
 
 function formatDuration(ms: number): string {
