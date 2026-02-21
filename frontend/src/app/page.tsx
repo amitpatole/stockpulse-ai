@@ -5,6 +5,7 @@ import KPICards from '@/components/dashboard/KPICards';
 import StockGrid from '@/components/dashboard/StockGrid';
 import NewsFeed from '@/components/dashboard/NewsFeed';
 import EarningsCalendar from '@/components/dashboard/EarningsCalendar';
+import ProviderRateLimitPanel from '@/components/dashboard/ProviderRateLimitPanel';
 
 export default function DashboardPage() {
   return (
@@ -14,6 +15,11 @@ export default function DashboardPage() {
       <div className="flex-1 p-6">
         {/* KPI Cards Row */}
         <KPICards />
+
+        {/* API Rate Limit Indicator */}
+        <div className="mt-6">
+          <ProviderRateLimitPanel />
+        </div>
 
         {/* Main Content: Stock Grid + News Feed + Earnings */}
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
