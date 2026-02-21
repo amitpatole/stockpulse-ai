@@ -37,6 +37,37 @@ def _tz(name: str):
 logger = logging.getLogger(__name__)
 
 
+def _extract_trigger_args(trigger) -> Dict[str, Any]:
+    """Return a structured dict of trigger arguments from an APScheduler trigger.
+
+    Inspects the live trigger object so callers get the persisted/current
+    schedule rather than whatever happens to be cached in ``_job_registry``.
+    """
+    if trigger is None:
+        return {}
+    trigger_class = type(trigger).__name__
+    if trigger_class == 'CronTrigger':
+        args: Dict[str, Any] = {}
+        for field in getattr(trigger, 'fields', []):
+            if not getattr(field, 'is_default', True):
+                args[field.name] = str(field)
+        return args
+    if trigger_class == 'IntervalTrigger':
+        interval = getattr(trigger, 'interval', None)
+        if interval is None:
+            return {}
+        total = int(interval.total_seconds())
+        if total % 3600 == 0:
+            return {'hours': total // 3600}
+        if total % 60 == 0:
+            return {'minutes': total // 60}
+        return {'seconds': total}
+    if trigger_class == 'DateTrigger':
+        run_date = getattr(trigger, 'run_date', None)
+        return {'run_date': str(run_date)} if run_date else {}
+    return {}
+
+
 class SchedulerManager:
     """Manages all scheduled jobs for TickerPulse AI."""
 
@@ -113,15 +144,23 @@ class SchedulerManager:
         for job_id, meta in registry_snapshot:
             if meta['enabled']:
                 try:
-                    self.scheduler.add_job(
-                        meta['func'],
-                        meta['trigger'],
-                        id=job_id,
-                        name=meta['name'],
-                        replace_existing=True,
-                        **meta['trigger_args'],
-                    )
-                    logger.info("Scheduled job: %s (%s)", job_id, meta['name'])
+                    existing = self.scheduler.get_job(job_id) if self.scheduler else None
+                    if existing is not None:
+                        # Job already exists in the APScheduler jobstore (e.g. trigger
+                        # was rescheduled and persisted to SQLite).  Do not overwrite
+                        # with startup-code defaults; the store is authoritative.
+                        logger.info("Job already scheduled (persisted trigger preserved): %s (%s)",
+                                    job_id, meta['name'])
+                    else:
+                        self.scheduler.add_job(
+                            meta['func'],
+                            meta['trigger'],
+                            id=job_id,
+                            name=meta['name'],
+                            replace_existing=True,
+                            **meta['trigger_args'],
+                        )
+                        logger.info("Scheduled job: %s (%s)", job_id, meta['name'])
                 except Exception as exc:
                     logger.error("Failed to schedule job %s: %s", job_id, exc)
 
@@ -144,6 +183,7 @@ class SchedulerManager:
                 'enabled': meta['enabled'],
                 'next_run': str(sched_job.next_run_time) if sched_job and sched_job.next_run_time else None,
                 'trigger': str(sched_job.trigger) if sched_job else meta['trigger'],
+                'trigger_args': _extract_trigger_args(sched_job.trigger) if sched_job else meta['trigger_args'],
             })
         return jobs
 
@@ -161,6 +201,7 @@ class SchedulerManager:
                 'enabled': meta['enabled'],
                 'next_run': str(sched_job.next_run_time) if sched_job and sched_job.next_run_time else None,
                 'trigger': str(sched_job.trigger) if sched_job else meta['trigger'],
+                'trigger_args': _extract_trigger_args(sched_job.trigger) if sched_job else meta['trigger_args'],
             }
 
     def pause_job(self, job_id: str) -> bool:
@@ -251,11 +292,8 @@ class SchedulerManager:
                 logger.warning("Cannot update unknown job: %s", job_id)
                 return False
             try:
-                # Update the registry
-                self._job_registry[job_id]['trigger'] = trigger
-                self._job_registry[job_id]['trigger_args'] = trigger_args
-
-                # Reschedule in APScheduler
+                # Reschedule in APScheduler first; update registry only on success
+                # so a failure leaves the registry in its pre-call state.
                 if self.scheduler:
                     sched_job = self.scheduler.get_job(job_id)
                     if sched_job:
@@ -271,6 +309,10 @@ class SchedulerManager:
                             replace_existing=True,
                             **trigger_args,
                         )
+
+                # Update the registry only after APScheduler succeeds
+                self._job_registry[job_id]['trigger'] = trigger
+                self._job_registry[job_id]['trigger_args'] = trigger_args
                 logger.info("Updated schedule for job %s: trigger=%s, args=%s",
                             job_id, trigger, trigger_args)
                 return True
