@@ -5,6 +5,7 @@ Blueprint for AI ratings and chart data endpoints.
 
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+import math
 import sqlite3
 import logging
 
@@ -16,6 +17,25 @@ logger = logging.getLogger(__name__)
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api')
 
 AI_RATINGS_CACHE_TTL_SECONDS = 300  # 5 minutes, configurable
+
+
+def _parse_pagination(args):
+    """Parse and validate page/page_size query parameters.
+
+    Returns (page, page_size, error_response). On success, error_response is None.
+    On validation failure, page and page_size are None and error_response is a
+    (response, status_code) tuple ready to return from a Flask view.
+    """
+    try:
+        page = int(args.get('page', 1))
+        page_size = int(args.get('page_size', 25))
+    except (ValueError, TypeError):
+        return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+
+    if not (1 <= page_size <= 100):
+        return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
+
+    return page, page_size, None
 
 
 def _get_cached_ratings():
@@ -146,6 +166,10 @@ def get_chart_data(ticker):
         404: No data available or no valid data points.
     """
     period = request.args.get('period', '1mo')
+    page, page_size, err = _parse_pagination(request.args)
+    if err:
+        return err
+
     analytics = StockAnalytics()
     price_data = analytics.get_stock_price_data(ticker, period)
 
@@ -177,11 +201,18 @@ def get_chart_data(ticker):
     if not data_points:
         return jsonify({'error': 'No valid data points'}), 404
 
-    # Calculate price change
+    # Calculate price change and stats across the full dataset
     first_price = data_points[0]['close']
     last_price = data_points[-1]['close']
     price_change = last_price - first_price
     price_change_percent = (price_change / first_price) * 100 if first_price else 0
+
+    total = len(data_points)
+    total_pages = math.ceil(total / page_size)
+
+    # Slice data for the requested page (1-based: offset = (page-1) * page_size)
+    offset = (page - 1) * page_size
+    page_data = data_points[offset:offset + page_size]
 
     # Determine currency
     is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
@@ -190,7 +221,12 @@ def get_chart_data(ticker):
     return jsonify({
         'ticker': ticker,
         'period': period,
-        'data': data_points,
+        'data': page_data,
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'total_pages': total_pages,
+        'has_next': (page * page_size) < total,
         'currency_symbol': currency_symbol,
         'stats': {
             'current_price': last_price,
