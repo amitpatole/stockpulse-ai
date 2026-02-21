@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createChart, AreaSeries, ColorType, type IChartApi, type Time, type UTCTimestamp } from 'lightweight-charts';
+import { ChartDataSummary } from './ChartDataSummary';
 
 interface PriceDataPoint {
   time: string | number;
@@ -23,6 +24,9 @@ export default function PriceChart({
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const baseId = useId();
+  const titleId = `${baseId}-title`;
+  const summaryId = `${baseId}-summary`;
 
   const usesTimestamps = data.length > 0 && typeof data[0].time === 'number';
   const browserTimezone = usesTimestamps
@@ -109,10 +113,18 @@ export default function PriceChart({
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
-      {title && (
-        <h3 className="mb-3 text-sm font-semibold text-white">{title}</h3>
-      )}
-      <div ref={containerRef} className="w-full" />
+      <figure
+        role="img"
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={data.length > 0 ? summaryId : undefined}
+        className="m-0"
+      >
+        {title && (
+          <h3 id={titleId} className="mb-3 text-sm font-semibold text-white">{title}</h3>
+        )}
+        <div ref={containerRef} className="w-full" aria-hidden="true" />
+        <ChartDataSummary id={summaryId} data={data} />
+      </figure>
       {usesTimestamps && browserTimezone && (
         <p className="mt-2 text-right text-[10px] text-slate-500">
           All times in {browserTimezone}
