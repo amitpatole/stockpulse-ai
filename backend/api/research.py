@@ -12,6 +12,12 @@ import logging
 from backend.config import Config
 from backend.utils.export_briefs import build_zip, build_csv, build_pdf
 
+try:
+    import fpdf  # noqa: F401
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 research_bp = Blueprint('research', __name__, url_prefix='/api')
@@ -161,13 +167,26 @@ def export_briefs():
         return jsonify({'error': 'ids must be a non-empty array'}), 400
     if len(ids) > 100:
         return jsonify({'error': 'Too many briefs selected (max 100)'}), 400
-    if not all(isinstance(i, int) and i > 0 for i in ids):
+    if not all(isinstance(i, int) and not isinstance(i, bool) and i > 0 for i in ids):
         return jsonify({'error': 'ids must be an array of positive integers'}), 400
+
+    # -- Deduplicate ids while preserving first-occurrence order --------------
+    seen: set = set()
+    unique_ids: list = []
+    for i in ids:
+        if i not in seen:
+            seen.add(i)
+            unique_ids.append(i)
+    ids = unique_ids
 
     # -- Validate format ------------------------------------------------------
     ALLOWED_FORMATS = {'zip', 'csv', 'pdf'}
     if fmt not in ALLOWED_FORMATS:
         return jsonify({'error': f'format must be one of: {", ".join(sorted(ALLOWED_FORMATS))}'}), 400
+
+    # -- Reject PDF when the PDF library is unavailable -----------------------
+    if fmt == 'pdf' and not REPORTLAB_AVAILABLE:
+        return jsonify({'error': 'PDF export requires the reportlab library, which is not installed'}), 501
 
     # -- Fetch briefs from DB --------------------------------------------------
     try:

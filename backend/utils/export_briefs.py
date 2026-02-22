@@ -64,8 +64,7 @@ def build_csv(briefs: list[dict]) -> bytes:
     writer.writeheader()
     for brief in briefs:
         writer.writerow({k: brief.get(k, '') for k in fieldnames})
-    # UTF-8 BOM so Excel opens without encoding dialog
-    return ('\ufeff' + buf.getvalue()).encode('utf-8')
+    return buf.getvalue().encode('utf-8')
 
 
 def _latin1(text: str) -> str:
