@@ -270,6 +270,13 @@ export interface ComparisonResult {
   series: ComparisonSeries[];
 }
 
+export interface WatchlistImportResult {
+  added: number;
+  skipped_duplicates: number;
+  skipped_invalid: number;
+  invalid_symbols: string[];
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update' | 'snapshot';
 
@@ -290,6 +297,8 @@ export interface AlertEvent {
   type: string;
   message: string;
   severity: string;
+  sound_type?: string;
+  alert_id?: number;
 }
 
 export interface JobCompleteEvent {
@@ -299,9 +308,22 @@ export interface JobCompleteEvent {
   duration_ms?: number;
 }
 
+export type AlertPerSoundType = 'default' | 'chime' | 'alarm' | 'silent';
+
+export interface PriceAlert {
+  id: number;
+  ticker: string;
+  condition_type: 'price_above' | 'price_below' | 'pct_change';
+  threshold: number;
+  enabled: boolean;
+  triggered_at: string | null;
+  sound_type: AlertPerSoundType;
+  created_at: string;
+}
+
 export interface AlertSoundSettings {
   enabled: boolean;
-  sound_type: 'chime' | 'bell' | 'beep';
+  sound_type: 'chime' | 'alarm' | 'silent';
   volume: number;
   mute_when_active: boolean;
 }
