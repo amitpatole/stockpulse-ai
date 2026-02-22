@@ -108,6 +108,7 @@ def get_alerts():
     """
     conn = get_db_connection()
     try:
+        conn.execute('BEGIN DEFERRED')
         cursor = conn.cursor()
 
         cursor.execute('''
@@ -129,7 +130,7 @@ def get_alerts():
         'message': html.escape(alert['message'] or ''),
         'created_at': alert['created_at'],
         'title': html.escape(alert['title']) if alert['title'] else None,
-        'url': alert['url'],
+        'url': html.escape(alert['url']) if alert['url'] else None,
         'source': html.escape(alert['source']) if alert['source'] else None,
         'sentiment_score': alert['sentiment_score']
     } for alert in alerts])
