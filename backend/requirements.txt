@@ -29,6 +29,9 @@ langchain-core>=0.3.0
 # PDF parsing (transitive via yfinance/crewai; pinned to patched version, CVE: DoS/infinite loop/memory exhaustion)
 pypdf>=4.0.0
 
+# PDF generation (batch export for research briefs)
+fpdf2>=2.7.0
+
 # OpenClaw bridge (WebSocket client)
 websocket-client>=1.7.0
 

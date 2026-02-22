@@ -2,12 +2,22 @@
 
 import DOMPurify from 'dompurify';
 import { useState, useMemo } from 'react';
-import { FileText, Loader2, Calendar, Bot, Filter, Play } from 'lucide-react';
+import {
+  FileText,
+  Loader2,
+  Calendar,
+  Bot,
+  Filter,
+  Play,
+  Download,
+  CheckSquare,
+  Square,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import { useApi } from '@/hooks/useApi';
-import { getResearchBriefs, generateResearchBrief, getStocks } from '@/lib/api';
-import type { ResearchBrief, Stock } from '@/lib/types';
+import { getResearchBriefs, generateResearchBrief, getStocks, exportBriefs } from '@/lib/api';
+import type { ResearchBrief, Stock, ExportFormat } from '@/lib/types';
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -63,6 +73,12 @@ export default function ResearchPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
+  // Batch-export selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('zip');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const { data: briefs, loading, error, refetch } = useApi<ResearchBrief[]>(
     () => getResearchBriefs(filterTicker || undefined),
     [filterTicker],
@@ -78,6 +94,30 @@ export default function ResearchPage() {
     return Array.from(set).sort();
   }, [briefs]);
 
+  const allIds = useMemo(() => new Set((briefs ?? []).map((b) => b.id)), [briefs]);
+  const allSelected = allIds.size > 0 && allIds.size === selectedIds.size &&
+    [...allIds].every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allIds));
+    }
+  };
+
+  const toggleId = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   const handleGenerate = async () => {
     setGenerating(true);
     setGenError(null);
@@ -91,6 +131,35 @@ export default function ResearchPage() {
       setGenerating(false);
     }
   };
+
+  const handleExport = async () => {
+    if (selectedIds.size === 0 || selectedIds.size > 100 || exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const blob = await exportBriefs([...selectedIds], exportFormat);
+      const today = new Date().toISOString().slice(0, 10);
+      const filename = `research-brief-export-${today}.${exportFormat}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportDisabled = selectedIds.size === 0 || selectedIds.size > 100 || exporting;
+  const exportTitle =
+    selectedIds.size > 100
+      ? 'Max 100 briefs per export'
+      : selectedIds.size === 0
+      ? 'Select briefs to export'
+      : `Export ${selectedIds.size} brief${selectedIds.size !== 1 ? 's' : ''}`;
 
   return (
     <div className="flex flex-col">
@@ -107,6 +176,7 @@ export default function ResearchPage() {
               onChange={(e) => {
                 setFilterTicker(e.target.value);
                 setSelectedBrief(null);
+                setSelectedIds(new Set());
               }}
               className="bg-transparent text-sm text-slate-300 outline-none"
             >
@@ -150,13 +220,76 @@ export default function ResearchPage() {
           {/* Briefs List */}
           <div className="xl:col-span-1">
             <div className="rounded-xl border border-slate-700/50 bg-slate-800/50">
-              <div className="border-b border-slate-700/50 px-4 py-3">
-                <h2 className="text-sm font-semibold text-white">
-                  Briefs {briefs ? `(${briefs.length})` : ''}
-                </h2>
+              {/* List header with select-all */}
+              <div className="border-b border-slate-700/50 px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-slate-400 hover:text-slate-200 transition-colors"
+                    title={allSelected ? 'Deselect all' : 'Select all'}
+                    aria-label={allSelected ? 'Deselect all' : 'Select all'}
+                  >
+                    {allSelected ? (
+                      <CheckSquare className="h-4 w-4 text-blue-400" />
+                    ) : (
+                      <Square className="h-4 w-4" />
+                    )}
+                  </button>
+                  <h2 className="text-sm font-semibold text-white">
+                    Briefs {briefs ? `(${briefs.length})` : ''}
+                  </h2>
+                </div>
+                {selectedIds.size > 0 && (
+                  <span className="text-xs text-blue-400">{selectedIds.size} selected</span>
+                )}
               </div>
 
-              <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+              {/* Batch export toolbar — visible when at least one brief is selected */}
+              {selectedIds.size > 0 && (
+                <div className="border-b border-slate-700/50 px-4 py-2.5 bg-slate-900/60 flex flex-wrap items-center gap-2">
+                  <select
+                    value={exportFormat}
+                    onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+                    className="rounded bg-slate-700 px-2 py-1 text-xs text-slate-200 outline-none border border-slate-600 focus:border-blue-500"
+                    aria-label="Export format"
+                  >
+                    <option value="zip">ZIP (.md files)</option>
+                    <option value="csv">CSV</option>
+                    <option value="pdf">PDF</option>
+                  </select>
+
+                  <button
+                    onClick={handleExport}
+                    disabled={exportDisabled}
+                    title={exportTitle}
+                    className={clsx(
+                      'flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors',
+                      exportDisabled
+                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    )}
+                  >
+                    {exporting ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Download className="h-3 w-3" />
+                    )}
+                    {exporting ? 'Exporting…' : 'Export'}
+                  </button>
+
+                  {selectedIds.size > 100 && (
+                    <span className="text-xs text-amber-400">Max 100 briefs per export</span>
+                  )}
+                </div>
+              )}
+
+              {exportError && (
+                <div className="px-4 py-2 bg-red-900/20 border-b border-red-800/40">
+                  <p className="text-xs text-red-400">{exportError}</p>
+                </div>
+              )}
+
+              <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
                 {loading && !briefs && (
                   <div className="space-y-3 p-4">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -180,29 +313,50 @@ export default function ResearchPage() {
                 {briefs && briefs.length > 0 && (
                   <div className="divide-y divide-slate-700/30">
                     {briefs.map((brief) => (
-                      <button
+                      <div
                         key={brief.id}
-                        onClick={() => setSelectedBrief(brief)}
                         className={clsx(
-                          'w-full px-4 py-3 text-left transition-colors hover:bg-slate-700/20',
+                          'flex items-start gap-2 px-3 py-3 transition-colors',
                           selectedBrief?.id === brief.id && 'bg-blue-500/10 border-l-2 border-blue-500'
                         )}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
-                            {brief.ticker}
-                          </span>
-                          <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                            <Bot className="h-2.5 w-2.5" />
-                            {brief.agent_name}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-300 line-clamp-2">{brief.title}</p>
-                        <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
-                          <Calendar className="h-2.5 w-2.5" />
-                          {formatDate(brief.created_at)}
-                        </div>
-                      </button>
+                        {/* Checkbox — stop propagation so row click still opens detail */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleId(brief.id);
+                          }}
+                          className="mt-0.5 shrink-0 text-slate-400 hover:text-slate-200 transition-colors"
+                          aria-label={selectedIds.has(brief.id) ? `Deselect ${brief.title}` : `Select ${brief.title}`}
+                        >
+                          {selectedIds.has(brief.id) ? (
+                            <CheckSquare className="h-4 w-4 text-blue-400" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+
+                        {/* Row content — clicking opens detail view */}
+                        <button
+                          onClick={() => setSelectedBrief(brief)}
+                          className="flex-1 text-left hover:bg-slate-700/10 rounded transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+                              {brief.ticker}
+                            </span>
+                            <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                              <Bot className="h-2.5 w-2.5" />
+                              {brief.agent_name}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-300 line-clamp-2">{brief.title}</p>
+                          <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
+                            <Calendar className="h-2.5 w-2.5" />
+                            {formatDate(brief.created_at)}
+                          </div>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
