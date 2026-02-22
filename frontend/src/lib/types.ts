@@ -324,7 +324,7 @@ export interface JobCompleteEvent {
 
 export interface AlertSoundSettings {
   enabled: boolean;
-  sound_type: 'chime' | 'alarm' | 'silent';
+  sound_type: 'default' | 'chime' | 'alarm' | 'silent';
   volume: number;
   mute_when_active: boolean;
 }
@@ -359,3 +359,10 @@ export const AGENT_STATUS_COLORS: Record<string, string> = {
   error: 'bg-red-500',
   disabled: 'bg-slate-500',
 };
+
+export interface WatchlistImportResult {
+  added: number;
+  skipped_duplicates: number;
+  skipped_invalid: number;
+  invalid_symbols: string[];
+}

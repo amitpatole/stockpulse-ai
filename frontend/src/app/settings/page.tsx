@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Key,
   CheckCircle,
@@ -12,12 +12,16 @@ import {
   Brain,
   Eye,
   EyeOff,
+  Volume2,
+  VolumeX,
+  Bell,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
+import PriceAlertsPanel from '@/components/alerts/PriceAlertsPanel';
 import { useApi } from '@/hooks/useApi';
-import { getAIProviders, getHealth } from '@/lib/api';
-import type { AIProvider, HealthCheck } from '@/lib/types';
+import { getAIProviders, getHealth, getAlertSoundSettings, updateAlertSoundSettings } from '@/lib/api';
+import type { AIProvider, HealthCheck, AlertSoundSettings } from '@/lib/types';
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: 'border-green-500/30 bg-green-500/5',
@@ -148,6 +152,162 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
         {testResult === 'error' && (
           <span className="flex items-center gap-1 text-xs text-red-400">
             <XCircle className="h-3 w-3" /> Failed
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const GLOBAL_SOUND_OPTIONS = [
+  { value: 'chime', label: 'Chime' },
+  { value: 'alarm', label: 'Alarm' },
+  { value: 'silent', label: 'Silent' },
+] as const;
+
+function AlertSoundsSection() {
+  const { data: settings, loading } = useApi<AlertSoundSettings>(getAlertSoundSettings, []);
+  const [local, setLocal] = useState<AlertSoundSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    if (settings && !local) {
+      setLocal(settings);
+    }
+  }, [settings, local]);
+
+  const handleSave = async () => {
+    if (!local) return;
+    setSaving(true);
+    setSaveStatus('idle');
+    try {
+      await updateAlertSoundSettings(local);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading && !local) {
+    return (
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5">
+        <div className="h-32 animate-pulse rounded-lg bg-slate-700/30" />
+      </div>
+    );
+  }
+
+  const current = local ?? settings;
+  if (!current) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5">
+      <div className="flex items-center gap-3 mb-5">
+        <Bell className="h-5 w-5 text-blue-400" />
+        <div>
+          <p className="text-sm font-medium text-white">Alert Sound Settings</p>
+          <p className="text-xs text-slate-400">Global defaults for price alert notifications</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between">
+          <label className="text-sm text-slate-300">Enable sound notifications</label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={current.enabled}
+            aria-label="Enable sound notifications"
+            onClick={() => setLocal({ ...current, enabled: !current.enabled })}
+            className="flex items-center gap-1.5 text-sm transition-colors"
+          >
+            {current.enabled ? (
+              <Volume2 className="h-5 w-5 text-blue-400" />
+            ) : (
+              <VolumeX className="h-5 w-5 text-slate-500" />
+            )}
+            <span className={current.enabled ? 'text-blue-400' : 'text-slate-500'}>
+              {current.enabled ? 'On' : 'Off'}
+            </span>
+          </button>
+        </div>
+
+        {/* Default sound type */}
+        <div>
+          <label className="mb-1.5 block text-xs text-slate-400">Default sound</label>
+          <select
+            value={current.sound_type}
+            onChange={(e) =>
+              setLocal({
+                ...current,
+                sound_type: e.target.value as AlertSoundSettings['sound_type'],
+              })
+            }
+            className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+            aria-label="Default alert sound"
+          >
+            {GLOBAL_SOUND_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-slate-800">
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Volume */}
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-xs text-slate-400">Volume</label>
+            <span className="text-xs font-mono text-slate-400">{current.volume}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={current.volume}
+            onChange={(e) => setLocal({ ...current, volume: Number(e.target.value) })}
+            aria-label="Alert sound volume"
+            className="w-full accent-blue-500"
+          />
+        </div>
+
+        {/* Mute when active */}
+        <div className="flex items-center gap-3">
+          <input
+            id="mute-when-active"
+            type="checkbox"
+            checked={current.mute_when_active}
+            onChange={(e) => setLocal({ ...current, mute_when_active: e.target.checked })}
+            className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 accent-blue-500"
+            aria-label="Mute when tab is focused"
+          />
+          <label htmlFor="mute-when-active" className="cursor-pointer text-sm text-slate-300">
+            Mute when tab is focused
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Save Sound Settings
+        </button>
+        {saveStatus === 'saved' && (
+          <span className="flex items-center gap-1 text-xs text-emerald-400">
+            <CheckCircle className="h-3.5 w-3.5" /> Saved
+          </span>
+        )}
+        {saveStatus === 'error' && (
+          <span className="flex items-center gap-1 text-xs text-red-400">
+            <XCircle className="h-3.5 w-3.5" /> Save failed
           </span>
         )}
       </div>
@@ -288,7 +448,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Data Providers / System Health */}
-        <div>
+        <div className="mb-8">
           <h2 className="mb-4 text-sm font-semibold text-white">System Status</h2>
           <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5">
             <div className="flex items-center gap-3 mb-4">
@@ -341,6 +501,18 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Alert Sounds */}
+        <div className="mb-8">
+          <h2 className="mb-4 text-sm font-semibold text-white">Alert Sounds</h2>
+          <AlertSoundsSection />
+        </div>
+
+        {/* Price Alerts */}
+        <div>
+          <h2 className="mb-4 text-sm font-semibold text-white">Price Alerts</h2>
+          <PriceAlertsPanel />
         </div>
       </div>
     </div>

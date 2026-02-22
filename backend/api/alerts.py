@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 alerts_bp = Blueprint('alerts', __name__, url_prefix='/api')
 
-_VALID_SOUND_TYPES = {'chime', 'bell', 'beep'}
+_VALID_SOUND_TYPES = {'default', 'chime', 'alarm', 'silent'}
 
 _SOUND_DEFAULTS = {
     'alert_sound_enabled': 'true',
@@ -80,6 +80,13 @@ def create_alert_endpoint():
     if condition_type == 'pct_change' and threshold > 100:
         return jsonify({'error': 'threshold for pct_change must be ≤ 100'}), 400
 
+    # Validate optional sound_type
+    sound_type = str(data.get('sound_type', 'default')).strip()
+    if sound_type not in _VALID_SOUND_TYPES:
+        return jsonify({
+            'error': f"Invalid sound_type. Must be one of: {', '.join(sorted(_VALID_SOUND_TYPES))}"
+        }), 400
+
     # Verify the ticker exists in the stocks table
     with db_session() as conn:
         row = conn.execute(
@@ -90,7 +97,7 @@ def create_alert_endpoint():
             'error': f"Ticker '{ticker}' is not in the monitored stocks list. Add it first."
         }), 400
 
-    alert = create_alert(ticker, condition_type, threshold)
+    alert = create_alert(ticker, condition_type, threshold, sound_type)
     return jsonify(alert), 201
 
 
@@ -118,6 +125,30 @@ def toggle_alert_endpoint(alert_id: int):
     if updated is None:
         return jsonify({'error': f'Alert {alert_id} not found'}), 404
     return jsonify(updated)
+
+
+@alerts_bp.route('/alerts/<int:alert_id>/sound', methods=['PUT'])
+def update_alert_sound_endpoint(alert_id: int):
+    """Update the sound_type of a specific price alert.
+
+    Request Body (JSON):
+        sound_type (str): One of 'default', 'chime', 'alarm', 'silent'.
+
+    Returns:
+        200 with updated alert, 400 on bad sound_type, 404 if not found.
+    """
+    data = request.get_json(silent=True) or {}
+    sound_type = str(data.get('sound_type', '')).strip()
+
+    if sound_type not in _VALID_SOUND_TYPES:
+        return jsonify({
+            'error': f"Invalid sound_type. Must be one of: {', '.join(sorted(_VALID_SOUND_TYPES))}"
+        }), 400
+
+    updated = update_alert_sound_type(alert_id, sound_type)
+    if updated is None:
+        return jsonify({'error': f'Alert {alert_id} not found'}), 404
+    return jsonify({'id': updated['id'], 'sound_type': updated['sound_type']})
 
 
 @alerts_bp.route('/alerts/sound-settings', methods=['GET'])

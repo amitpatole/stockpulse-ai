@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Activity,
   Zap,
+  Bell,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/agents', label: 'Agents', icon: Bot },
   { href: '/research', label: 'Research', icon: FileSearch },
   { href: '/scheduler', label: 'Scheduler', icon: Calendar },
+  { href: '/alerts', label: 'Alerts', icon: Bell },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
