@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback } from 'react';
+import { use, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -8,6 +8,7 @@ import Header from '@/components/layout/Header';
 import StockPriceChart from '@/components/stocks/StockPriceChart';
 import SentimentBadge from '@/components/stocks/SentimentBadge';
 import { useApi } from '@/hooks/useApi';
+import { useSSE } from '@/hooks/useSSE';
 import { getStockDetail } from '@/lib/api';
 
 interface StockDetailPageProps {
@@ -34,7 +35,23 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
   // Fetch with default 1M timeframe for the quote stats at the top.
   // StockPriceChart manages its own timeframe state independently.
   const fetcher = useCallback(() => getStockDetail(upperTicker, '1M'), [upperTicker]);
-  const { data, loading, error } = useApi(fetcher, [upperTicker]);
+  const { data, loading, error, refetch } = useApi(fetcher, [upperTicker]);
+
+  // Refetch stock detail when a snapshot or ticker-matching news SSE event arrives.
+  const { lastEvent } = useSSE();
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (lastEvent.type === 'snapshot') {
+      refetch();
+      return;
+    }
+    if (lastEvent.type === 'news') {
+      const eventTicker = (lastEvent.data?.ticker as string | undefined)?.toUpperCase();
+      if (eventTicker === upperTicker) {
+        refetch();
+      }
+    }
+  }, [lastEvent, refetch, upperTicker]);
 
   const quote = data?.quote;
   const isPositive = (quote?.change_pct ?? 0) > 0;

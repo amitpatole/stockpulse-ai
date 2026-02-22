@@ -163,6 +163,24 @@ def _compute_sentiment(ticker: str, db_path: str) -> dict:
     }
 
 
+def invalidate_ticker(ticker: str, db_path: str | None = None) -> None:
+    """Evict *ticker* from the sentiment cache.
+
+    The next call to :func:`get_sentiment` for this ticker will recompute
+    scores from the source tables rather than returning a stale cached value.
+    """
+    db_path = db_path or Config.DB_PATH
+    ticker = ticker.upper()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute("DELETE FROM sentiment_cache WHERE ticker = ?", (ticker,))
+        conn.commit()
+        conn.close()
+        logger.debug("Sentiment cache invalidated for %s", ticker)
+    except Exception as exc:
+        logger.warning("Cache invalidation failed for %s: %s", ticker, exc)
+
+
 def get_sentiment(ticker: str, db_path: str | None = None) -> dict:
     """Return cached or freshly-computed sentiment for *ticker*.
 
