@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -29,18 +30,29 @@ function formatVolume(v: number): string {
 }
 
 export default function StockDetailPage({ params }: StockDetailPageProps) {
+  const router = useRouter();
   const { ticker } = use(params);
-  const upperTicker = ticker.toUpperCase();
+  const isInvalidTicker = !ticker || !ticker.trim();
+  const upperTicker = isInvalidTicker ? '' : ticker.toUpperCase();
+
+  // Redirect to home with error when ticker param is empty or whitespace.
+  useEffect(() => {
+    if (isInvalidTicker) {
+      router.replace('/?error=missing-ticker');
+    }
+  }, [isInvalidTicker, router]);
 
   // Fetch with default 1M timeframe for the quote stats at the top.
   // StockPriceChart manages its own timeframe state independently.
   const fetcher = useCallback(() => getStockDetail(upperTicker, '1M'), [upperTicker]);
-  const { data, loading, error, refetch } = useApi(fetcher, [upperTicker]);
+  const { data, loading, error, refetch } = useApi(fetcher, [upperTicker], {
+    enabled: !isInvalidTicker,
+  });
 
   // Refetch stock detail when a snapshot or ticker-matching news SSE event arrives.
   const { lastEvent } = useSSE();
   useEffect(() => {
-    if (!lastEvent) return;
+    if (isInvalidTicker || !lastEvent) return;
     if (lastEvent.type === 'snapshot') {
       refetch();
       return;
@@ -51,7 +63,11 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
         refetch();
       }
     }
-  }, [lastEvent, refetch, upperTicker]);
+  }, [lastEvent, refetch, upperTicker, isInvalidTicker]);
+
+  if (isInvalidTicker) {
+    return null;
+  }
 
   const quote = data?.quote;
   const isPositive = (quote?.change_pct ?? 0) > 0;

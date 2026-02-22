@@ -250,6 +250,26 @@ export interface ProviderRateLimitsResponse {
   polled_at: string;
 }
 
+// Performance Comparison Types
+
+export interface ComparisonCandle {
+  time: number;
+  value: number;
+}
+
+export interface ComparisonSeries {
+  ticker: string;
+  name: string;
+  candles: ComparisonCandle[];
+  delta_pct: number;
+  error: string | null;
+}
+
+export interface ComparisonResult {
+  timeframe: string;
+  series: ComparisonSeries[];
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update' | 'snapshot';
 

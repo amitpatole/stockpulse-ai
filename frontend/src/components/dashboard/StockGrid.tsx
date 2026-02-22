@@ -18,10 +18,12 @@ export default function StockGrid() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [announceMsg, setAnnounceMsg] = useState('');
   const [order, setOrder] = useState<string[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Sync order when ratings change: preserve custom order, append new, drop removed
@@ -83,6 +85,7 @@ export default function StockGrid() {
     setQuery(value);
     setAddError(null);
     setSearchError(null);
+    if (value.trim()) setValidationError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(value), 300);
   };
@@ -105,6 +108,13 @@ export default function StockGrid() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !query.trim()) {
+      e.preventDefault();
+      setValidationError('Please enter a ticker symbol');
+      inputRef.current?.focus();
+      return;
+    }
+
     if (!showDropdown || results.length === 0) return;
 
     if (e.key === 'ArrowDown') {
