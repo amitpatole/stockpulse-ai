@@ -1,0 +1,5 @@
+# VO-777: Missing input validation in chart rendering allows injection
+
+## User Story
+
+You're out of extra usage · resets Feb 23, 7pm (UTC)
