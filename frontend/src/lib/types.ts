@@ -270,6 +270,13 @@ export interface ComparisonResult {
   series: ComparisonSeries[];
 }
 
+export interface Watchlist {
+  id: number;
+  name: string;
+  stock_count: number;
+  created_at?: string;
+}
+
 export interface WatchlistImportResult {
   added: number;
   skipped_duplicates: number;

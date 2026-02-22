@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Plus, Loader2, X, ChevronUp, ChevronDown, Upload } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { getRatings, addStock, deleteStock, searchStocks, ApiError } from '@/lib/api';
 import type { AIRating, StockSearchResult } from '@/lib/types';
 import StockCard from './StockCard';
+import WatchlistImportModal from './WatchlistImportModal';
 
 export default function StockGrid() {
   const { data: ratings, loading, error, refetch } = useApi<AIRating[]>(getRatings, [], {
@@ -22,8 +23,10 @@ export default function StockGrid() {
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [announceMsg, setAnnounceMsg] = useState('');
   const [order, setOrder] = useState<string[]>([]);
+  const [showImportModal, setShowImportModal] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const importBtnRef = useRef<HTMLButtonElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Sync order when ratings change: preserve custom order, append new, drop removed
