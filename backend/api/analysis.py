@@ -119,8 +119,25 @@ def get_ai_ratings():
                 'message': str(e)
             }
 
-    # Return only active stocks, sorted by ticker
-    results = [cached_map[t] for t in sorted(active_tickers) if t in cached_map]
+    # Return active stocks ordered by watchlist_stocks.position for watchlist 1,
+    # then alphabetically for any active stocks not in watchlist 1.
+    try:
+        conn2 = sqlite3.connect(Config.DB_PATH)
+        conn2.row_factory = sqlite3.Row
+        wl_order = [
+            row['ticker']
+            for row in conn2.execute(
+                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = 1 ORDER BY position, ticker"
+            ).fetchall()
+        ]
+        conn2.close()
+    except Exception:
+        wl_order = []
+
+    wl_set = set(wl_order)
+    ordered = [t for t in wl_order if t in cached_map]
+    remaining = sorted(t for t in active_tickers if t not in wl_set and t in cached_map)
+    results = [cached_map[t] for t in ordered + remaining]
     return jsonify(results)
 
 

@@ -271,6 +271,7 @@ _NEW_TABLES_SQL = [
     CREATE TABLE IF NOT EXISTS watchlist_stocks (
         watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
         ticker       TEXT NOT NULL REFERENCES stocks(ticker),
+        position     INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (watchlist_id, ticker)
     )
     """,
@@ -331,6 +332,7 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wl    ON watchlist_stocks (watchlist_id)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_tk    ON watchlist_stocks (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_pos   ON watchlist_stocks (watchlist_id, position)",
     "CREATE INDEX IF NOT EXISTS idx_price_alerts_enabled   ON price_alerts (enabled, ticker)",
     "CREATE INDEX IF NOT EXISTS idx_sentiment_ticker       ON sentiment_cache (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_earnings_date          ON earnings_events (earnings_date)",
@@ -381,6 +383,47 @@ def _migrate_news(cursor) -> None:
         logger.info("Migration applied: added engagement_score to news table")
 
 
+def _backfill_watchlist_positions(cursor) -> None:
+    """Assign sequential 0-based positions alphabetically within each watchlist.
+
+    Safe to call when all rows in a watchlist have the same position value
+    (e.g. all 0 after an ALTER TABLE … DEFAULT 0 or a bulk INSERT).
+    Skips watchlists that already have unique positions set by the user.
+    """
+    wl_ids = [row[0] for row in cursor.execute(
+        "SELECT DISTINCT watchlist_id FROM watchlist_stocks"
+    ).fetchall()]
+    for wl_id in wl_ids:
+        positions = [row[0] for row in cursor.execute(
+            "SELECT position FROM watchlist_stocks WHERE watchlist_id = ?", (wl_id,)
+        ).fetchall()]
+        if len(positions) <= 1 or len(set(positions)) == len(positions):
+            continue  # Already unique — user has set a custom order, leave it alone
+        tickers = [row[0] for row in cursor.execute(
+            "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY ticker",
+            (wl_id,),
+        ).fetchall()]
+        for pos, ticker in enumerate(tickers):
+            cursor.execute(
+                "UPDATE watchlist_stocks SET position = ? WHERE watchlist_id = ? AND ticker = ?",
+                (pos, wl_id, ticker),
+            )
+
+
+def _migrate_watchlist_stocks(cursor) -> None:
+    """Add position column to watchlist_stocks if missing and backfill alphabetically."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(watchlist_stocks)").fetchall()}
+    if not cols:
+        return  # Table doesn't exist yet; CREATE TABLE will handle it
+    if 'position' in cols:
+        return  # Already migrated
+    cursor.execute(
+        "ALTER TABLE watchlist_stocks ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+    )
+    _backfill_watchlist_positions(cursor)
+    logger.info("Migration applied: added position column to watchlist_stocks and backfilled alphabetically")
+
+
 def _migrate_data_providers_config(cursor) -> None:
     """Add rate limit tracking columns to data_providers_config if missing."""
     cols = {row[1] for row in cursor.execute("PRAGMA table_info(data_providers_config)").fetchall()}
@@ -414,6 +457,7 @@ def init_all_tables(db_path: str | None = None) -> None:
         _migrate_agent_runs(cursor)
         _migrate_news(cursor)
         _migrate_data_providers_config(cursor)
+        _migrate_watchlist_stocks(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)
@@ -427,6 +471,8 @@ def init_all_tables(db_path: str | None = None) -> None:
             "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) "
             "SELECT 1, ticker FROM stocks WHERE active = 1"
         )
+        # Fix any duplicate positions (happens on first seed where all rows default to 0)
+        _backfill_watchlist_positions(cursor)
 
         conn.commit()
         logger.info("All database tables and indexes initialised successfully")

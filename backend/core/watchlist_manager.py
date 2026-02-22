@@ -57,7 +57,7 @@ def get_watchlist(watchlist_id: int) -> Optional[Dict]:
         tickers = [
             r["ticker"]
             for r in conn.execute(
-                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY ticker",
+                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY position, ticker",
                 (watchlist_id,),
             ).fetchall()
         ]
@@ -136,10 +136,22 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
             ).fetchone()
             if wl is None:
                 return False
-            conn.execute(
-                "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) VALUES (?, ?)",
+            # Check if ticker is already in the watchlist
+            already = conn.execute(
+                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? AND ticker = ?",
                 (watchlist_id, ticker),
-            )
+            ).fetchone()
+            if not already:
+                # Append at end: position = max existing position + 1
+                max_pos_row = conn.execute(
+                    "SELECT COALESCE(MAX(position), -1) FROM watchlist_stocks WHERE watchlist_id = ?",
+                    (watchlist_id,),
+                ).fetchone()
+                next_pos = (max_pos_row[0] + 1) if max_pos_row else 0
+                conn.execute(
+                    "INSERT INTO watchlist_stocks (watchlist_id, ticker, position) VALUES (?, ?, ?)",
+                    (watchlist_id, ticker, next_pos),
+                )
         # Invalidate stale cache so next ratings fetch recomputes fresh
         with db_session() as conn:
             conn.execute("DELETE FROM ai_ratings WHERE ticker = ?", (ticker,))
@@ -162,3 +174,24 @@ def remove_stock_from_watchlist(watchlist_id: int, ticker: str) -> bool:
     with db_session() as conn:
         conn.execute("DELETE FROM ai_ratings WHERE ticker = ?", (ticker,))
     return result.rowcount > 0
+
+
+def reorder_stocks(watchlist_id: int, tickers: list) -> bool:
+    """Persist a new position order for stocks in a watchlist.
+
+    Each ticker in ``tickers`` gets its position set to its index (0-based).
+    Tickers not present in the watchlist are silently skipped.
+    Returns False if the watchlist does not exist, True on success.
+    """
+    with db_session() as conn:
+        wl = conn.execute(
+            "SELECT id FROM watchlists WHERE id = ?", (watchlist_id,)
+        ).fetchone()
+        if wl is None:
+            return False
+        for idx, ticker in enumerate(tickers):
+            conn.execute(
+                "UPDATE watchlist_stocks SET position = ? WHERE watchlist_id = ? AND ticker = ?",
+                (idx, watchlist_id, ticker.strip().upper()),
+            )
+    return True
