@@ -331,6 +331,7 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_wl    ON watchlist_stocks (watchlist_id)",
     "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_tk    ON watchlist_stocks (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_watchlist_stocks_pos   ON watchlist_stocks (watchlist_id, position)",
     "CREATE INDEX IF NOT EXISTS idx_price_alerts_enabled   ON price_alerts (enabled, ticker)",
     "CREATE INDEX IF NOT EXISTS idx_sentiment_ticker       ON sentiment_cache (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_earnings_date          ON earnings_events (earnings_date)",

@@ -9,6 +9,13 @@ export interface Stock {
   added_at?: string;
 }
 
+export interface WatchlistData {
+  id: number;
+  name: string;
+  tickers: string[];
+  created_at?: string;
+}
+
 export interface StockSearchResult {
   ticker: string;
   name: string;

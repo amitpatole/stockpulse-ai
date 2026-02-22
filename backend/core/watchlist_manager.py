@@ -57,7 +57,7 @@ def get_watchlist(watchlist_id: int) -> Optional[Dict]:
         tickers = [
             r["ticker"]
             for r in conn.execute(
-                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY ticker",
+                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY position ASC, ticker ASC",
                 (watchlist_id,),
             ).fetchall()
         ]
@@ -162,3 +162,24 @@ def remove_stock_from_watchlist(watchlist_id: int, ticker: str) -> bool:
     with db_session() as conn:
         conn.execute("DELETE FROM ai_ratings WHERE ticker = ?", (ticker,))
     return result.rowcount > 0
+
+
+def reorder_stocks(watchlist_id: int, tickers: List[str]) -> bool:
+    """Persist a new display order for stocks in a watchlist.
+
+    Assigns ``position = index`` for each ticker in the given list.
+    Tickers not present in the watchlist are silently skipped.
+    Returns False if the watchlist does not exist, True on success.
+    """
+    with db_session() as conn:
+        wl = conn.execute(
+            "SELECT id FROM watchlists WHERE id = ?", (watchlist_id,)
+        ).fetchone()
+        if wl is None:
+            return False
+        for idx, ticker in enumerate(tickers):
+            conn.execute(
+                "UPDATE watchlist_stocks SET position = ? WHERE watchlist_id = ? AND ticker = ?",
+                (idx, watchlist_id, ticker.strip().upper()),
+            )
+    return True
