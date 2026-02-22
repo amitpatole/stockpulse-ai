@@ -384,13 +384,13 @@ def _migrate_news(cursor) -> None:
 
 
 def _migrate_watchlist_stocks(cursor) -> None:
-    """Add position column to watchlist_stocks if missing and initialise positions."""
+    """Add sort_order column to watchlist_stocks if missing and initialise values."""
     cols = {row[1] for row in cursor.execute("PRAGMA table_info(watchlist_stocks)").fetchall()}
     if not cols:
         return  # table doesn't exist yet; CREATE TABLE will handle it
-    if 'position' not in cols:
-        cursor.execute("ALTER TABLE watchlist_stocks ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
-        # Initialise positions alphabetically within each watchlist so the
+    if 'sort_order' not in cols:
+        cursor.execute("ALTER TABLE watchlist_stocks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+        # Initialise sort_order alphabetically within each watchlist so the
         # existing order is deterministic for users upgrading from older DBs.
         watchlist_ids = [row[0] for row in cursor.execute("SELECT id FROM watchlists").fetchall()]
         for wl_id in watchlist_ids:
@@ -400,12 +400,11 @@ def _migrate_watchlist_stocks(cursor) -> None:
                     (wl_id,),
                 ).fetchall()
             ]
-            for pos, ticker in enumerate(tickers):
-                cursor.execute(
-                    "UPDATE watchlist_stocks SET position = ? WHERE watchlist_id = ? AND ticker = ?",
-                    (pos, wl_id, ticker),
-                )
-        logger.info("Migration applied: added position column to watchlist_stocks")
+            cursor.executemany(
+                "UPDATE watchlist_stocks SET sort_order = ? WHERE watchlist_id = ? AND ticker = ?",
+                [(pos, wl_id, ticker) for pos, ticker in enumerate(tickers)],
+            )
+        logger.info("Migration applied: added sort_order column to watchlist_stocks")
 
 
 def _migrate_data_providers_config(cursor) -> None:

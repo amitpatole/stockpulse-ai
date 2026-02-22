@@ -60,12 +60,13 @@ def reorder_stocks(watchlist_id: int):
     if len(tickers) > 500:
         return jsonify({'error': 'Too many tickers'}), 400
 
-    wl = get_watchlist(watchlist_id)
-    if wl is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+    try:
+        found = reorder_watchlist(watchlist_id, tickers)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
 
-    if not reorder_watchlist(watchlist_id, tickers):
-        return jsonify({'error': 'Failed to reorder watchlist'}), 500
+    if not found:
+        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
 
     return jsonify({'ok': True}), 200
 

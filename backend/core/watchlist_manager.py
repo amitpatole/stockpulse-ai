@@ -175,20 +175,32 @@ def remove_stock_from_watchlist(watchlist_id: int, ticker: str) -> bool:
 def reorder_watchlist(watchlist_id: int, tickers: List[str]) -> bool:
     """Persist a new sort order for stocks in a watchlist.
 
-    Each ticker in *tickers* receives ``sort_order = index``.  Tickers not
-    present in *tickers* are left unchanged.  Returns False if the watchlist
-    does not exist.
+    Each ticker in *tickers* receives ``sort_order = index``.  Raises
+    ``ValueError`` if any submitted ticker is not present in the watchlist
+    (guards against stale client state sending deleted/unknown tickers).
+    Returns False if the watchlist does not exist.
     """
+    normalized = [t.strip().upper() for t in tickers]
     with db_session() as conn:
         wl = conn.execute(
             "SELECT id FROM watchlists WHERE id = ?", (watchlist_id,)
         ).fetchone()
         if wl is None:
             return False
-        for i, ticker in enumerate(tickers):
-            conn.execute(
-                "UPDATE watchlist_stocks SET sort_order = ?"
-                " WHERE watchlist_id = ? AND ticker = ?",
-                (i, watchlist_id, ticker.strip().upper()),
-            )
+        if normalized:
+            existing = {
+                r["ticker"]
+                for r in conn.execute(
+                    "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ?",
+                    (watchlist_id,),
+                ).fetchall()
+            }
+            unknown = [t for t in normalized if t not in existing]
+            if unknown:
+                raise ValueError(f"Tickers not in watchlist: {', '.join(unknown)}")
+        conn.executemany(
+            "UPDATE watchlist_stocks SET sort_order = ?"
+            " WHERE watchlist_id = ? AND ticker = ?",
+            [(i, watchlist_id, ticker) for i, ticker in enumerate(normalized)],
+        )
     return True
