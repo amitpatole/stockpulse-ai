@@ -15,6 +15,7 @@ interface SSEState {
   recentAlerts: AlertEvent[];
   recentJobCompletes: JobCompleteEvent[];
   eventLog: SSEEvent[];
+  announcement: { assertive: string; polite: string };
 }
 
 function playAlertSound(settings: AlertSoundSettings): void {
@@ -36,6 +37,7 @@ export function useSSE() {
     recentAlerts: [],
     recentJobCompletes: [],
     eventLog: [],
+    announcement: { assertive: '', polite: '' },
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -47,6 +49,10 @@ export function useSSE() {
     volume: 70,
     mute_when_active: false,
   });
+  const lastAnnouncementRef = useRef<{ text: string; ts: number }>({ text: '', ts: 0 });
+  const prevConnectedRef = useRef<boolean | null>(null);
+  // Stable ref so memoized callbacks can always call the latest announce
+  const announceRef = useRef<(text: string, channel: 'assertive' | 'polite') => void>(() => {});
 
   // Fetch sound settings once on mount and keep the ref updated
   useEffect(() => {
@@ -58,6 +64,16 @@ export function useSSE() {
         // Keep defaults on error
       });
   }, []);
+
+  const announce = useCallback((text: string, channel: 'assertive' | 'polite') => {
+    const now = Date.now();
+    if (text === lastAnnouncementRef.current.text && now - lastAnnouncementRef.current.ts < 500) return;
+    lastAnnouncementRef.current = { text, ts: now };
+    setState((prev) => ({ ...prev, announcement: { ...prev.announcement, [channel]: text } }));
+  }, []);
+
+  // Keep ref pointing to the latest announce so memoized callbacks stay current
+  announceRef.current = announce;
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -71,6 +87,10 @@ export function useSSE() {
       es.onopen = () => {
         if (mountedRef.current) {
           setState((prev) => ({ ...prev, connected: true }));
+          if (prevConnectedRef.current === false) {
+            announceRef.current('Market data stream connected', 'polite');
+          }
+          prevConnectedRef.current = true;
         }
       };
 
@@ -101,6 +121,10 @@ export function useSSE() {
       es.onerror = () => {
         if (!mountedRef.current) return;
         es.close();
+        if (prevConnectedRef.current === true) {
+          announceRef.current('Market data stream reconnecting', 'polite');
+        }
+        prevConnectedRef.current = false;
         setState((prev) => ({ ...prev, connected: false }));
         scheduleReconnect();
       };
@@ -110,6 +134,33 @@ export function useSSE() {
   }, []);
 
   const handleEvent = useCallback((event: SSEEvent) => {
+    // Fire announcements synchronously before state update so React 18 batches them together
+    switch (event.type) {
+      case 'alert': {
+        const alertEvent = event.data as unknown as AlertEvent;
+        announceRef.current(`Price alert: ${alertEvent.ticker} ${alertEvent.message}`, 'assertive');
+        break;
+      }
+      case 'news': {
+        const headline = (event.data as Record<string, unknown>).headline as string | undefined;
+        if (headline) announceRef.current(`News update: ${headline}`, 'polite');
+        break;
+      }
+      case 'rating_update': {
+        const ticker = (event.data as Record<string, unknown>).ticker as string | undefined;
+        const rating = (event.data as Record<string, unknown>).rating as string | undefined;
+        if (ticker && rating) announceRef.current(`Rating update: ${ticker} rated ${rating}`, 'polite');
+        break;
+      }
+      case 'job_complete': {
+        const jobEvent = event.data as unknown as JobCompleteEvent;
+        if (jobEvent.job_name) announceRef.current(`Job complete: ${jobEvent.job_name}`, 'polite');
+        break;
+      }
+      default:
+        break;
+    }
+
     setState((prev) => {
       const newLog = [event, ...prev.eventLog].slice(0, 100);
       const next: SSEState = {
