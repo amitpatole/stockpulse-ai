@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -31,6 +31,7 @@ function formatVolume(v: number): string {
 
 export default function StockDetailPage({ params }: StockDetailPageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { ticker } = use(params);
   const isInvalidTicker = !ticker || !ticker.trim();
   const upperTicker = isInvalidTicker ? '' : ticker.toUpperCase();
@@ -194,8 +195,11 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
           </div>
         )}
 
-        {/* Multi-timeframe chart — owns its own timeframe state */}
-        <StockPriceChart ticker={upperTicker} />
+        {/* Multi-timeframe chart — owns its own timeframe and comparison state */}
+        <StockPriceChart
+          ticker={upperTicker}
+          initialCompare={searchParams.get('compare') ?? ''}
+        />
 
         {/* Loading placeholder when we have no quote yet */}
         {loading && !data && (

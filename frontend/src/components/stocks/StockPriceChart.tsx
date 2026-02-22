@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useApi } from '@/hooks/useApi';
 import { getStockDetail, getComparisonData } from '@/lib/api';
 import type { Timeframe, StockDetail, ComparisonResult, ComparisonSeries } from '@/lib/types';
@@ -25,17 +26,51 @@ interface ComparisonTicker {
   error: string | null;
 }
 
-interface StockPriceChartProps {
-  ticker: string;
+function parseCompareParam(param: string): ComparisonTicker[] {
+  return param
+    .split(',')
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((t) => ({ ticker: t, name: t, error: null }));
 }
 
-export default function StockPriceChart({ ticker }: StockPriceChartProps) {
+interface StockPriceChartProps {
+  ticker: string;
+  initialCompare?: string;
+}
+
+export default function StockPriceChart({ ticker, initialCompare = '' }: StockPriceChartProps) {
+  const router = useRouter();
   const [timeframe, setTimeframe] = useState<Timeframe>(getInitialTimeframe);
-  const [comparisonEnabled, setComparisonEnabled] = useState(false);
-  const [comparisonTickers, setComparisonTickers] = useState<ComparisonTicker[]>([]);
+  const [comparisonEnabled, setComparisonEnabled] = useState<boolean>(
+    () => initialCompare.trim().length > 0
+  );
+  const [comparisonTickers, setComparisonTickers] = useState<ComparisonTicker[]>(
+    () => (initialCompare.trim() ? parseCompareParam(initialCompare) : [])
+  );
   const [comparisonData, setComparisonData] = useState<ComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+
+  // Skip URL sync on first mount — the URL already reflects initialCompare
+  const isMounted = useRef(false);
+
+  // Sync comparison state → ?compare= URL param (skip initial mount)
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (comparisonEnabled && comparisonTickers.length > 0) {
+      params.set('compare', comparisonTickers.map((c) => c.ticker).join(','));
+    } else {
+      params.delete('compare');
+    }
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+  }, [comparisonEnabled, comparisonTickers, router]);
 
   const fetcher = useCallback(
     () => getStockDetail(ticker, timeframe),
