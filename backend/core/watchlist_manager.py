@@ -46,7 +46,7 @@ def create_watchlist(name: str) -> Dict:
 
 
 def get_watchlist(watchlist_id: int) -> Optional[Dict]:
-    """Return a watchlist with its list of tickers, or None if not found."""
+    """Return a watchlist with its list of tickers ordered by sort_order, or None if not found."""
     with db_session() as conn:
         row = conn.execute(
             "SELECT id, name, created_at FROM watchlists WHERE id = ?",
@@ -57,7 +57,8 @@ def get_watchlist(watchlist_id: int) -> Optional[Dict]:
         tickers = [
             r["ticker"]
             for r in conn.execute(
-                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY ticker",
+                "SELECT ticker FROM watchlist_stocks"
+                " WHERE watchlist_id = ? ORDER BY sort_order ASC, ticker ASC",
                 (watchlist_id,),
             ).fetchall()
         ]
@@ -108,8 +109,9 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
     """Add a ticker to a watchlist.
 
     Upserts the ticker into the stocks table (if absent) then inserts the
-    junction row.  Returns True on success, False if the watchlist does not
-    exist.
+    junction row with sort_order = MAX(sort_order) + 1 so new stocks
+    appear at the end of the user's custom order.
+    Returns True on success, False if the watchlist does not exist.
     """
     ticker = ticker.strip().upper()
 
@@ -137,8 +139,14 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
             if wl is None:
                 return False
             conn.execute(
-                "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) VALUES (?, ?)",
-                (watchlist_id, ticker),
+                """
+                INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker, sort_order)
+                VALUES (?, ?, (
+                    SELECT COALESCE(MAX(sort_order) + 1, 0)
+                    FROM watchlist_stocks WHERE watchlist_id = ?
+                ))
+                """,
+                (watchlist_id, ticker, watchlist_id),
             )
         # Invalidate stale cache so next ratings fetch recomputes fresh
         with db_session() as conn:
@@ -162,3 +170,25 @@ def remove_stock_from_watchlist(watchlist_id: int, ticker: str) -> bool:
     with db_session() as conn:
         conn.execute("DELETE FROM ai_ratings WHERE ticker = ?", (ticker,))
     return result.rowcount > 0
+
+
+def reorder_watchlist(watchlist_id: int, tickers: List[str]) -> bool:
+    """Persist a new sort order for stocks in a watchlist.
+
+    Each ticker in *tickers* receives ``sort_order = index``.  Tickers not
+    present in *tickers* are left unchanged.  Returns False if the watchlist
+    does not exist.
+    """
+    with db_session() as conn:
+        wl = conn.execute(
+            "SELECT id FROM watchlists WHERE id = ?", (watchlist_id,)
+        ).fetchone()
+        if wl is None:
+            return False
+        for i, ticker in enumerate(tickers):
+            conn.execute(
+                "UPDATE watchlist_stocks SET sort_order = ?"
+                " WHERE watchlist_id = ? AND ticker = ?",
+                (i, watchlist_id, ticker.strip().upper()),
+            )
+    return True
