@@ -24,6 +24,8 @@ import type {
   ProviderRateLimitsResponse,
   ExportFormat,
   ComparisonResult,
+  PriceAlert,
+  WatchlistImportResult,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -196,6 +198,26 @@ export async function resumeJob(id: string): Promise<{ message: string }> {
   });
 }
 
+// ---- Price Alerts ----
+
+export async function listPriceAlerts(): Promise<PriceAlert[]> {
+  const data = await request<PriceAlert[]>('/api/alerts');
+  return Array.isArray(data) ? data : [];
+}
+
+export async function updateAlertSoundType(
+  alertId: number,
+  soundType: string
+): Promise<{ id: number; sound_type: string }> {
+  return request<{ id: number; sound_type: string }>(
+    `/api/alerts/${alertId}/sound`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ sound_type: soundType }),
+    }
+  );
+}
+
 // ---- Alert Sound Settings ----
 
 export async function getAlertSoundSettings(): Promise<AlertSoundSettings> {
@@ -323,6 +345,34 @@ export async function getProviderStatus(): Promise<ProviderStatusResponse> {
 
 export async function getProviderRateLimits(): Promise<ProviderRateLimitsResponse> {
   return request<ProviderRateLimitsResponse>('/api/providers/rate-limits');
+}
+
+// ---- Watchlist CSV Import ----
+
+export async function importWatchlistCsv(
+  watchlistId: number,
+  file: File
+): Promise<WatchlistImportResult> {
+  const url = `${API_BASE}/api/watchlist/${watchlistId}/import`;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(url, { method: 'POST', body: formData });
+
+  if (!res.ok) {
+    const body = await res.text();
+    let message = `Import failed: ${res.status}`;
+    try {
+      const json = JSON.parse(body);
+      message = json.error || json.message || message;
+    } catch {
+      if (body) message = body;
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  const text = await res.text();
+  return JSON.parse(text) as WatchlistImportResult;
 }
 
 export { ApiError };

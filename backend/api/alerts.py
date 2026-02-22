@@ -8,7 +8,7 @@ import re
 
 from flask import Blueprint, jsonify, request
 
-from backend.core.alert_manager import create_alert, get_alerts, delete_alert, toggle_alert
+from backend.core.alert_manager import create_alert, get_alerts, delete_alert, toggle_alert, update_alert_sound_type
 from backend.core.settings_manager import get_setting, set_setting
 from backend.database import db_session
 

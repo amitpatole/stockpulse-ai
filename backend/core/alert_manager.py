@@ -35,7 +35,7 @@ def get_alerts() -> list[dict]:
         return [_row_to_dict(row) for row in cursor.fetchall()]
 
 
-def create_alert(ticker: str, condition_type: str, threshold: float) -> dict:
+def create_alert(ticker: str, condition_type: str, threshold: float, sound_type: str = 'default') -> dict:
     """Insert a new price alert and return the created row.
 
     Parameters
@@ -46,6 +46,8 @@ def create_alert(ticker: str, condition_type: str, threshold: float) -> dict:
         One of 'price_above', 'price_below', 'pct_change'.
     threshold : float
         Numeric threshold for the condition.
+    sound_type : str
+        One of 'default', 'chime', 'alarm', 'silent'. Defaults to 'default'.
 
     Returns
     -------
@@ -54,9 +56,9 @@ def create_alert(ticker: str, condition_type: str, threshold: float) -> dict:
     """
     with db_session() as conn:
         cursor = conn.execute(
-            '''INSERT INTO price_alerts (ticker, condition_type, threshold)
-               VALUES (?, ?, ?)''',
-            (ticker.upper(), condition_type, threshold),
+            '''INSERT INTO price_alerts (ticker, condition_type, threshold, sound_type)
+               VALUES (?, ?, ?, ?)''',
+            (ticker.upper(), condition_type, threshold, sound_type),
         )
         alert_id = cursor.lastrowid
         row = conn.execute(
@@ -72,6 +74,27 @@ def delete_alert(alert_id: int) -> bool:
             'DELETE FROM price_alerts WHERE id = ?', (alert_id,)
         )
         return cursor.rowcount > 0
+
+
+def update_alert_sound_type(alert_id: int, sound_type: str) -> Optional[dict]:
+    """Update the sound_type of a price alert.
+
+    Returns
+    -------
+    dict or None
+        Updated alert row, or None if the ID was not found.
+    """
+    with db_session() as conn:
+        cursor = conn.execute(
+            'UPDATE price_alerts SET sound_type = ? WHERE id = ?',
+            (sound_type, alert_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            'SELECT * FROM price_alerts WHERE id = ?', (alert_id,)
+        ).fetchone()
+        return _row_to_dict(row)
 
 
 def toggle_alert(alert_id: int) -> Optional[dict]:
@@ -208,6 +231,7 @@ def evaluate_price_alerts(tickers: list[str]) -> None:
                         'condition_type': condition,
                         'threshold': threshold,
                         'current_price': current_price,
+                        'sound_type': alert['sound_type'] if 'sound_type' in alert.keys() else 'default',
                     })
                 except Exception as exc:
                     logger.warning("Failed to send SSE for alert %d: %s", alert['id'], exc)

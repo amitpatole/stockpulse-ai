@@ -18,11 +18,20 @@ interface SSEState {
   announcement: { assertive: string; polite: string };
 }
 
-function playAlertSound(settings: AlertSoundSettings): void {
+function playAlertSound(settings: AlertSoundSettings, perAlertSoundType?: string): void {
   if (!settings.enabled) return;
   if (settings.mute_when_active && document.hasFocus()) return;
 
-  const audio = new Audio(`/sounds/${settings.sound_type}.mp3`);
+  // Per-alert 'silent' suppresses audio entirely
+  if (perAlertSoundType === 'silent') return;
+
+  // Per-alert override takes precedence unless it's 'default' (fall back to global)
+  const soundToPlay =
+    perAlertSoundType && perAlertSoundType !== 'default'
+      ? perAlertSoundType
+      : settings.sound_type;
+
+  const audio = new Audio(`/sounds/${soundToPlay}.mp3`);
   audio.volume = settings.volume / 100;
   audio.play().catch(() => {
     // Ignore autoplay errors (e.g. browser policy requires user gesture)
@@ -181,7 +190,7 @@ export function useSSE() {
         case 'alert': {
           const alertEvent = event.data as unknown as AlertEvent;
           next.recentAlerts = [alertEvent, ...prev.recentAlerts].slice(0, 50);
-          playAlertSound(soundSettingsRef.current);
+          playAlertSound(soundSettingsRef.current, alertEvent.sound_type);
           break;
         }
         case 'job_complete': {
