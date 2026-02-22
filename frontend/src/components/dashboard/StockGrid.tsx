@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Plus, Loader2, X, ChevronUp, ChevronDown, Upload } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { getRatings, addStock, deleteStock, searchStocks, ApiError } from '@/lib/api';
 import type { AIRating, StockSearchResult } from '@/lib/types';
 import StockCard from './StockCard';
+import WatchlistImportModal from './WatchlistImportModal';
 
 export default function StockGrid() {
   const { data: ratings, loading, error, refetch } = useApi<AIRating[]>(getRatings, [], {
@@ -22,6 +23,7 @@ export default function StockGrid() {
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [announceMsg, setAnnounceMsg] = useState('');
   const [order, setOrder] = useState<string[]>([]);
+  const [showImportModal, setShowImportModal] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -165,6 +167,14 @@ export default function StockGrid() {
       {/* Search & Add Stock Bar */}
       <div ref={wrapperRef} className="relative mb-4">
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowImportModal(true)}
+            aria-label="Import stocks from CSV file"
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Import CSV</span>
+          </button>
           <div className="relative flex-1">
             <label htmlFor="stock-search-input" className="sr-only">
               Search stocks to add to watchlist
@@ -327,6 +337,18 @@ export default function StockGrid() {
             </ul>
           )}
         </>
+      )}
+
+      {/* CSV Import Modal */}
+      {showImportModal && (
+        <WatchlistImportModal
+          watchlistId={1}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => {
+            refetch();
+            setAnnounceMsg('Watchlist updated from CSV import');
+          }}
+        />
       )}
     </div>
   );
