@@ -36,16 +36,22 @@ export function useNewsFeedKeyboard(
     [itemCount]
   );
 
-  const activatePanel = useCallback(() => {
+  const activatePanel = useCallback((e?: React.FocusEvent) => {
+    if (e && e.target !== containerRef.current) return;
     if (focusedIndexRef.current === null && itemCount > 0) {
       setFocusedIndex(0);
       itemRefs.current[0]?.focus();
     }
-  }, [itemCount]);
+  }, [itemCount, containerRef]);
 
   const releasePanel = useCallback(() => {
+    const prev = focusedIndexRef.current;
     setFocusedIndex(null);
-    containerRef.current?.blur();
+    if (prev !== null) {
+      itemRefs.current[prev]?.blur();
+    } else {
+      containerRef.current?.blur();
+    }
   }, [containerRef]);
 
   const handleKeyDown = useCallback(
