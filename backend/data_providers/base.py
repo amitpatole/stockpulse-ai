@@ -232,7 +232,11 @@ class DataProviderRegistry:
         self._providers: Dict[str, DataProvider] = {}
         self._fallback_order: List[str] = []
         self._primary: Optional[str] = None
+        self._in_fallback: bool = False
+        self._fallback_provider: Optional[str] = None
+        self._fallback_lock: threading.Lock = threading.Lock()
         self.on_fallback: Optional[Callable[[str, str, str], None]] = None
+        self.on_recovered: Optional[Callable[[str, str], None]] = None
 
     def register(self, name: str, provider: DataProvider):
         self._providers[name] = provider
@@ -242,6 +246,9 @@ class DataProviderRegistry:
     def set_primary(self, name: str):
         if name in self._providers:
             self._primary = name
+            with self._fallback_lock:
+                self._in_fallback = False
+                self._fallback_provider = None
 
     def set_fallback_order(self, order: List[str]):
         self._fallback_order = [n for n in order if n in self._providers]
@@ -276,8 +283,23 @@ class DataProviderRegistry:
             try:
                 result = provider.get_quote(ticker)
                 if result:
-                    if failed_from is not None and self.on_fallback is not None:
-                        self.on_fallback(failed_from, name, failed_reason)
+                    if failed_from is not None:
+                        # A prior provider failed; this one is the active fallback
+                        with self._fallback_lock:
+                            self._in_fallback = True
+                            self._fallback_provider = name
+                        if self.on_fallback is not None:
+                            self.on_fallback(failed_from, name, failed_reason)
+                    elif name == self._primary:
+                        # Primary succeeded; check whether we need to signal recovery
+                        with self._fallback_lock:
+                            was_in_fallback = self._in_fallback
+                            fallback_was = self._fallback_provider
+                            if was_in_fallback:
+                                self._in_fallback = False
+                                self._fallback_provider = None
+                        if was_in_fallback and self.on_recovered is not None:
+                            self.on_recovered(name, fallback_was or '')
                     return result
                 else:
                     if failed_from is None:
@@ -289,6 +311,10 @@ class DataProviderRegistry:
                     failed_from = name
                     failed_reason = 'exception'
                 continue
+
+        # All tried providers failed — emit a fallback event with no successor
+        if failed_from is not None and self.on_fallback is not None:
+            self.on_fallback(failed_from, '', failed_reason)
         return None
 
     def get_historical(self, ticker: str, period: str = '1mo') -> Optional[PriceHistory]:
@@ -308,8 +334,23 @@ class DataProviderRegistry:
             try:
                 result = provider.get_historical(ticker, period)
                 if result and result.bars:
-                    if failed_from is not None and self.on_fallback is not None:
-                        self.on_fallback(failed_from, name, failed_reason)
+                    if failed_from is not None:
+                        # A prior provider failed; this one is the active fallback
+                        with self._fallback_lock:
+                            self._in_fallback = True
+                            self._fallback_provider = name
+                        if self.on_fallback is not None:
+                            self.on_fallback(failed_from, name, failed_reason)
+                    elif name == self._primary:
+                        # Primary succeeded; check whether we need to signal recovery
+                        with self._fallback_lock:
+                            was_in_fallback = self._in_fallback
+                            fallback_was = self._fallback_provider
+                            if was_in_fallback:
+                                self._in_fallback = False
+                                self._fallback_provider = None
+                        if was_in_fallback and self.on_recovered is not None:
+                            self.on_recovered(name, fallback_was or '')
                     return result
                 else:
                     if failed_from is None:
@@ -321,6 +362,10 @@ class DataProviderRegistry:
                     failed_from = name
                     failed_reason = 'exception'
                 continue
+
+        # All tried providers failed — emit a fallback event with no successor
+        if failed_from is not None and self.on_fallback is not None:
+            self.on_fallback(failed_from, '', failed_reason)
         return None
 
     def search_ticker(self, query: str) -> List[TickerResult]:

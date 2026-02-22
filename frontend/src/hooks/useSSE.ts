@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import type { SSEEvent, SSEEventType, AgentStatusEvent, AlertEvent, JobCompleteEvent } from '@/lib/types';
+import type { SSEEvent, SSEEventType, AgentStatusEvent, AlertEvent, JobCompleteEvent, ProviderFallbackState } from '@/lib/types';
 import type { AlertSoundSettings } from '@/lib/types';
 import { getAlertSoundSettings } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 const RECONNECT_DELAY = 5000;
+const PROVIDER_ANNOUNCE_DEBOUNCE_MS = 2000;
 
 interface SSEState {
   connected: boolean;
@@ -16,6 +17,8 @@ interface SSEState {
   recentJobCompletes: JobCompleteEvent[];
   eventLog: SSEEvent[];
   announcement: { assertive: string; polite: string };
+  fallbackActive: boolean;
+  fallbackInfo: ProviderFallbackState | null;
 }
 
 function playAlertSound(settings: AlertSoundSettings): void {
@@ -38,6 +41,8 @@ export function useSSE() {
     recentJobCompletes: [],
     eventLog: [],
     announcement: { assertive: '', polite: '' },
+    fallbackActive: false,
+    fallbackInfo: null,
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -53,6 +58,8 @@ export function useSSE() {
   const prevConnectedRef = useRef<boolean | null>(null);
   // Stable ref so memoized callbacks can always call the latest announce
   const announceRef = useRef<(text: string, channel: 'assertive' | 'polite') => void>(() => {});
+  // Tracks the timestamp of the last provider-related ARIA announcement for debouncing
+  const lastProviderAnnounceTsRef = useRef<number>(0);
 
   // Fetch sound settings once on mount and keep the ref updated
   useEffect(() => {
@@ -105,7 +112,10 @@ export function useSSE() {
       };
 
       // Listen for specific named events
-      const eventTypes: SSEEventType[] = ['agent_status', 'alert', 'job_complete', 'heartbeat', 'news', 'rating_update', 'snapshot'];
+      const eventTypes: SSEEventType[] = [
+        'agent_status', 'alert', 'job_complete', 'heartbeat', 'news', 'rating_update', 'snapshot',
+        'provider_fallback', 'provider_recovered',
+      ];
       eventTypes.forEach((type) => {
         es.addEventListener(type, (event: MessageEvent) => {
           if (!mountedRef.current) return;
@@ -157,6 +167,31 @@ export function useSSE() {
         if (jobEvent.job_name) announceRef.current(`Job complete: ${jobEvent.job_name}`, 'polite');
         break;
       }
+      case 'provider_fallback': {
+        const payload = event.data as Record<string, unknown>;
+        const toProvider = payload.to_provider as string | null | undefined;
+        const now = Date.now();
+        if (now - lastProviderAnnounceTsRef.current >= PROVIDER_ANNOUNCE_DEBOUNCE_MS) {
+          lastProviderAnnounceTsRef.current = now;
+          if (toProvider) {
+            announceRef.current(
+              `Primary data source unavailable. Using fallback provider: ${toProvider}.`,
+              'polite',
+            );
+          } else {
+            announceRef.current('Market data unavailable. All data providers failed.', 'assertive');
+          }
+        }
+        break;
+      }
+      case 'provider_recovered': {
+        const now = Date.now();
+        if (now - lastProviderAnnounceTsRef.current >= PROVIDER_ANNOUNCE_DEBOUNCE_MS) {
+          lastProviderAnnounceTsRef.current = now;
+          announceRef.current('Primary data source restored.', 'polite');
+        }
+        break;
+      }
       default:
         break;
     }
@@ -187,6 +222,28 @@ export function useSSE() {
         case 'job_complete': {
           const jobEvent = event.data as unknown as JobCompleteEvent;
           next.recentJobCompletes = [jobEvent, ...prev.recentJobCompletes].slice(0, 50);
+          break;
+        }
+        case 'provider_fallback': {
+          const payload = event.data as Record<string, unknown>;
+          const toProvider = payload.to_provider as string | null | undefined;
+          if (toProvider) {
+            next.fallbackActive = true;
+            next.fallbackInfo = {
+              from_provider: (payload.from_provider as string) || '',
+              to_provider: toProvider,
+              tier: (payload.tier as string) || '',
+              reason: (payload.reason as string) || '',
+              timestamp: (payload.timestamp as string) || '',
+            };
+          }
+          // If to_provider is null/empty (all providers failed), we leave
+          // fallbackActive unchanged and only the assertive announcement fires.
+          break;
+        }
+        case 'provider_recovered': {
+          next.fallbackActive = false;
+          next.fallbackInfo = null;
           break;
         }
         default:
