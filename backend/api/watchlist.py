@@ -12,6 +12,7 @@ from flask import Blueprint, jsonify, request
 from backend.core.watchlist_manager import (
     add_stock_to_watchlist,
     get_watchlist,
+    reorder_watchlist,
 )
 from backend.database import db_session
 
@@ -21,6 +22,47 @@ watchlist_bp = Blueprint('watchlist', __name__, url_prefix='/api/watchlist')
 
 _MAX_FILE_BYTES = 1 * 1024 * 1024  # 1 MB
 _MAX_ROWS = 500
+
+
+@watchlist_bp.route('/<int:watchlist_id>', methods=['GET'])
+def get_watchlist_route(watchlist_id: int):
+    """Return a watchlist with its ordered ticker list.
+
+    Returns:
+        200  {id, name, created_at, tickers}
+        404  Watchlist not found
+    """
+    wl = get_watchlist(watchlist_id)
+    if wl is None:
+        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+    return jsonify(wl), 200
+
+
+@watchlist_bp.route('/<int:watchlist_id>/reorder', methods=['PUT'])
+def reorder_stocks(watchlist_id: int):
+    """Persist a new drag-and-drop sort order for stocks in a watchlist.
+
+    Request body: {"tickers": ["AAPL", "MSFT", ...]}
+    Each ticker is assigned sort_order equal to its index in the list.
+
+    Returns:
+        200  {"ok": true}
+        400  Missing or invalid tickers field
+        404  Watchlist not found
+    """
+    body = request.get_json(silent=True) or {}
+    tickers = body.get('tickers')
+    if not isinstance(tickers, list):
+        return jsonify({'error': 'tickers must be a list'}), 400
+    if not all(isinstance(t, str) for t in tickers):
+        return jsonify({'error': 'All tickers must be strings'}), 400
+    if len(tickers) > 500:
+        return jsonify({'error': 'Too many tickers'}), 400
+
+    if not reorder_watchlist(watchlist_id, tickers):
+        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+
+    return jsonify({'ok': True}), 200
 
 
 @watchlist_bp.route('/<int:watchlist_id>/import', methods=['POST'])

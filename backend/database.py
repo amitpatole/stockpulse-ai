@@ -271,6 +271,7 @@ _NEW_TABLES_SQL = [
     CREATE TABLE IF NOT EXISTS watchlist_stocks (
         watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
         ticker       TEXT NOT NULL REFERENCES stocks(ticker),
+        sort_order   INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (watchlist_id, ticker)
     )
     """,

@@ -1,16 +1,20 @@
 'use client';
 
-import { use, useCallback, useEffect } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import StockPriceChart from '@/components/stocks/StockPriceChart';
 import SentimentBadge from '@/components/stocks/SentimentBadge';
+import TimezoneToggle from '@/components/stocks/TimezoneToggle';
 import { useApi } from '@/hooks/useApi';
 import { useSSE } from '@/hooks/useSSE';
 import { getStockDetail } from '@/lib/api';
+import type { TimezoneMode } from '@/lib/types';
+import { SENTIMENT_COLORS } from '@/lib/types';
+import { formatDate } from '@/lib/formatTime';
 
 interface StockDetailPageProps {
   params: Promise<{ ticker: string }>;

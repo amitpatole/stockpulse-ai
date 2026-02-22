@@ -147,10 +147,13 @@ export type Timeframe = '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
 
 export type ExportFormat = 'zip' | 'csv' | 'pdf';
 
+export type TimezoneMode = 'local' | 'ET';
+
 // Stock Detail Page Types
 
 export interface CandleDataPoint {
   time: number;
+  time_iso?: string;
   open: number;
   high: number;
   low: number;
