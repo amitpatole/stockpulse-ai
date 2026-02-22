@@ -290,6 +290,7 @@ export interface AlertEvent {
   type: string;
   message: string;
   severity: string;
+  sound_type?: AlertSoundType;
 }
 
 export interface JobCompleteEvent {
@@ -299,9 +300,22 @@ export interface JobCompleteEvent {
   duration_ms?: number;
 }
 
+export type AlertSoundType = 'default' | 'chime' | 'alarm' | 'silent';
+
+export interface PriceAlert {
+  id: number;
+  ticker: string;
+  condition_type: string;
+  threshold: number;
+  enabled: boolean;
+  sound_type: AlertSoundType;
+  triggered_at: string | null;
+  created_at: string;
+}
+
 export interface AlertSoundSettings {
   enabled: boolean;
-  sound_type: 'chime' | 'bell' | 'beep';
+  sound_type: 'chime' | 'alarm';
   volume: number;
   mute_when_active: boolean;
 }

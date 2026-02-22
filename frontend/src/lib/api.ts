@@ -16,6 +16,8 @@ import type {
   HealthCheck,
   ResearchBrief,
   AlertSoundSettings,
+  AlertSoundType,
+  PriceAlert,
   EarningsResponse,
   SentimentData,
   StockDetail,
