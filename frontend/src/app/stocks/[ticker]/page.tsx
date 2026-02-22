@@ -6,6 +6,7 @@ import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-reac
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import StockPriceChart from '@/components/stocks/StockPriceChart';
+import SentimentBadge from '@/components/stocks/SentimentBadge';
 import { useApi } from '@/hooks/useApi';
 import { getStockDetail } from '@/lib/api';
 
@@ -105,6 +106,8 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
                   {quote.change_pct.toFixed(2)}%
                 </span>
               </div>
+
+              <SentimentBadge ticker={upperTicker} />
             </div>
 
             <dl className="mt-4 flex flex-wrap gap-6">
