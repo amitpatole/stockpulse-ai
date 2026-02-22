@@ -1,6 +1,6 @@
 {
   "name": "tickerpulse-ai",
-  "version": "3.2.2",
+  "version": "3.78.0",
   "description": "TickerPulse AI - Multi-agent stock research desktop app",
   "main": "dist/main/index.js",
   "author": "TickerPulse AI",
