@@ -36,6 +36,7 @@ function formatVolume(v: number): string {
 export default function StockDetailPage({ params }: StockDetailPageProps) {
   const router = useRouter();
   const { ticker } = use(params);
+  const [tz, setTz] = useState<TimezoneMode>('local');
   const isInvalidTicker = !ticker || !ticker.trim();
   const upperTicker = isInvalidTicker ? '' : ticker.toUpperCase();
 
