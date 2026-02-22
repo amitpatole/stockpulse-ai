@@ -335,6 +335,7 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.sentiment':        'sentiment_bp',
         'backend.api.providers':        'providers_bp',
         'backend.api.compare':          'compare_bp',
+        'backend.api.watchlist':        'watchlist_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():

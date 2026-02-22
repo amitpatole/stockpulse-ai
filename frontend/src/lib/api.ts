@@ -24,6 +24,7 @@ import type {
   ProviderRateLimitsResponse,
   ExportFormat,
   ComparisonResult,
+  WatchlistImportResult,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -313,6 +314,41 @@ export async function getComparisonData(
     timeframe,
   });
   return request<ComparisonResult>(`/api/stocks/compare?${params.toString()}`);
+}
+
+// ---- Watchlist CSV Import ----
+
+export async function importWatchlistCsv(
+  watchlistId: number,
+  file: File
+): Promise<WatchlistImportResult> {
+  const url = `${API_BASE}/api/watchlist/${watchlistId}/import`;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'POST', body: formData });
+  } catch (err) {
+    throw new ApiError(
+      `Failed to connect to API: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      0
+    );
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    let message = `Import failed: ${res.status}`;
+    try {
+      const json = JSON.parse(body);
+      message = json.error || json.message || message;
+    } catch {
+      if (body) message = body;
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  return res.json() as Promise<WatchlistImportResult>;
 }
 
 // ---- Data Provider Status ----
