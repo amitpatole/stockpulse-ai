@@ -23,6 +23,7 @@ import type {
   ProviderStatusResponse,
   ProviderRateLimitsResponse,
   ExportFormat,
+  ComparisonResult,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -299,6 +300,19 @@ export async function getEarnings(days: number = 14): Promise<EarningsResponse> 
 
 export async function getStockSentiment(ticker: string): Promise<SentimentData> {
   return request<SentimentData>(`/api/stocks/${encodeURIComponent(ticker)}/sentiment`);
+}
+
+// ---- Performance Comparison ----
+
+export async function getComparisonData(
+  tickers: string[],
+  timeframe: Timeframe
+): Promise<ComparisonResult> {
+  const params = new URLSearchParams({
+    tickers: tickers.map((t) => t.toUpperCase()).join(','),
+    timeframe,
+  });
+  return request<ComparisonResult>(`/api/stocks/compare?${params.toString()}`);
 }
 
 // ---- Data Provider Status ----
