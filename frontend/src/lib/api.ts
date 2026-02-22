@@ -15,6 +15,8 @@ import type {
   AIProvider,
   HealthCheck,
   ResearchBrief,
+  ResearchBriefsResponse,
+  ExportCapabilities,
   AlertSoundSettings,
   EarningsResponse,
   SentimentData,
@@ -227,16 +229,16 @@ export async function getHealth(): Promise<HealthCheck> {
 
 // ---- Research ----
 
-export async function getResearchBriefs(ticker?: string, page?: number, pageSize?: number): Promise<ResearchBrief[]> {
+export async function getResearchBriefs(ticker?: string, page?: number, pageSize?: number): Promise<ResearchBriefsResponse> {
   const params = new URLSearchParams();
   if (ticker) params.set('ticker', ticker);
   if (page !== undefined) params.set('page', String(page));
   if (pageSize !== undefined) params.set('page_size', String(pageSize));
-  const data = await request<{ data: ResearchBrief[] } | ResearchBrief[]>(
-    `/api/research/briefs?${params.toString()}`
-  );
-  if (Array.isArray(data)) return data;
-  return (data as { data: ResearchBrief[] }).data || [];
+  return request<ResearchBriefsResponse>(`/api/research/briefs?${params.toString()}`);
+}
+
+export async function getExportCapabilities(): Promise<ExportCapabilities> {
+  return request<ExportCapabilities>('/api/research/briefs/export/capabilities');
 }
 
 export async function generateResearchBrief(ticker?: string): Promise<ResearchBrief> {

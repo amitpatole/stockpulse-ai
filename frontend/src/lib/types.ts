@@ -143,6 +143,22 @@ export interface ResearchBrief {
   model_used?: string;
 }
 
+export interface ResearchBriefsResponse {
+  data: ResearchBrief[];
+  page: number;
+  page_size: number;
+  total: number;
+  has_next: boolean;
+}
+
+export interface ExportCapabilities {
+  formats: {
+    zip: { available: boolean };
+    csv: { available: boolean };
+    pdf: { available: boolean };
+  };
+}
+
 export type Timeframe = '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
 
 export type ExportFormat = 'zip' | 'csv' | 'pdf';
