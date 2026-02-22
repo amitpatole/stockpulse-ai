@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
@@ -8,9 +8,11 @@ import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import StockPriceChart from '@/components/stocks/StockPriceChart';
 import SentimentBadge from '@/components/stocks/SentimentBadge';
+import TimezoneToggle from '@/components/stocks/TimezoneToggle';
 import { useApi } from '@/hooks/useApi';
 import { useSSE } from '@/hooks/useSSE';
 import { getStockDetail } from '@/lib/api';
+import type { TimezoneMode } from '@/lib/types';
 
 interface StockDetailPageProps {
   params: Promise<{ ticker: string }>;
@@ -34,6 +36,7 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
   const { ticker } = use(params);
   const isInvalidTicker = !ticker || !ticker.trim();
   const upperTicker = isInvalidTicker ? '' : ticker.toUpperCase();
+  const [tz, setTz] = useState<TimezoneMode>('local');
 
   // Redirect to home with error when ticker param is empty or whitespace.
   useEffect(() => {
@@ -109,38 +112,42 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
 
         {quote && (
           <div className="mb-6">
-            <div className="flex flex-wrap items-baseline gap-3">
-              <span className="font-mono text-4xl font-bold text-white">
-                {currencyPrefix}
-                {quote.price.toFixed(2)}
-                {quote.currency !== 'USD' && (
-                  <span className="ml-1 text-sm text-slate-400">{quote.currency}</span>
-                )}
-              </span>
-
-              <div
-                className={clsx(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold',
-                  isPositive && 'bg-emerald-500/10 text-emerald-400',
-                  isNegative && 'bg-red-500/10 text-red-400',
-                  !isPositive && !isNegative && 'bg-slate-500/10 text-slate-400'
-                )}
-                aria-label={`${isPositive ? '+' : ''}${quote.change_pct.toFixed(2)}% change`}
-              >
-                {isPositive ? (
-                  <TrendingUp className="h-4 w-4" aria-hidden="true" />
-                ) : isNegative ? (
-                  <TrendingDown className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <Minus className="h-4 w-4" aria-hidden="true" />
-                )}
-                <span className="font-mono">
-                  {isPositive ? '+' : ''}
-                  {quote.change_pct.toFixed(2)}%
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="font-mono text-4xl font-bold text-white">
+                  {currencyPrefix}
+                  {quote.price.toFixed(2)}
+                  {quote.currency !== 'USD' && (
+                    <span className="ml-1 text-sm text-slate-400">{quote.currency}</span>
+                  )}
                 </span>
+
+                <div
+                  className={clsx(
+                    'flex items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold',
+                    isPositive && 'bg-emerald-500/10 text-emerald-400',
+                    isNegative && 'bg-red-500/10 text-red-400',
+                    !isPositive && !isNegative && 'bg-slate-500/10 text-slate-400'
+                  )}
+                  aria-label={`${isPositive ? '+' : ''}${quote.change_pct.toFixed(2)}% change`}
+                >
+                  {isPositive ? (
+                    <TrendingUp className="h-4 w-4" aria-hidden="true" />
+                  ) : isNegative ? (
+                    <TrendingDown className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Minus className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  <span className="font-mono">
+                    {isPositive ? '+' : ''}
+                    {quote.change_pct.toFixed(2)}%
+                  </span>
+                </div>
+
+                <SentimentBadge ticker={upperTicker} tz={tz} />
               </div>
 
-              <SentimentBadge ticker={upperTicker} />
+              <TimezoneToggle mode={tz} onModeChange={setTz} />
             </div>
 
             <dl className="mt-4 flex flex-wrap gap-6">
