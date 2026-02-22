@@ -5,6 +5,7 @@ Blueprint for stock management endpoints: list, add, remove, and search stocks.
 
 import math
 import logging
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
@@ -139,8 +140,10 @@ def get_stock_detail(ticker):
                     continue
             except (TypeError, ValueError):
                 continue
+            unix_ts = int(ts.timestamp())
             candles.append({
-                'time': int(ts.timestamp()),
+                'time': unix_ts,
+                'time_iso': datetime.fromtimestamp(unix_ts, tz=timezone.utc).isoformat(),
                 'open': round(float(row['Open']), 4),
                 'high': round(float(row['High']), 4),
                 'low': round(float(row['Low']), 4),
