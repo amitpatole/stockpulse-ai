@@ -130,6 +130,21 @@ export async function getAlerts(): Promise<Alert[]> {
   return data.alerts || [];
 }
 
+export async function listPriceAlerts(): Promise<PriceAlert[]> {
+  const data = await request<PriceAlert[]>('/api/alerts');
+  return Array.isArray(data) ? data : [];
+}
+
+export async function updateAlertSoundType(
+  alertId: number,
+  soundType: PriceAlert['sound_type']
+): Promise<{ id: number; sound_type: string }> {
+  return request<{ id: number; sound_type: string }>(`/api/alerts/${alertId}/sound`, {
+    method: 'PUT',
+    body: JSON.stringify({ sound_type: soundType }),
+  });
+}
+
 // ---- AI Ratings ----
 
 export async function getRatings(): Promise<AIRating[]> {
