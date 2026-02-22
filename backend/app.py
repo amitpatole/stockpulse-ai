@@ -11,6 +11,7 @@ import threading
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
 from flask import Flask, Response, jsonify, send_from_directory
 
@@ -28,7 +29,7 @@ sse_clients: list[queue.Queue] = []
 sse_lock = threading.Lock()
 
 _ALLOWED_EVENT_TYPES = frozenset({
-    'heartbeat', 'alert', 'provider_fallback', 'job_completed',
+    'heartbeat', 'alert', 'provider_fallback', 'provider_recovered', 'job_completed',
     'technical_alerts', 'regime_update', 'morning_briefing',
     'daily_summary', 'weekly_review', 'reddit_trending', 'download_tracker',
     'snapshot', 'rate_limit_update',
@@ -171,21 +172,49 @@ def create_app() -> Flask:
 
         data_registry = create_data_registry()
 
-        def _on_provider_fallback(from_name: str, to_name: str, reason: str) -> None:
+        def _on_provider_fallback(from_name: str, to_name: Optional[str], reason: str) -> None:
             from_provider = data_registry.get_provider(from_name)
-            to_provider = data_registry.get_provider(to_name)
             from_display = from_provider.get_provider_info().display_name if from_provider else from_name
-            to_display = to_provider.get_provider_info().display_name if to_provider else to_name
-            tier = to_provider.get_provider_info().tier if to_provider else 'free'
-            send_sse_event('provider_fallback', {
-                'from_provider': from_display,
-                'to_provider': to_display,
-                'tier': tier,
-                'reason': reason,
+            if to_name is None:
+                # All providers exhausted — signal full unavailability
+                send_sse_event('provider_fallback', {
+                    'from_provider': from_display,
+                    'to_provider': None,
+                    'tier': None,
+                    'reason': reason,
+                    'timestamp': datetime.utcnow().isoformat() + 'Z',
+                })
+            else:
+                to_provider = data_registry.get_provider(to_name)
+                to_display = to_provider.get_provider_info().display_name if to_provider else to_name
+                tier = to_provider.get_provider_info().tier if to_provider else 'free'
+                send_sse_event('provider_fallback', {
+                    'from_provider': from_display,
+                    'to_provider': to_display,
+                    'tier': tier,
+                    'reason': reason,
+                    'timestamp': datetime.utcnow().isoformat() + 'Z',
+                })
+
+        def _on_provider_recovered(recovered_name: str, fallback_was: str) -> None:
+            recovered_provider = data_registry.get_provider(recovered_name)
+            recovered_display = (
+                recovered_provider.get_provider_info().display_name
+                if recovered_provider else recovered_name
+            )
+            fallback_provider = data_registry.get_provider(fallback_was)
+            fallback_display = (
+                fallback_provider.get_provider_info().display_name
+                if fallback_provider else fallback_was
+            )
+            send_sse_event('provider_recovered', {
+                'recovered_provider': recovered_display,
+                'fallback_was': fallback_display,
                 'timestamp': datetime.utcnow().isoformat() + 'Z',
             })
 
         data_registry.on_fallback = _on_provider_fallback
+        data_registry.on_recovered = _on_provider_recovered
         app.extensions['data_registry'] = data_registry
         logger.info("Data provider registry initialised")
     except Exception as exc:

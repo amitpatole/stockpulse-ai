@@ -104,7 +104,12 @@ def get_ai_providers_endpoint():
             })
 
         total = len(result)
+        total_pages = max(1, (total + page_size - 1) // page_size)
         offset = (page - 1) * page_size
+
+        if page > total_pages:
+            return jsonify({'error': f'page {page} exceeds total_pages {total_pages}'}), 400
+
         page_data = result[offset:offset + page_size]
 
         return jsonify({
@@ -112,11 +117,16 @@ def get_ai_providers_endpoint():
             'page': page,
             'page_size': page_size,
             'total': total,
+            'total_pages': total_pages,
             'has_next': (page * page_size) < total,
+            'has_prev': page > 1,
         })
     except Exception as e:
         logger.error(f"Error fetching AI providers: {e}")
-        return jsonify({'data': [], 'page': page, 'page_size': page_size, 'total': 0, 'has_next': False})
+        return jsonify({
+            'data': [], 'page': page, 'page_size': page_size, 'total': 0,
+            'total_pages': 1, 'has_next': False, 'has_prev': False,
+        })
 
 
 @settings_bp.route('/settings/ai-provider', methods=['POST'])
