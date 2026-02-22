@@ -2,12 +2,12 @@
 
 import DOMPurify from 'dompurify';
 import { useState, useMemo } from 'react';
-import { FileText, Loader2, Calendar, Bot, Filter, Play } from 'lucide-react';
+import { FileText, Loader2, Calendar, Bot, Filter, Play, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import { useApi } from '@/hooks/useApi';
-import { getResearchBriefs, generateResearchBrief, getStocks } from '@/lib/api';
-import type { ResearchBrief, Stock } from '@/lib/types';
+import { getResearchBriefs, generateResearchBrief, getStocks, exportBriefs } from '@/lib/api';
+import type { ResearchBrief, Stock, ExportFormat } from '@/lib/types';
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -63,6 +63,12 @@ export default function ResearchPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
+  // Batch export state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('zip');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const { data: briefs, loading, error, refetch } = useApi<ResearchBrief[]>(
     () => getResearchBriefs(filterTicker || undefined),
     [filterTicker],
@@ -92,6 +98,43 @@ export default function ResearchPage() {
     }
   };
 
+  const toggleSelection = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleExport = async () => {
+    if (selectedIds.size === 0 || exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const blob = await exportBriefs(Array.from(selectedIds), exportFormat);
+      const today = new Date().toISOString().slice(0, 10);
+      const filename = `research-brief-export-${today}.${exportFormat}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const showSpinner = exporting && selectedIds.size > 10;
+
   return (
     <div className="flex flex-col">
       <Header title="Research Briefs" subtitle="AI-generated research analysis" />
@@ -107,6 +150,7 @@ export default function ResearchPage() {
               onChange={(e) => {
                 setFilterTicker(e.target.value);
                 setSelectedBrief(null);
+                setSelectedIds(new Set());
               }}
               className="bg-transparent text-sm text-slate-300 outline-none"
             >
@@ -145,6 +189,49 @@ export default function ResearchPage() {
           )}
         </div>
 
+        {/* Export toolbar — visible only when briefs are selected */}
+        {selectedIds.size > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-600 bg-slate-800/70 px-4 py-2.5">
+            <span className="text-xs font-medium text-slate-400">
+              {selectedIds.size} brief{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+
+            <select
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+              className="rounded border border-slate-600 bg-slate-700 px-2 py-1 text-xs text-slate-200 outline-none"
+            >
+              <option value="zip">ZIP</option>
+              <option value="csv">CSV</option>
+              <option value="pdf">PDF</option>
+            </select>
+
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {showSpinner ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Export Selected ({selectedIds.size})
+            </button>
+
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              Clear
+            </button>
+
+            {exportError && (
+              <span className="text-xs text-red-400">{exportError}</span>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           {/* Briefs List */}
@@ -180,29 +267,44 @@ export default function ResearchPage() {
                 {briefs && briefs.length > 0 && (
                   <div className="divide-y divide-slate-700/30">
                     {briefs.map((brief) => (
-                      <button
+                      <div
                         key={brief.id}
-                        onClick={() => setSelectedBrief(brief)}
                         className={clsx(
-                          'w-full px-4 py-3 text-left transition-colors hover:bg-slate-700/20',
+                          'flex items-start gap-2 px-3 py-3 transition-colors hover:bg-slate-700/20',
                           selectedBrief?.id === brief.id && 'bg-blue-500/10 border-l-2 border-blue-500'
                         )}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
-                            {brief.ticker}
-                          </span>
-                          <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                            <Bot className="h-2.5 w-2.5" />
-                            {brief.agent_name}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-300 line-clamp-2">{brief.title}</p>
-                        <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
-                          <Calendar className="h-2.5 w-2.5" />
-                          {formatDate(brief.created_at)}
-                        </div>
-                      </button>
+                        {/* Checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(brief.id)}
+                          onChange={() => toggleSelection(brief.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-1 h-3.5 w-3.5 flex-shrink-0 accent-emerald-500"
+                          aria-label={`Select brief: ${brief.title}`}
+                        />
+
+                        {/* Row content — clicking selects the brief for preview */}
+                        <button
+                          onClick={() => setSelectedBrief(brief)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+                              {brief.ticker}
+                            </span>
+                            <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                              <Bot className="h-2.5 w-2.5" />
+                              {brief.agent_name}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-300 line-clamp-2">{brief.title}</p>
+                          <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
+                            <Calendar className="h-2.5 w-2.5" />
+                            {formatDate(brief.created_at)}
+                          </div>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}

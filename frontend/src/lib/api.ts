@@ -22,6 +22,7 @@ import type {
   Timeframe,
   ProviderStatusResponse,
   ProviderRateLimitsResponse,
+  ExportFormat,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -242,6 +243,27 @@ export async function generateResearchBrief(ticker?: string): Promise<ResearchBr
     method: 'POST',
     body: JSON.stringify(ticker ? { ticker } : {}),
   });
+}
+
+export async function exportBriefs(ids: number[], format: ExportFormat): Promise<Blob> {
+  const url = `${API_BASE}/api/research/briefs/export`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, format }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    let message = `Export failed: ${res.status}`;
+    try {
+      const json = JSON.parse(body);
+      message = json.error || json.message || message;
+    } catch {
+      if (body) message = body;
+    }
+    throw new ApiError(message, res.status);
+  }
+  return res.blob();
 }
 
 // ---- Chat ----
