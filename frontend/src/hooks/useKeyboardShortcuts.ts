@@ -16,6 +16,7 @@ interface UseKeyboardShortcutsOptions {
   onOpenHelp: () => void;
   onCloseHelp: () => void;
   isHelpOpen: boolean;
+  onFocusNewsFeed?: () => void;
 }
 
 export function useKeyboardShortcuts({
@@ -23,6 +24,7 @@ export function useKeyboardShortcuts({
   onOpenHelp,
   onCloseHelp,
   isHelpOpen,
+  onFocusNewsFeed,
 }: UseKeyboardShortcutsOptions) {
   const router = useRouter();
 
@@ -76,9 +78,16 @@ export function useKeyboardShortcuts({
         onOpenHelp();
         return;
       }
+
+      // N: focus news feed
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        onFocusNewsFeed?.();
+        return;
+      }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [router, searchRef, onOpenHelp, onCloseHelp, isHelpOpen]);
+  }, [router, searchRef, onOpenHelp, onCloseHelp, isHelpOpen, onFocusNewsFeed]);
 }
