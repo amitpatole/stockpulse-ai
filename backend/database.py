@@ -282,6 +282,7 @@ _NEW_TABLES_SQL = [
         condition_type TEXT NOT NULL,
         threshold      REAL NOT NULL,
         enabled        INTEGER NOT NULL DEFAULT 1,
+        sound_type     TEXT NOT NULL DEFAULT 'default',
         triggered_at   TIMESTAMP,
         created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )

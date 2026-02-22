@@ -8,7 +8,7 @@ import re
 
 from flask import Blueprint, jsonify, request
 
-from backend.core.alert_manager import create_alert, get_alerts, delete_alert, toggle_alert
+from backend.core.alert_manager import create_alert, get_alerts, delete_alert, toggle_alert, update_alert_sound_type
 from backend.core.settings_manager import get_setting, set_setting
 from backend.database import db_session
 
@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 alerts_bp = Blueprint('alerts', __name__, url_prefix='/api')
 
-_VALID_SOUND_TYPES = {'chime', 'bell', 'beep'}
+# Valid sound types for both global settings and per-alert overrides
+_VALID_SOUND_TYPES = {'default', 'chime', 'alarm', 'silent'}
 
 _SOUND_DEFAULTS = {
     'alert_sound_enabled': 'true',
@@ -49,6 +50,7 @@ def create_alert_endpoint():
         ticker         (str)   : Stock ticker — must exist in the stocks table.
         condition_type (str)   : One of 'price_above', 'price_below', 'pct_change'.
         threshold      (float) : Numeric threshold value.
+        sound_type     (str)   : Optional. One of 'default', 'chime', 'alarm', 'silent'.
 
     Returns:
         201 with the created alert object, or 400 on validation failure.
@@ -58,6 +60,7 @@ def create_alert_endpoint():
     ticker = str(data.get('ticker', '')).strip().upper()
     condition_type = str(data.get('condition_type', '')).strip()
     threshold_raw = data.get('threshold')
+    sound_type = str(data.get('sound_type', 'default')).strip()
 
     # Validate required fields
     if not ticker:
@@ -80,6 +83,11 @@ def create_alert_endpoint():
     if condition_type == 'pct_change' and threshold > 100:
         return jsonify({'error': 'threshold for pct_change must be ≤ 100'}), 400
 
+    if sound_type not in _VALID_SOUND_TYPES:
+        return jsonify({
+            'error': f"Invalid sound_type. Must be one of: {', '.join(sorted(_VALID_SOUND_TYPES))}"
+        }), 400
+
     # Verify the ticker exists in the stocks table
     with db_session() as conn:
         row = conn.execute(
@@ -90,7 +98,7 @@ def create_alert_endpoint():
             'error': f"Ticker '{ticker}' is not in the monitored stocks list. Add it first."
         }), 400
 
-    alert = create_alert(ticker, condition_type, threshold)
+    alert = create_alert(ticker, condition_type, threshold, sound_type)
     return jsonify(alert), 201
 
 
@@ -120,6 +128,32 @@ def toggle_alert_endpoint(alert_id: int):
     return jsonify(updated)
 
 
+@alerts_bp.route('/alerts/<int:alert_id>/sound', methods=['PUT'])
+def update_alert_sound_endpoint(alert_id: int):
+    """Update the per-alert sound type.
+
+    Request Body (JSON):
+        sound_type (str) : One of 'default', 'chime', 'alarm', 'silent'.
+
+    Returns:
+        200 with {id, sound_type}, 400 on bad input, 404 if alert not found.
+    """
+    data = request.get_json(silent=True) or {}
+    sound_type = data.get('sound_type')
+
+    if sound_type is None:
+        return jsonify({'error': 'Missing required field: sound_type'}), 400
+    if sound_type not in _VALID_SOUND_TYPES:
+        return jsonify({
+            'error': f"Invalid sound_type. Must be one of: {', '.join(sorted(_VALID_SOUND_TYPES))}"
+        }), 400
+
+    updated = update_alert_sound_type(alert_id, sound_type)
+    if updated is None:
+        return jsonify({'error': f'Alert {alert_id} not found'}), 404
+    return jsonify({'id': alert_id, 'sound_type': sound_type})
+
+
 @alerts_bp.route('/alerts/sound-settings', methods=['GET'])
 def get_sound_settings():
     """Return current alert sound settings.
@@ -145,7 +179,7 @@ def update_sound_settings():
 
     Request Body (JSON, all fields optional):
         enabled          (bool) : Whether alert sounds are enabled.
-        sound_type       (str)  : One of 'chime', 'bell', 'beep'.
+        sound_type       (str)  : One of 'default', 'chime', 'alarm', 'silent'.
         volume           (int)  : Volume from 0 to 100.
         mute_when_active (bool) : Whether to mute when tab is focused.
 
