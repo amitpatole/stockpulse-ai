@@ -271,6 +271,7 @@ _NEW_TABLES_SQL = [
     CREATE TABLE IF NOT EXISTS watchlist_stocks (
         watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
         ticker       TEXT NOT NULL REFERENCES stocks(ticker),
+        sort_order   INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (watchlist_id, ticker)
     )
     """,
@@ -382,6 +383,31 @@ def _migrate_news(cursor) -> None:
         logger.info("Migration applied: added engagement_score to news table")
 
 
+def _migrate_watchlist_stocks(cursor) -> None:
+    """Add position column to watchlist_stocks if missing and initialise positions."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(watchlist_stocks)").fetchall()}
+    if not cols:
+        return  # table doesn't exist yet; CREATE TABLE will handle it
+    if 'position' not in cols:
+        cursor.execute("ALTER TABLE watchlist_stocks ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+        # Initialise positions alphabetically within each watchlist so the
+        # existing order is deterministic for users upgrading from older DBs.
+        watchlist_ids = [row[0] for row in cursor.execute("SELECT id FROM watchlists").fetchall()]
+        for wl_id in watchlist_ids:
+            tickers = [
+                row[0] for row in cursor.execute(
+                    "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY ticker ASC",
+                    (wl_id,),
+                ).fetchall()
+            ]
+            for pos, ticker in enumerate(tickers):
+                cursor.execute(
+                    "UPDATE watchlist_stocks SET position = ? WHERE watchlist_id = ? AND ticker = ?",
+                    (pos, wl_id, ticker),
+                )
+        logger.info("Migration applied: added position column to watchlist_stocks")
+
+
 def _migrate_data_providers_config(cursor) -> None:
     """Add rate limit tracking columns to data_providers_config if missing."""
     cols = {row[1] for row in cursor.execute("PRAGMA table_info(data_providers_config)").fetchall()}
@@ -414,6 +440,7 @@ def init_all_tables(db_path: str | None = None) -> None:
         # Migrate existing tables before CREATE TABLE (which is a no-op if table exists)
         _migrate_agent_runs(cursor)
         _migrate_news(cursor)
+        _migrate_watchlist_stocks(cursor)
         _migrate_data_providers_config(cursor)
 
         for sql in _NEW_TABLES_SQL:

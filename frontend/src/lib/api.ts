@@ -315,6 +315,20 @@ export async function getComparisonData(
   return request<ComparisonResult>(`/api/stocks/compare?${params.toString()}`);
 }
 
+// ---- Watchlist ----
+
+export async function getWatchlistOrder(watchlistId: number = 1): Promise<string[]> {
+  const data = await request<{ tickers: string[] }>(`/api/watchlist/${watchlistId}`);
+  return data.tickers ?? [];
+}
+
+export async function reorderWatchlist(watchlistId: number = 1, tickers: string[]): Promise<void> {
+  await request<{ ok: boolean }>(`/api/watchlist/${watchlistId}/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ tickers }),
+  });
+}
+
 // ---- Data Provider Status ----
 
 export async function getProviderStatus(): Promise<ProviderStatusResponse> {
