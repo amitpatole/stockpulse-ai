@@ -251,7 +251,7 @@ export interface ProviderRateLimitsResponse {
 }
 
 // SSE Event Types
-export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
+export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update' | 'snapshot';
 
 export interface SSEEvent {
   type: SSEEventType;

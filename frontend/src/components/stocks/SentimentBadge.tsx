@@ -24,7 +24,7 @@ function formatScore(score: number | null): string {
 function isStaleData(data: SentimentData): boolean {
   if (data.stale) return true;
   const ageMs = Date.now() - new Date(data.updated_at).getTime();
-  return ageMs > 60 * 60 * 1000;
+  return ageMs > 15 * 60 * 1000;
 }
 
 function buildSourceLine(sources: { news: number; reddit: number }): string {

@@ -85,7 +85,7 @@ export function useSSE() {
       };
 
       // Listen for specific named events
-      const eventTypes: SSEEventType[] = ['agent_status', 'alert', 'job_complete', 'heartbeat', 'news', 'rating_update'];
+      const eventTypes: SSEEventType[] = ['agent_status', 'alert', 'job_complete', 'heartbeat', 'news', 'rating_update', 'snapshot'];
       eventTypes.forEach((type) => {
         es.addEventListener(type, (event: MessageEvent) => {
           if (!mountedRef.current) return;

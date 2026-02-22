@@ -106,6 +106,17 @@ def send_sse_event(event_type: str, data: dict) -> None:
         for dead in dead_clients:
             sse_clients.remove(dead)
 
+    # Invalidate stale sentiment cache whenever a news event lands so the
+    # next GET /api/stocks/<ticker>/sentiment recomputes immediately.
+    if event_type == 'news':
+        ticker = data.get('ticker')
+        if ticker:
+            try:
+                from backend.core.sentiment_service import invalidate_ticker
+                invalidate_ticker(ticker)
+            except Exception as exc:
+                logger.debug("Sentiment cache invalidation skipped: %s", exc)
+
 
 # ---------------------------------------------------------------------------
 # Application factory

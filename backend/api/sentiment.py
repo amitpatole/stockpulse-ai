@@ -7,7 +7,7 @@ import logging
 
 from flask import Blueprint, jsonify
 
-from backend.core.sentiment_service import get_sentiment
+from backend.core.sentiment_service import get_sentiment, invalidate_ticker
 
 logger = logging.getLogger(__name__)
 
