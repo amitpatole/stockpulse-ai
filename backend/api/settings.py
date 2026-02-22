@@ -3,6 +3,8 @@ TickerPulse AI v3.0 - Settings API Routes
 Blueprint for AI provider settings, data provider settings, and agent framework configuration.
 """
 
+import math
+
 from flask import Blueprint, jsonify, request
 import logging
 
@@ -35,6 +37,9 @@ def _parse_pagination(args):
         page_size = int(args.get('page_size', 25))
     except (ValueError, TypeError):
         return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+
+    if page < 1:
+        return None, None, (jsonify({'error': 'page must be >= 1'}), 400)
 
     if not (1 <= page_size <= 100):
         return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)

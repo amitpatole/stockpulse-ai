@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CalendarDays, Clock, TrendingUp, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, CalendarDays, Clock, RefreshCw, TrendingUp } from 'lucide-react';
 import { getEarnings } from '@/lib/api';
 import type { EarningsEvent } from '@/lib/types';
 
@@ -35,7 +36,9 @@ export default function EarningsCalendar() {
   const [events, setEvents] = useState<EarningsEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useState(7);
+  const [stale, setStale] = useState(false);
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -43,6 +46,7 @@ export default function EarningsCalendar() {
     try {
       const data = await getEarnings(days);
       setEvents(data.events);
+      setStale(data.stale);
     } catch (err) {
       setError('Failed to load earnings data');
       console.error(err);
@@ -53,6 +57,8 @@ export default function EarningsCalendar() {
 
   useEffect(() => { load(); }, [days]);
 
+  const visibleEvents = watchlistOnly ? events.filter(e => e.on_watchlist) : events;
+
   return (
     <div className="rounded-xl bg-slate-900 border border-slate-700/50">
       {/* Header */}
@@ -60,13 +66,25 @@ export default function EarningsCalendar() {
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-blue-400" />
           <span className="text-sm font-semibold text-white">Earnings Calendar</span>
-          {events.some(e => e.on_watchlist) && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              Watchlist
+          {stale && (
+            <span title="Data may be outdated — refresh to update">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setWatchlistOnly(v => !v)}
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+              watchlistOnly
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                : 'text-slate-400 border-slate-600 hover:text-white hover:border-slate-500'
+            }`}
+            title={watchlistOnly ? 'Show all earnings' : 'Show watchlist only'}
+          >
+            <TrendingUp className="h-3 w-3" />
+            Watchlist
+          </button>
           <select
             value={days}
             onChange={e => setDays(Number(e.target.value))}
@@ -101,21 +119,21 @@ export default function EarningsCalendar() {
           </div>
         )}
 
-        {!loading && !error && events.length === 0 && (
+        {!loading && !error && visibleEvents.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 text-slate-400 text-sm gap-1">
             <CalendarDays className="h-8 w-8 opacity-30 mb-1" />
             <span>No earnings in the next {days} days</span>
           </div>
         )}
 
-        {!loading && !error && events.length > 0 && (
+        {!loading && !error && visibleEvents.length > 0 && (
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {events.map(event => (
+            {visibleEvents.map(event => (
               <div
                 key={event.id}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg ${
                   event.on_watchlist
-                    ? 'bg-slate-800/80 border border-slate-600/50'
+                    ? 'bg-slate-800/80 border border-emerald-500/30'
                     : 'bg-slate-800/40'
                 }`}
               >
@@ -127,7 +145,12 @@ export default function EarningsCalendar() {
                 {/* Ticker + company */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-semibold text-white">{event.ticker}</span>
+                    <Link
+                      href={`/stocks/${event.ticker}`}
+                      className="text-sm font-semibold text-white hover:text-blue-300 transition-colors"
+                    >
+                      {event.ticker}
+                    </Link>
                     {event.on_watchlist && (
                       <TrendingUp className="h-3 w-3 text-emerald-400 flex-shrink-0" />
                     )}
