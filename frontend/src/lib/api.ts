@@ -16,6 +16,8 @@ import type {
   HealthCheck,
   ResearchBrief,
   AlertSoundSettings,
+  AlertSoundType,
+  PriceAlert,
   EarningsResponse,
   SentimentData,
   StockDetail,
@@ -128,6 +130,26 @@ export async function getAlerts(): Promise<Alert[]> {
   return data.alerts || [];
 }
 
+export async function listPriceAlerts(): Promise<PriceAlert[]> {
+  const data = await request<PriceAlert[] | { alerts: PriceAlert[] }>('/api/alerts');
+  if (Array.isArray(data)) return data;
+  return (data as { alerts: PriceAlert[] }).alerts || [];
+}
+
+export async function deletePriceAlert(alertId: number): Promise<void> {
+  await request<void>(`/api/alerts/${alertId}`, { method: 'DELETE' });
+}
+
+export async function updateAlertSoundType(
+  alertId: number,
+  soundType: AlertSoundType
+): Promise<{ id: number; sound_type: AlertSoundType }> {
+  return request<{ id: number; sound_type: AlertSoundType }>(
+    `/api/alerts/${alertId}/sound`,
+    { method: 'PUT', body: JSON.stringify({ sound_type: soundType }) }
+  );
+}
+
 // ---- AI Ratings ----
 
 export async function getRatings(): Promise<AIRating[]> {
@@ -194,6 +216,25 @@ export async function resumeJob(id: string): Promise<{ message: string }> {
   return request<{ message: string }>(`/api/scheduler/jobs/${id}/resume`, {
     method: 'POST',
   });
+}
+
+// ---- Price Alerts ----
+
+export async function listPriceAlerts(): Promise<PriceAlert[]> {
+  const data = await request<PriceAlert[] | { alerts: PriceAlert[] }>('/api/alerts');
+  if (Array.isArray(data)) return data;
+  return data.alerts || [];
+}
+
+export async function updateAlertSoundType(alertId: number, soundType: AlertSoundType): Promise<{ id: number; sound_type: AlertSoundType }> {
+  return request<{ id: number; sound_type: AlertSoundType }>(`/api/alerts/${alertId}/sound`, {
+    method: 'PUT',
+    body: JSON.stringify({ sound_type: soundType }),
+  });
+}
+
+export async function deletePriceAlert(alertId: number): Promise<void> {
+  await request<void>(`/api/alerts/${alertId}`, { method: 'DELETE' });
 }
 
 // ---- Alert Sound Settings ----

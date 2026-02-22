@@ -382,6 +382,18 @@ def _migrate_news(cursor) -> None:
         logger.info("Migration applied: added engagement_score to news table")
 
 
+def _migrate_price_alerts(cursor) -> None:
+    """Add sound_type column to price_alerts table if missing."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(price_alerts)").fetchall()}
+    if not cols:
+        return  # table doesn't exist yet; CREATE TABLE will handle it
+    if 'sound_type' not in cols:
+        cursor.execute(
+            "ALTER TABLE price_alerts ADD COLUMN sound_type TEXT NOT NULL DEFAULT 'default'"
+        )
+        logger.info("Migration applied: added sound_type to price_alerts table")
+
+
 def _migrate_data_providers_config(cursor) -> None:
     """Add rate limit tracking columns to data_providers_config if missing."""
     cols = {row[1] for row in cursor.execute("PRAGMA table_info(data_providers_config)").fetchall()}
@@ -415,6 +427,7 @@ def init_all_tables(db_path: str | None = None) -> None:
         _migrate_agent_runs(cursor)
         _migrate_news(cursor)
         _migrate_data_providers_config(cursor)
+        _migrate_price_alerts(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)

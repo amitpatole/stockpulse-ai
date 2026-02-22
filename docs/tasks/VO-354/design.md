@@ -2,94 +2,107 @@
 
 ## Technical Design
 
-Now I have everything I need. Here's the technical design spec:
+Now I have the full picture. The backend is already complete — all endpoints, the DB column, and SSE payload with `sound_type` are in place. The gap is entirely on the frontend. Here is the design spec:
 
 ---
 
 ### 1. Approach
 
-Add a `sound_type` column to `price_alerts` for per-alert overrides, stored via a new `PUT /api/alerts/<id>/sound` endpoint. The existing SSE `alert` event payload is extended with `sound_type` so `useSSE.ts` can play the correct sound per-alert rather than the global fallback. Global sound settings (enable/volume/mute) already exist in `backend/api/alerts.py`; the settings page gets a new UI section wiring them.
+The backend is fully implemented: `price_alerts.sound_type` column exists, all CRUD and sound-settings endpoints are live, and the SSE `alert` event already carries `sound_type`. The work is frontend-only: add missing TypeScript types and API functions, build a `PriceAlertsPanel` component with a per-alert sound picker and global settings section, fix `useSSE.ts` to resolve per-alert sound overrides, and ship the two required audio files.
 
 ---
 
 ### 2. Files to Create/Modify
 
-- **MODIFY**: `backend/database.py` — add `_migrate_price_alerts_sound_type()` migration
-- **MODIFY**: `backend/core/alert_manager.py` — `create_alert()` accepts `sound_type`; SSE payload includes `alert['sound_type']`
-- **MODIFY**: `backend/api/alerts.py` — `POST /api/alerts` accepts `sound_type`; new `PUT /api/alerts/<id>/sound`; expand `_VALID_SOUND_TYPES` to `{default, chime, alarm, silent}`
-- **MODIFY**: `frontend/src/lib/types.ts` — update `AlertSoundSettings.sound_type` union; add `sound_type` to `AlertEvent`; add `PriceAlert` interface
-- **MODIFY**: `frontend/src/lib/api.ts` — add `updateAlertSoundType(alertId, soundType)` and `listAlerts()`
-- **MODIFY**: `frontend/src/hooks/useSSE.ts` — pass per-alert `sound_type` from SSE payload to `playAlertSound()`
-- **CREATE**: `frontend/src/components/alerts/PriceAlertsPanel.tsx` — alert list with inline sound picker + preview
-- **MODIFY**: `frontend/src/app/settings/page.tsx` — add "Alert Sounds" global settings section + render `PriceAlertsPanel`
-- **MODIFY**: `frontend/src/components/layout/Sidebar.tsx` — add Alerts nav link
+- **CREATE**: `frontend/src/components/alerts/PriceAlertsPanel.tsx`
+- **MODIFY**: `frontend/src/lib/types.ts` — add `PriceAlert` interface and `AlertSoundType`; fix `AlertSoundSettings.sound_type` union (`'chime' | 'beep' | 'bell'` → `'chime' | 'alarm'`)
+- **MODIFY**: `frontend/src/lib/api.ts` — add `listPriceAlerts`, `createPriceAlert`, `deletePriceAlert`, `updateAlertSoundType`
+- **MODIFY**: `frontend/src/hooks/useSSE.ts` — update `playAlertSound` to accept per-alert `sound_type` from the SSE event; resolve `'default'` to global setting, `'silent'` to no-op
+- **MODIFY**: `frontend/src/app/settings/page.tsx` — import and render `PriceAlertsPanel`
+- **CREATE**: `frontend/public/sounds/chime.mp3`
+- **CREATE**: `frontend/public/sounds/alarm.mp3`
 
 ---
 
 ### 3. Data Model
 
-```sql
--- Migration: add sound_type to price_alerts
-ALTER TABLE price_alerts ADD COLUMN sound_type TEXT NOT NULL DEFAULT 'default';
--- CHECK constraint enforced at application layer (Flask); SQLite ALTER TABLE doesn't support it inline
-```
+Already in place. No migrations needed.
 
-Global sound settings continue to use the existing `settings` key-value table (`alert_sound_enabled`, `alert_sound_type`, `alert_sound_volume`, `alert_mute_when_active`).
+```sql
+-- Existing column in price_alerts (database.py:285)
+sound_type  TEXT NOT NULL DEFAULT 'default'
+-- Valid values: 'default' | 'chime' | 'alarm' | 'silent'
+-- Global sound settings stored in the key-value settings table
+```
 
 ---
 
 ### 4. API Spec
 
-**Existing — extend POST `/api/alerts`** (no breaking change, field is optional):
-```json
-// Request
-{ "ticker": "AAPL", "condition_type": "price_above", "threshold": 200, "sound_type": "alarm" }
-// Response 201
-{ "id": 7, "ticker": "AAPL", ..., "sound_type": "alarm" }
-```
+All endpoints already exist. Summary for reference:
 
-**New — PUT `/api/alerts/<id>/sound`**:
-```json
-// Request
-{ "sound_type": "chime" }   // one of: default | chime | alarm | silent
-// Response 200
-{ "id": 7, "sound_type": "chime" }
-// Response 400: { "error": "Invalid sound_type. Must be one of: alarm, chime, default, silent" }
-// Response 404: { "error": "Alert 7 not found" }
-```
-
-**SSE `alert` payload** gains `"sound_type": "alarm"` field (passed through from the alert row).
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/alerts` | List all alerts → `PriceAlert[]` |
+| `POST` | `/api/alerts` | Create alert → `{ticker, condition_type, threshold, sound_type?}` |
+| `DELETE` | `/api/alerts/<id>` | Delete alert |
+| `PUT` | `/api/alerts/<id>/toggle` | Enable/disable |
+| `PUT` | `/api/alerts/<id>/sound` | `{sound_type}` → `{id, sound_type}` |
+| `GET` | `/api/alerts/sound-settings` | Global settings |
+| `PUT` | `/api/alerts/sound-settings` | Partial update of global settings |
 
 ---
 
 ### 5. Frontend Component Spec
 
-**Component**: `PriceAlertsPanel` — `frontend/src/components/alerts/PriceAlertsPanel.tsx`
+**Component**: `PriceAlertsPanel`
+**File**: `frontend/src/components/alerts/PriceAlertsPanel.tsx`
+**Rendered in**: `frontend/src/app/settings/page.tsx`
 
-**Renders in**: `frontend/src/app/settings/page.tsx` as a "Price Alerts" section (below "System Status").
+**Layout — two sections:**
 
-**UI layout** — table with columns:
+*Global Sound Settings card:*
+- Toggle switch: "Enable alert sounds" (`enabled`)
+- `<select>` labelled "Default sound": `chime` / `alarm` / `silent`
+- Range input: "Volume" (0–100), aria-labelled
+- Preview button: plays the selected sound immediately via Web Audio on click (satisfies browser autoplay policy)
 
-| Ticker | Condition | Threshold | Sound | Status | Actions |
-|--------|-----------|-----------|-------|--------|---------|
-| AAPL | price_above | $200 | `<select>` [▶ preview] | Enabled | Delete |
+*Alerts table:*
+- Columns: **Ticker** | **Condition** | **Threshold** | **Sound** | **Status** | **Actions**
+- Sound column: `<select>` with options `Default (Global) / Chime / Alarm / Silent` + icon-button to preview selection
+- Status column: enabled/disabled toggle
+- Actions column: delete button
+- Create-alert form above the table: ticker input, condition dropdown, threshold input, sound dropdown, Submit
 
-- Sound column: `<select>` with options `default / chime / alarm / silent`, labelled `aria-label="Sound for AAPL alert"`. Fires `PUT /api/alerts/<id>/sound` on change.
-- Preview button (▶): calls `playAlertSound()` immediately with the selected type — satisfies "audition before saving" requirement.
-- Loading state: skeleton rows while fetching.
-- Error state: inline `<p role="alert">` banner if fetch or update fails.
+**Type additions to `types.ts`:**
+```ts
+export type AlertSoundType = 'default' | 'chime' | 'alarm' | 'silent';
+export interface PriceAlert {
+  id: number; ticker: string; condition_type: string;
+  threshold: number; enabled: boolean;
+  sound_type: AlertSoundType;
+  triggered_at: string | null; created_at: string;
+}
+```
 
-**Global "Alert Sounds" section** (above `PriceAlertsPanel` in settings):
-- Toggle: Enable sound notifications (maps `enabled`)
-- Slider: Volume 0–100 (maps `volume`)
-- Checkbox: Mute when tab is focused (maps `mute_when_active`)
+**`useSSE.ts` change** — `playAlertSound` receives the raw event data and resolves the sound:
+```ts
+function playAlertSound(settings: AlertSoundSettings, alertSoundType: AlertSoundType): void {
+  if (!settings.enabled) return;
+  if (settings.mute_when_active && document.hasFocus()) return;
+  const resolved = alertSoundType === 'default' ? settings.sound_type : alertSoundType;
+  if (resolved === 'silent') return;
+  new Audio(`/sounds/${resolved}.mp3`).play().catch(() => {});
+}
+// Call site (line 184): playAlertSound(soundSettingsRef.current, alertEvent.sound_type ?? 'default')
+```
 
-All controls keyboard-navigable; sliders use `<input type="range">` with `aria-label`.
+Loading state: skeleton rows. Error state: inline error banner with retry button. Empty state: "No alerts yet" message with the create form still visible.
 
 ---
 
 ### 6. Verification
 
-1. **Per-alert sound plays on trigger**: Set AAPL alert to `alarm`, trigger it in dev (manually call `evaluate_price_alerts`), verify the browser plays `alarm` not the global `chime`.
-2. **Silent alert suppresses audio**: Set an alert to `silent`, trigger it, verify no sound plays even with global sounds enabled.
-3. **Preview on picker change**: Select `chime` from the dropdown, click ▶ — sound plays immediately without saving the alert first.
+1. **Per-alert sound override**: Create two alerts — one with `chime`, one with `alarm`. Trigger both via the backend evaluation loop and confirm the browser plays the correct distinct sound for each.
+2. **Global mute toggle**: In Global Sound Settings, toggle "Enable alert sounds" off. Trigger an alert; confirm no sound plays regardless of per-alert setting.
+3. **Preview on picker change**: Open the sound `<select>` on any alert row, change to `alarm`, and immediately click the preview icon — confirm the alarm sound plays without needing to save, and no console errors appear for the autoplay policy path.
