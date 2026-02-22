@@ -3,13 +3,14 @@ TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs.
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 from datetime import datetime, timezone
 import sqlite3
 import random
 import logging
 
 from backend.config import Config
+from backend.utils.export_briefs import build_zip, build_csv, build_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,90 @@ def generate_brief():
 
     brief = _generate_sample_brief(ticker)
     return jsonify(brief)
+
+
+@research_bp.route('/research/briefs/export', methods=['POST'])
+def export_briefs():
+    """Batch-export selected research briefs as ZIP, CSV, or PDF.
+
+    Request Body (JSON):
+        ids (list[int]): Brief IDs to export. 1–100 items.
+        format (str): "zip" | "csv" | "pdf"
+
+    Returns:
+        Binary file stream with appropriate Content-Type and Content-Disposition.
+    """
+    data = request.get_json(silent=True) or {}
+
+    ids = data.get('ids')
+    fmt = data.get('format', 'zip')
+
+    # -- Validate ids ---------------------------------------------------------
+    if not ids or not isinstance(ids, list):
+        return jsonify({'error': 'ids must be a non-empty array'}), 400
+    if len(ids) > 100:
+        return jsonify({'error': 'Too many briefs selected (max 100)'}), 400
+    if not all(isinstance(i, int) and i > 0 for i in ids):
+        return jsonify({'error': 'ids must be an array of positive integers'}), 400
+
+    # -- Validate format ------------------------------------------------------
+    ALLOWED_FORMATS = {'zip', 'csv', 'pdf'}
+    if fmt not in ALLOWED_FORMATS:
+        return jsonify({'error': f'format must be one of: {", ".join(sorted(ALLOWED_FORMATS))}'}), 400
+
+    # -- Fetch briefs from DB --------------------------------------------------
+    try:
+        conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        placeholders = ','.join('?' * len(ids))
+        rows = conn.execute(
+            f'SELECT id, ticker, title, content, agent_name, model_used, created_at'
+            f' FROM research_briefs WHERE id IN ({placeholders})',
+            ids,
+        ).fetchall()
+        conn.close()
+    except Exception as exc:
+        logger.error("export_briefs: DB error: %s", exc)
+        return jsonify({'error': 'Database error while fetching briefs'}), 500
+
+    # Check all requested IDs were found
+    found_ids = {row['id'] for row in rows}
+    missing = [i for i in ids if i not in found_ids]
+    if missing:
+        return jsonify({'error': f'Brief(s) not found: {missing}'}), 404
+
+    # Preserve the original requested order
+    id_order = {bid: idx for idx, bid in enumerate(ids)}
+    briefs = sorted([dict(r) for r in rows], key=lambda b: id_order[b['id']])
+
+    # -- Generate export payload ----------------------------------------------
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    try:
+        if fmt == 'zip':
+            payload = build_zip(briefs)
+            mime = 'application/zip'
+            filename = f'research-brief-export-{today}.zip'
+        elif fmt == 'csv':
+            payload = build_csv(briefs)
+            mime = 'text/csv'
+            filename = f'research-brief-export-{today}.csv'
+        else:  # pdf
+            payload = build_pdf(briefs)
+            mime = 'application/pdf'
+            filename = f'research-brief-export-{today}.pdf'
+    except Exception as exc:
+        logger.error("export_briefs: generation error (format=%s): %s", fmt, exc)
+        return jsonify({'error': 'Failed to generate export file'}), 500
+
+    return Response(
+        payload,
+        status=200,
+        mimetype=mime,
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Content-Length': str(len(payload)),
+        },
+    )
 
 
 def _generate_sample_brief(ticker: str) -> dict:
