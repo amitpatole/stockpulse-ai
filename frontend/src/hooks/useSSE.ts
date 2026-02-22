@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import type { SSEEvent, SSEEventType, AgentStatusEvent, AlertEvent, JobCompleteEvent } from '@/lib/types';
+import type { SSEEvent, SSEEventType, AgentStatusEvent, AlertEvent, JobCompleteEvent, ProviderFallbackState } from '@/lib/types';
 import type { AlertSoundSettings } from '@/lib/types';
 import { getAlertSoundSettings } from '@/lib/api';
 
@@ -16,6 +16,8 @@ interface SSEState {
   recentJobCompletes: JobCompleteEvent[];
   eventLog: SSEEvent[];
   announcement: { assertive: string; polite: string };
+  fallbackActive: boolean;
+  fallbackInfo: ProviderFallbackState | null;
 }
 
 function playAlertSound(settings: AlertSoundSettings): void {
@@ -38,6 +40,8 @@ export function useSSE() {
     recentJobCompletes: [],
     eventLog: [],
     announcement: { assertive: '', polite: '' },
+    fallbackActive: false,
+    fallbackInfo: null,
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);

@@ -271,7 +271,15 @@ export interface ComparisonResult {
 }
 
 // SSE Event Types
-export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update' | 'snapshot';
+export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update' | 'snapshot' | 'provider_fallback' | 'provider_recovered';
+
+export interface ProviderFallbackState {
+  from_provider: string;
+  to_provider: string;
+  tier: string;
+  reason: string;
+  timestamp: string;
+}
 
 export interface SSEEvent {
   type: SSEEventType;
