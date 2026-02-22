@@ -7,24 +7,15 @@ import { useApi } from '@/hooks/useApi';
 import { useNewsFeedKeyboard } from '@/hooks/useNewsFeedKeyboard';
 import { useKeyboardShortcutsContext } from '@/components/layout/KeyboardShortcutsProvider';
 import { getNews } from '@/lib/api';
-import type { NewsArticle } from '@/lib/types';
+import type { NewsArticle, TimezoneMode } from '@/lib/types';
 import { SENTIMENT_COLORS } from '@/lib/types';
+import { formatTimestamp } from '@/lib/formatTime';
 
-function timeAgo(dateStr: string): string {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+interface NewsFeedProps {
+  tz?: TimezoneMode;
 }
 
-export default function NewsFeed() {
+export default function NewsFeed({ tz = 'local' }: NewsFeedProps) {
   const { data: articles, loading, error } = useApi<NewsArticle[]>(
     () => getNews(undefined, 20),
     [],
@@ -136,7 +127,7 @@ export default function NewsFeed() {
                       {/* Time */}
                       <span className="flex items-center gap-0.5 text-[10px] text-slate-500">
                         <Clock className="h-2.5 w-2.5" />
-                        {timeAgo(article.created_at)}
+                        {formatTimestamp(article.created_at, tz)}
                       </span>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
@@ -8,9 +8,11 @@ import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import StockPriceChart from '@/components/stocks/StockPriceChart';
 import SentimentBadge from '@/components/stocks/SentimentBadge';
+import TimezoneToggle from '@/components/stocks/TimezoneToggle';
 import { useApi } from '@/hooks/useApi';
 import { useSSE } from '@/hooks/useSSE';
 import { getStockDetail } from '@/lib/api';
+import type { TimezoneMode } from '@/lib/types';
 
 interface StockDetailPageProps {
   params: Promise<{ ticker: string }>;
@@ -34,6 +36,8 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
   const { ticker } = use(params);
   const isInvalidTicker = !ticker || !ticker.trim();
   const upperTicker = isInvalidTicker ? '' : ticker.toUpperCase();
+
+  const [tz, setTz] = useState<TimezoneMode>('local');
 
   // Redirect to home with error when ticker param is empty or whitespace.
   useEffect(() => {
@@ -82,13 +86,16 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
       />
 
       <div className="flex-1 p-6">
-        <Link
-          href="/"
-          className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Back to Dashboard
-        </Link>
+        <div className="mb-6 flex items-center justify-between">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to Dashboard
+          </Link>
+          <TimezoneToggle mode={tz} onModeChange={setTz} />
+        </div>
 
         {/* Quote stats */}
         {loading && !data && (
@@ -140,7 +147,7 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
                 </span>
               </div>
 
-              <SentimentBadge ticker={upperTicker} />
+              <SentimentBadge ticker={upperTicker} tz={tz} />
             </div>
 
             <dl className="mt-4 flex flex-wrap gap-6">
@@ -195,7 +202,7 @@ export default function StockDetailPage({ params }: StockDetailPageProps) {
         )}
 
         {/* Multi-timeframe chart — owns its own timeframe state */}
-        <StockPriceChart ticker={upperTicker} />
+        <StockPriceChart ticker={upperTicker} tz={tz} />
 
         {/* Loading placeholder when we have no quote yet */}
         {loading && !data && (

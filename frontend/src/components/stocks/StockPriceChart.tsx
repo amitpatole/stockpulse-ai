@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { getStockDetail, getCompareData } from '@/lib/api';
-import type { Timeframe, StockDetail, CompareResponse } from '@/lib/types';
+import type { Timeframe, StockDetail, CompareResponse, TimezoneMode } from '@/lib/types';
 import PriceChart from '@/components/charts/PriceChart';
 import TimeframeToggle from './TimeframeToggle';
 import CompareInput from './CompareInput';
@@ -41,9 +41,10 @@ interface CompareOverlay {
 
 interface StockPriceChartProps {
   ticker: string;
+  tz?: TimezoneMode;
 }
 
-export default function StockPriceChart({ ticker }: StockPriceChartProps) {
+export default function StockPriceChart({ ticker, tz = 'local' }: StockPriceChartProps) {
   const router = useRouter();
 
   const [timeframe, setTimeframe] = useState<Timeframe>(getInitialTimeframe);
@@ -210,6 +211,7 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
             data={chartData}
             height={320}
             timeframe={timeframe}
+            tz={tz}
             primarySymbol={isComparing ? ticker : undefined}
             compareOverlays={isComparing ? compareOverlays : undefined}
           />

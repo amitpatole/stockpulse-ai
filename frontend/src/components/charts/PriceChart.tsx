@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { createChart, AreaSeries, ColorType, TickMarkType, type IChartApi, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { ChartDataSummary } from './ChartDataSummary';
+import type { TimezoneMode } from '@/lib/types';
 
 interface PriceDataPoint {
   time: string | number;
@@ -15,6 +16,7 @@ interface PriceChartProps {
   height?: number;
   color?: string;
   timeframe?: '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
+  tz?: TimezoneMode;
 }
 
 export default function PriceChart({
@@ -23,6 +25,7 @@ export default function PriceChart({
   height = 300,
   color = '#3b82f6',
   timeframe,
+  tz = 'local',
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -30,15 +33,15 @@ export default function PriceChart({
   const titleId = `${baseId}-title`;
   const summaryId = `${baseId}-summary`;
 
+  const resolvedTz = tz === 'ET' ? 'America/New_York' : Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const usesTimestamps = data.length > 0 && typeof data[0].time === 'number';
-  const browserTimezone = usesTimestamps
-    ? Intl.DateTimeFormat().resolvedOptions().timeZone
-    : null;
+  const displayTimezone = usesTimestamps ? resolvedTz : null;
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const chartTz = resolvedTz;
     const hasTimestamps = data.length > 0 && typeof data[0].time === 'number';
     const isIntraday = timeframe === '1D' || timeframe === '1W';
 
@@ -68,14 +71,14 @@ export default function PriceChart({
           const d = new Date((time as number) * 1000);
           if (tickMarkType === TickMarkType.Time) {
             return new Intl.DateTimeFormat(locale, {
-              timeZone: tz,
+              timeZone: chartTz,
               hour: '2-digit',
               minute: '2-digit',
               hour12: false,
             }).format(d);
           }
           return new Intl.DateTimeFormat(locale, {
-            timeZone: tz,
+            timeZone: chartTz,
             month: 'short',
             day: 'numeric',
           }).format(d);
@@ -85,7 +88,7 @@ export default function PriceChart({
         timeFormatter: (time: Time) => {
           if (typeof time !== 'number') return String(time);
           return new Intl.DateTimeFormat(undefined, {
-            timeZone: tz,
+            timeZone: chartTz,
             month: 'short',
             day: 'numeric',
             ...(isIntraday
@@ -128,7 +131,7 @@ export default function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, height, color, timeframe]);
+  }, [data, height, color, timeframe, resolvedTz]);
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
@@ -144,9 +147,9 @@ export default function PriceChart({
         <div ref={containerRef} className="w-full" aria-hidden="true" />
         <ChartDataSummary id={summaryId} data={data} />
       </figure>
-      {usesTimestamps && browserTimezone && (
+      {usesTimestamps && displayTimezone && (
         <p className="mt-2 text-right text-[10px] text-slate-500">
-          All times in {browserTimezone}
+          All times in {displayTimezone}
         </p>
       )}
       {data.length === 0 && (
