@@ -3,16 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Search, GitCompare } from 'lucide-react';
 import { searchStocks } from '@/lib/api';
-import type { StockSearchResult } from '@/lib/types';
+import type { StockSearchResult, ComparisonTicker } from '@/lib/types';
+import { COMPARISON_PALETTE } from '@/lib/constants';
 
-const COMPARISON_PALETTE = ['#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
 const MAX_COMPARISONS = 4;
-
-interface ComparisonTicker {
-  ticker: string;
-  name: string;
-  error: string | null;
-}
 
 interface ComparisonModePanelProps {
   primaryTicker: string;

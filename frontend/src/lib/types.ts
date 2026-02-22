@@ -143,7 +143,7 @@ export interface ResearchBrief {
   model_used?: string;
 }
 
-export type Timeframe = '1D' | '1W' | '1M' | '3M' | '1Y' | 'All';
+export type Timeframe = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'All';
 
 export type ExportFormat = 'zip' | 'csv' | 'pdf';
 
@@ -251,6 +251,12 @@ export interface ProviderRateLimitsResponse {
 }
 
 // Performance Comparison Types
+
+export interface ComparisonTicker {
+  ticker: string;
+  name: string;
+  error: string | null;
+}
 
 export interface ComparisonCandle {
   time: number;

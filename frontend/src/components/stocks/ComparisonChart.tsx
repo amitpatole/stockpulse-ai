@@ -12,8 +12,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 import type { ComparisonSeries, Timeframe } from '@/lib/types';
-
-const COMPARISON_PALETTE = ['#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
+import { COMPARISON_PALETTE } from '@/lib/constants';
 const PRIMARY_COLOR = '#3b82f6';
 
 interface ComparisonChartProps {

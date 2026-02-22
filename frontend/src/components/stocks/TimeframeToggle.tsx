@@ -3,7 +3,7 @@
 import { clsx } from 'clsx';
 import type { Timeframe } from '@/lib/types';
 
-const TIMEFRAMES: Timeframe[] = ['1D', '1W', '1M', '3M', '1Y', 'All'];
+const TIMEFRAMES: Timeframe[] = ['1D', '1W', '1M', '3M', '6M', '1Y', 'All'];
 
 interface TimeframeToggleProps {
   selected: Timeframe;

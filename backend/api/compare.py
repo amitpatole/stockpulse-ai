@@ -5,6 +5,7 @@ for up to 5 tickers, with pre-computed performance deltas.
 """
 
 import math
+import re
 import logging
 import concurrent.futures
 
@@ -21,7 +22,10 @@ _TIMEFRAME_MAP = {
     '3M': ('3mo', '1d'),
     '6M': ('6mo', '1d'),
     '1Y': ('1y', '1d'),
+    'All': ('max', '1d'),
 }
+
+_TICKER_RE = re.compile(r'^[A-Z0-9.\-^]{1,12}$')
 
 _MAX_TICKERS = 5
 
@@ -53,14 +57,7 @@ def _fetch_series(ticker: str, period: str, interval: str) -> dict:
         if not raw_closes:
             return {'ticker': ticker, 'name': ticker, 'raw_closes': [], 'error': 'No data found'}
 
-        name = ticker
-        try:
-            info = tk.info
-            name = info.get('shortName') or info.get('longName') or ticker
-        except Exception:
-            pass
-
-        return {'ticker': ticker, 'name': name, 'raw_closes': raw_closes, 'error': None}
+        return {'ticker': ticker, 'name': ticker, 'raw_closes': raw_closes, 'error': None}
 
     except ImportError:
         logger.error("yfinance is not installed")
@@ -95,6 +92,10 @@ def compare_stocks():
 
     if len(tickers) > _MAX_TICKERS:
         return jsonify({'error': f'Maximum {_MAX_TICKERS} tickers allowed'}), 400
+
+    invalid = [t for t in tickers if not _TICKER_RE.match(t)]
+    if invalid:
+        return jsonify({'error': f'Invalid ticker symbol(s): {", ".join(invalid)}'}), 400
 
     timeframe = request.args.get('timeframe', '1M').strip()
     if timeframe not in _TIMEFRAME_MAP:

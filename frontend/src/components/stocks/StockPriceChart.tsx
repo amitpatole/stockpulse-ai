@@ -4,25 +4,19 @@ import { useState, useCallback, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
 import { getStockDetail, getComparisonData } from '@/lib/api';
-import type { Timeframe, StockDetail, ComparisonResult, ComparisonSeries } from '@/lib/types';
+import type { Timeframe, StockDetail, ComparisonResult, ComparisonSeries, ComparisonTicker } from '@/lib/types';
 import PriceChart from '@/components/charts/PriceChart';
 import TimeframeToggle from './TimeframeToggle';
 import ComparisonChart from './ComparisonChart';
 import ComparisonModePanel from './ComparisonModePanel';
 
 const STORAGE_KEY = 'vo_chart_timeframe';
-const VALID_TIMEFRAMES: Timeframe[] = ['1D', '1W', '1M', '3M', '1Y', 'All'];
+const VALID_TIMEFRAMES: Timeframe[] = ['1D', '1W', '1M', '3M', '6M', '1Y', 'All'];
 
 function getInitialTimeframe(): Timeframe {
   if (typeof window === 'undefined') return '1M';
   const stored = localStorage.getItem(STORAGE_KEY);
   return VALID_TIMEFRAMES.includes(stored as Timeframe) ? (stored as Timeframe) : '1M';
-}
-
-interface ComparisonTicker {
-  ticker: string;
-  name: string;
-  error: string | null;
 }
 
 interface StockPriceChartProps {
