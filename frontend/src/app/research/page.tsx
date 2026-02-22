@@ -1,7 +1,7 @@
 'use client';
 
 import DOMPurify from 'dompurify';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   FileText,
   Loader2,
@@ -12,12 +12,27 @@ import {
   Download,
   CheckSquare,
   Square,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import { useApi } from '@/hooks/useApi';
-import { getResearchBriefs, generateResearchBrief, getStocks, exportBriefs } from '@/lib/api';
-import type { ResearchBrief, Stock, ExportFormat } from '@/lib/types';
+import {
+  getResearchBriefs,
+  generateResearchBrief,
+  getStocks,
+  exportBriefs,
+  getExportCapabilities,
+} from '@/lib/api';
+import type {
+  ResearchBrief,
+  Stock,
+  ExportFormat,
+  ResearchBriefsResponse,
+  ExportCapabilities,
+} from '@/lib/types';
+import Toast from '@/components/ui/Toast';
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -67,42 +82,77 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
+const PAGE_SIZE = 25;
+
 export default function ResearchPage() {
   const [selectedBrief, setSelectedBrief] = useState<ResearchBrief | null>(null);
   const [filterTicker, setFilterTicker] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Batch-export selection state
+  // Batch-export selection state — Set<number> persists across page changes
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [exportFormat, setExportFormat] = useState<ExportFormat>('zip');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const { data: briefs, loading, error, refetch } = useApi<ResearchBrief[]>(
-    () => getResearchBriefs(filterTicker || undefined),
-    [filterTicker],
+  // Indeterminate ref for select-all checkbox
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  // PDF availability from capabilities endpoint
+  const { data: capabilities } = useApi<ExportCapabilities>(getExportCapabilities, []);
+  const pdfAvailable = capabilities?.formats.pdf.available !== false;
+
+  const { data: briefsPage, loading, error, refetch } = useApi<ResearchBriefsResponse>(
+    () => getResearchBriefs(filterTicker || undefined, currentPage, PAGE_SIZE),
+    [filterTicker, currentPage],
     { refreshInterval: 30000 }
   );
 
+  const briefs = briefsPage?.data ?? null;
+  const totalBriefs = briefsPage?.total ?? 0;
+  const hasNext = briefsPage?.has_next ?? false;
+  const totalPages = totalBriefs > 0 ? Math.ceil(totalBriefs / PAGE_SIZE) : 1;
+
   const { data: stocks } = useApi<Stock[]>(getStocks, []);
 
-  // Get unique tickers from briefs
+  // Get unique tickers from current page briefs for the filter dropdown
   const tickers = useMemo(() => {
     if (!briefs) return [];
     const set = new Set(briefs.map((b) => b.ticker));
     return Array.from(set).sort();
   }, [briefs]);
 
-  const allIds = useMemo(() => new Set((briefs ?? []).map((b) => b.id)), [briefs]);
-  const allSelected = allIds.size > 0 && allIds.size === selectedIds.size &&
-    [...allIds].every((id) => selectedIds.has(id));
+  // Current-page selection state for the select-all checkbox
+  const pageIds = useMemo(() => new Set((briefs ?? []).map((b) => b.id)), [briefs]);
+  const pageSelectedCount = useMemo(
+    () => [...pageIds].filter((id) => selectedIds.has(id)).length,
+    [pageIds, selectedIds]
+  );
+  const allPageSelected = pageIds.size > 0 && pageSelectedCount === pageIds.size;
+  const somePageSelected = pageSelectedCount > 0 && pageSelectedCount < pageIds.size;
+
+  // Sync indeterminate property on the native checkbox element
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = somePageSelected;
+    }
+  }, [somePageSelected]);
 
   const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
+    if (allPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.delete(id));
+        return next;
+      });
     } else {
-      setSelectedIds(new Set(allIds));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.add(id));
+        return next;
+      });
     }
   };
 
@@ -170,6 +220,11 @@ export default function ResearchPage() {
     <div className="flex flex-col">
       <Header title="Research Briefs" subtitle="AI-generated research analysis" />
 
+      {/* Toast for export errors */}
+      {exportError && (
+        <Toast message={exportError} variant="error" onDismiss={() => setExportError(null)} />
+      )}
+
       <div className="flex-1 p-6">
         {/* Toolbar */}
         <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -182,6 +237,7 @@ export default function ResearchPage() {
                 setFilterTicker(e.target.value);
                 setSelectedBrief(null);
                 setSelectedIds(new Set());
+                setCurrentPage(1);
               }}
               className="bg-transparent text-sm text-slate-300 outline-none"
             >
@@ -228,21 +284,17 @@ export default function ResearchPage() {
               {/* List header with select-all */}
               <div className="border-b border-slate-700/50 px-4 py-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={toggleSelectAll}
-                    className="text-slate-400 hover:text-slate-200 transition-colors"
-                    title={allSelected ? 'Deselect all' : 'Select all'}
-                    aria-label={allSelected ? 'Deselect all' : 'Select all'}
-                    aria-pressed={allSelected}
-                  >
-                    {allSelected ? (
-                      <CheckSquare className="h-4 w-4 text-blue-400" />
-                    ) : (
-                      <Square className="h-4 w-4" />
-                    )}
-                  </button>
+                  <input
+                    type="checkbox"
+                    ref={selectAllRef}
+                    checked={allPageSelected}
+                    onChange={toggleSelectAll}
+                    title={allPageSelected ? 'Deselect all on this page' : 'Select all on this page'}
+                    aria-label={allPageSelected ? 'Deselect all on this page' : 'Select all on this page'}
+                    className="h-4 w-4 cursor-pointer accent-blue-500"
+                  />
                   <h2 className="text-sm font-semibold text-white">
-                    Briefs {briefs ? `(${briefs.length})` : ''}
+                    Briefs {totalBriefs > 0 ? `(${totalBriefs})` : briefs ? `(${briefs.length})` : ''}
                   </h2>
                 </div>
                 {selectedIds.size > 0 && (
@@ -270,7 +322,13 @@ export default function ResearchPage() {
                   >
                     <option value="zip">ZIP (.md files)</option>
                     <option value="csv">CSV</option>
-                    <option value="pdf">PDF</option>
+                    <option
+                      value="pdf"
+                      disabled={!pdfAvailable}
+                      title={!pdfAvailable ? 'PDF export not available' : undefined}
+                    >
+                      PDF{!pdfAvailable ? ' (unavailable)' : ''}
+                    </option>
                   </select>
 
                   <button
@@ -296,12 +354,6 @@ export default function ResearchPage() {
                   {selectedIds.size > 100 && (
                     <span className="text-xs text-amber-400">Max 100 briefs per export</span>
                   )}
-                </div>
-              )}
-
-              {exportError && (
-                <div role="alert" className="px-4 py-2 bg-red-900/20 border-b border-red-800/40">
-                  <p className="text-xs text-red-400">{exportError}</p>
                 </div>
               )}
 
@@ -378,6 +430,33 @@ export default function ResearchPage() {
                   </div>
                 )}
               </div>
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="border-t border-slate-700/50 px-4 py-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded p-1 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage((p) => p + 1)}
+                      disabled={!hasNext}
+                      className="rounded p-1 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
