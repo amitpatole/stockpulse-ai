@@ -7,6 +7,7 @@ Benzinga, Finviz, StockTwits, and returns formatted results with sentiment.
 
 import json
 import logging
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type
 
@@ -46,29 +47,40 @@ except ImportError:
 # Lazy monitor singleton
 # ------------------------------------------------------------------
 _monitor_cache = None
+_monitor_lock = threading.Lock()
 
 
 def _get_monitor():
-    """Return a cached EnhancedStockNewsMonitor instance (lightweight, no run loop)."""
+    """Return a cached EnhancedStockNewsMonitor instance (lightweight, no run loop).
+
+    Uses double-checked locking to ensure only one instance is ever created
+    even when many threads call this simultaneously.
+    """
     global _monitor_cache
     if _monitor_cache is not None:
         return _monitor_cache
 
-    try:
-        from backend.core.stock_monitor import EnhancedStockNewsMonitor
-        _monitor_cache = EnhancedStockNewsMonitor()
-        return _monitor_cache
-    except ImportError:
-        pass
+    with _monitor_lock:
+        # Second check inside the lock — another thread may have constructed
+        # the instance between our first check and acquiring the lock.
+        if _monitor_cache is not None:
+            return _monitor_cache
 
-    try:
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-        from backend.core.stock_monitor import EnhancedStockNewsMonitor
-        _monitor_cache = EnhancedStockNewsMonitor()
-        return _monitor_cache
-    except Exception as e:
-        logger.error(f"Failed to create news monitor: {e}")
+        try:
+            from backend.core.stock_monitor import EnhancedStockNewsMonitor
+            _monitor_cache = EnhancedStockNewsMonitor()
+            return _monitor_cache
+        except ImportError:
+            pass
+
+        try:
+            import sys, os
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+            from backend.core.stock_monitor import EnhancedStockNewsMonitor
+            _monitor_cache = EnhancedStockNewsMonitor()
+            return _monitor_cache
+        except Exception as e:
+            logger.error(f"Failed to create news monitor: {e}")
     return None
 
 
