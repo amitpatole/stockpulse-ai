@@ -1,8 +1,10 @@
 'use client';
 
+import { useRef } from 'react';
 import { ExternalLink, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useApi } from '@/hooks/useApi';
+import { useNewsFeedKeyboard } from '@/hooks/useNewsFeedKeyboard';
 import { getNews } from '@/lib/api';
 import type { NewsArticle } from '@/lib/types';
 import { SENTIMENT_COLORS } from '@/lib/types';
@@ -28,13 +30,28 @@ export default function NewsFeed() {
     { refreshInterval: 60000 }
   );
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const itemCount = articles?.length ?? 0;
+
+  const { focusedIndex, itemRefs, handleKeyDown, activatePanel, releasePanel } =
+    useNewsFeedKeyboard(itemCount, containerRef);
+
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/50">
       <div className="border-b border-slate-700/50 px-4 py-3">
         <h2 className="text-sm font-semibold text-white">Recent News</h2>
       </div>
 
-      <div className="max-h-[600px] overflow-y-auto">
+      <div
+        ref={containerRef}
+        role="feed"
+        aria-label="Recent news"
+        aria-busy={loading}
+        tabIndex={0}
+        onFocus={activatePanel}
+        onKeyDown={handleKeyDown}
+        className="max-h-[600px] overflow-y-auto outline-none"
+      >
         {/* Loading */}
         {loading && !articles && (
           <div className="space-y-3 p-4">
@@ -59,8 +76,19 @@ export default function NewsFeed() {
 
         {articles && articles.length > 0 && (
           <div className="divide-y divide-slate-700/30">
-            {articles.map((article) => (
-              <div key={article.id} className="px-4 py-3 transition-colors hover:bg-slate-700/20">
+            {articles.map((article, i) => (
+              <article
+                key={article.id}
+                ref={(el) => { itemRefs.current[i] = el; }}
+                role="article"
+                tabIndex={-1}
+                aria-label={article.title}
+                aria-selected={focusedIndex === i}
+                className={clsx(
+                  'px-4 py-3 transition-colors hover:bg-slate-700/20 outline-none',
+                  focusedIndex === i && 'ring-2 ring-inset ring-blue-500'
+                )}
+              >
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <a
@@ -68,6 +96,7 @@ export default function NewsFeed() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="group flex items-start gap-1"
+                      tabIndex={-1}
                     >
                       <p className="text-sm text-slate-200 line-clamp-2 group-hover:text-blue-400 transition-colors">
                         {article.title}
@@ -102,7 +131,7 @@ export default function NewsFeed() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
