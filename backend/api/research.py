@@ -146,6 +146,18 @@ def generate_brief():
     return jsonify(brief)
 
 
+@research_bp.route('/research/briefs/export/capabilities', methods=['GET'])
+def export_capabilities():
+    """Return which export formats are available on this server."""
+    return jsonify({
+        'formats': {
+            'zip': {'available': True},
+            'csv': {'available': True},
+            'pdf': {'available': FPDF_AVAILABLE},
+        }
+    })
+
+
 @research_bp.route('/research/briefs/export', methods=['POST'])
 def export_briefs():
     """Batch-export selected research briefs as ZIP, CSV, or PDF.
