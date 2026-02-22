@@ -180,7 +180,7 @@ def update_schedule(job_id):
         return jsonify({'success': False, 'error': err}), 400
 
     data = request.get_json(silent=True)
-    if not data or 'trigger' not in data:
+    if not data or not isinstance(data, dict) or 'trigger' not in data:
         return jsonify({
             'success': False,
             'error': 'Request body must include "trigger" (cron or interval).',
