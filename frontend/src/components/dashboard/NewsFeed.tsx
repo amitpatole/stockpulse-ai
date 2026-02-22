@@ -89,7 +89,7 @@ export default function NewsFeed() {
                 role="article"
                 tabIndex={-1}
                 aria-label={article.title}
-                aria-selected={focusedIndex === i}
+                aria-current={focusedIndex === i ? 'true' : undefined}
                 className={clsx(
                   'px-4 py-3 transition-colors hover:bg-slate-700/20 focus:outline-none',
                   focusedIndex === i && 'ring-2 ring-inset ring-blue-500 bg-slate-700/20'

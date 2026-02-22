@@ -9,6 +9,8 @@ export function useNewsFeedKeyboard(
   containerRef: React.RefObject<HTMLDivElement | null>
 ) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const focusedIndexRef = useRef<number | null>(null);
+  focusedIndexRef.current = focusedIndex;
   const itemRefs = useRef<(HTMLElement | null)[]>([]);
 
   // Clamp focusedIndex when the article list shrinks on refresh
@@ -27,19 +29,19 @@ export function useNewsFeedKeyboard(
   const moveFocus = useCallback(
     (nextIndex: number) => {
       if (itemCount === 0) return;
-      const clamped = Math.max(0, Math.min(nextIndex, itemCount - 1));
-      setFocusedIndex(clamped);
-      itemRefs.current[clamped]?.focus();
+      const wrapped = ((nextIndex % itemCount) + itemCount) % itemCount;
+      setFocusedIndex(wrapped);
+      itemRefs.current[wrapped]?.focus();
     },
     [itemCount]
   );
 
   const activatePanel = useCallback(() => {
-    if (focusedIndex === null && itemCount > 0) {
+    if (focusedIndexRef.current === null && itemCount > 0) {
       setFocusedIndex(0);
       itemRefs.current[0]?.focus();
     }
-  }, [focusedIndex, itemCount]);
+  }, [itemCount]);
 
   const releasePanel = useCallback(() => {
     setFocusedIndex(null);
