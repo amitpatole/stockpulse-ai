@@ -105,6 +105,13 @@ export default function StockGrid() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !query.trim()) {
+      e.preventDefault();
+      setValidationError('Please enter a ticker symbol');
+      inputRef.current?.focus();
+      return;
+    }
+
     if (!showDropdown || results.length === 0) return;
 
     if (e.key === 'ArrowDown') {
