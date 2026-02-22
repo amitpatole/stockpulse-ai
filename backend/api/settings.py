@@ -6,6 +6,10 @@ Blueprint for AI provider settings, data provider settings, and agent framework 
 from flask import Blueprint, jsonify, request
 import logging
 
+from backend.api.validators.provider_validators import (
+    validate_add_provider_request,
+    validate_test_provider_request,
+)
 from backend.core.settings_manager import (
     get_all_ai_providers,
     add_ai_provider,
@@ -310,8 +314,12 @@ def add_data_provider():
         JSON object with 'success' boolean.
     """
     data = request.json
-    if not data or 'provider_id' not in data:
+    if not data:
         return jsonify({'success': False, 'error': 'Missing required field: provider_id'}), 400
+
+    ok, err = validate_add_provider_request(data)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
 
     # Stub implementation
     logger.info(f"Data provider configuration received for: {data.get('provider_id')}")
@@ -333,8 +341,12 @@ def test_data_provider():
         JSON object with 'success' boolean and optional 'error' message.
     """
     data = request.json
-    if not data or 'provider_id' not in data:
+    if not data:
         return jsonify({'success': False, 'error': 'Missing required field: provider_id'}), 400
+
+    ok, err = validate_test_provider_request(data)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
 
     provider_id = data['provider_id']
 
