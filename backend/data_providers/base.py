@@ -233,6 +233,9 @@ class DataProviderRegistry:
         self._fallback_order: List[str] = []
         self._primary: Optional[str] = None
         self.on_fallback: Optional[Callable[[str, str, str], None]] = None
+        self.on_recovered: Optional[Callable[[str, str], None]] = None
+        self._in_fallback: bool = False
+        self._fallback_to: str = ''
 
     def register(self, name: str, provider: DataProvider):
         self._providers[name] = provider
@@ -242,6 +245,8 @@ class DataProviderRegistry:
     def set_primary(self, name: str):
         if name in self._providers:
             self._primary = name
+            self._in_fallback = False
+            self._fallback_to = ''
 
     def set_fallback_order(self, order: List[str]):
         self._fallback_order = [n for n in order if n in self._providers]
@@ -277,7 +282,17 @@ class DataProviderRegistry:
                 result = provider.get_quote(ticker)
                 if result:
                     if failed_from is not None and self.on_fallback is not None:
+                        # Primary failed; a fallback provider succeeded.
+                        self._in_fallback = True
+                        self._fallback_to = name
                         self.on_fallback(failed_from, name, failed_reason)
+                    elif failed_from is None and self._in_fallback:
+                        # Primary succeeded after a period of fallback → recovery.
+                        prev_fallback = self._fallback_to
+                        self._in_fallback = False
+                        self._fallback_to = ''
+                        if self.on_recovered is not None:
+                            self.on_recovered(name, prev_fallback)
                     return result
                 else:
                     if failed_from is None:

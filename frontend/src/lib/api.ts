@@ -292,7 +292,7 @@ export async function askChat(
 
 // ---- Earnings Calendar ----
 
-export async function getEarnings(days: number = 14): Promise<EarningsResponse> {
+export async function getEarnings(days: number = 7): Promise<EarningsResponse> {
   return request<EarningsResponse>(`/api/earnings?days=${days}`);
 }
 
