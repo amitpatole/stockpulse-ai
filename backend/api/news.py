@@ -53,25 +53,28 @@ def get_news():
     offset = (page - 1) * page_size
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        conn.execute('BEGIN DEFERRED')
+        cursor = conn.cursor()
 
-    if ticker:
-        cursor.execute('SELECT COUNT(*) FROM news WHERE ticker = ?', (ticker,))
-        total = cursor.fetchone()[0]
-        cursor.execute(
-            'SELECT * FROM news WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            (ticker, page_size, offset)
-        )
-    else:
-        cursor.execute('SELECT COUNT(*) FROM news')
-        total = cursor.fetchone()[0]
-        cursor.execute(
-            'SELECT * FROM news ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            (page_size, offset)
-        )
+        if ticker:
+            cursor.execute('SELECT COUNT(*) FROM news WHERE ticker = ?', (ticker,))
+            total = cursor.fetchone()[0]
+            cursor.execute(
+                'SELECT * FROM news WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (ticker, page_size, offset)
+            )
+        else:
+            cursor.execute('SELECT COUNT(*) FROM news')
+            total = cursor.fetchone()[0]
+            cursor.execute(
+                'SELECT * FROM news ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (page_size, offset)
+            )
 
-    news = cursor.fetchall()
-    conn.close()
+        news = cursor.fetchall()
+    finally:
+        conn.close()
 
     return jsonify({
         'data': [{
@@ -101,18 +104,20 @@ def get_alerts():
         JSON array of alert objects joined with their associated news articles.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute('''
-        SELECT a.*, n.title, n.url, n.source, n.sentiment_score
-        FROM alerts a
-        LEFT JOIN news n ON a.news_id = n.id
-        ORDER BY a.created_at DESC
-        LIMIT 50
-    ''')
+        cursor.execute('''
+            SELECT a.*, n.title, n.url, n.source, n.sentiment_score
+            FROM alerts a
+            LEFT JOIN news n ON a.news_id = n.id
+            ORDER BY a.created_at DESC
+            LIMIT 50
+        ''')
 
-    alerts = cursor.fetchall()
-    conn.close()
+        alerts = cursor.fetchall()
+    finally:
+        conn.close()
 
     return jsonify([{
         'id': alert['id'],
@@ -139,45 +144,47 @@ def get_stats():
     """
     market = request.args.get('market', None)
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        conn.execute('BEGIN DEFERRED')
+        cursor = conn.cursor()
 
-    # Get stats for each stock with market filter
-    if market and market != 'All':
-        cursor.execute('''
-            SELECT
-                n.ticker,
-                COUNT(*) as total_articles,
-                SUM(CASE WHEN n.sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
-                SUM(CASE WHEN n.sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
-                SUM(CASE WHEN n.sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
-                AVG(n.sentiment_score) as avg_sentiment
-            FROM news n
-            INNER JOIN stocks s ON n.ticker = s.ticker
-            WHERE n.created_at > datetime('now', '-24 hours')
-                AND s.market = ?
-            GROUP BY n.ticker
-        ''', (market,))
-    else:
-        cursor.execute('''
-            SELECT
-                ticker,
-                COUNT(*) as total_articles,
-                SUM(CASE WHEN sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
-                SUM(CASE WHEN sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
-                SUM(CASE WHEN sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
-                AVG(sentiment_score) as avg_sentiment
-            FROM news
-            WHERE created_at > datetime('now', '-24 hours')
-            GROUP BY ticker
-        ''')
+        # Get stats for each stock with market filter
+        if market and market != 'All':
+            cursor.execute('''
+                SELECT
+                    n.ticker,
+                    COUNT(*) as total_articles,
+                    SUM(CASE WHEN n.sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
+                    SUM(CASE WHEN n.sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
+                    SUM(CASE WHEN n.sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
+                    AVG(n.sentiment_score) as avg_sentiment
+                FROM news n
+                INNER JOIN stocks s ON n.ticker = s.ticker
+                WHERE n.created_at > datetime('now', '-24 hours')
+                    AND s.market = ?
+                GROUP BY n.ticker
+            ''', (market,))
+        else:
+            cursor.execute('''
+                SELECT
+                    ticker,
+                    COUNT(*) as total_articles,
+                    SUM(CASE WHEN sentiment_label = 'positive' THEN 1 ELSE 0 END) as positive_count,
+                    SUM(CASE WHEN sentiment_label = 'negative' THEN 1 ELSE 0 END) as negative_count,
+                    SUM(CASE WHEN sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
+                    AVG(sentiment_score) as avg_sentiment
+                FROM news
+                WHERE created_at > datetime('now', '-24 hours')
+                GROUP BY ticker
+            ''')
 
-    stats = cursor.fetchall()
+        stats = cursor.fetchall()
 
-    # Get total alerts count
-    cursor.execute('SELECT COUNT(*) as count FROM alerts WHERE created_at > datetime("now", "-24 hours")')
-    alert_count = cursor.fetchone()['count']
-
-    conn.close()
+        # Get total alerts count — same snapshot as the stats query above
+        cursor.execute('SELECT COUNT(*) as count FROM alerts WHERE created_at > datetime("now", "-24 hours")')
+        alert_count = cursor.fetchone()['count']
+    finally:
+        conn.close()
 
     return jsonify({
         'stocks': [{
