@@ -16,6 +16,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['Ctrl', '3'], description: 'Research' },
       { keys: ['Ctrl', '4'], description: 'Scheduler' },
       { keys: ['Ctrl', '5'], description: 'Settings' },
+      { keys: ['N'], description: 'Focus news feed' },
     ],
   },
   {

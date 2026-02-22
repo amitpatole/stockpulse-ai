@@ -1,10 +1,11 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { ExternalLink, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useApi } from '@/hooks/useApi';
 import { useNewsFeedKeyboard } from '@/hooks/useNewsFeedKeyboard';
+import { useKeyboardShortcutsContext } from '@/components/layout/KeyboardShortcutsProvider';
 import { getNews } from '@/lib/api';
 import type { NewsArticle } from '@/lib/types';
 import { SENTIMENT_COLORS } from '@/lib/types';
@@ -34,6 +35,12 @@ export default function NewsFeed() {
   const itemCount = articles?.length ?? 0;
   const { focusedIndex, itemRefs, handleKeyDown, activatePanel } =
     useNewsFeedKeyboard(itemCount, containerRef);
+
+  const { registerNewsFeed } = useKeyboardShortcutsContext();
+  useEffect(() => {
+    registerNewsFeed(activatePanel);
+    return () => registerNewsFeed(null);
+  }, [registerNewsFeed, activatePanel]);
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/50">
