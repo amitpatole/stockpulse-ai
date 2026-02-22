@@ -57,7 +57,8 @@ def get_watchlist(watchlist_id: int) -> Optional[Dict]:
         tickers = [
             r["ticker"]
             for r in conn.execute(
-                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ? ORDER BY ticker",
+                "SELECT ticker FROM watchlist_stocks"
+                " WHERE watchlist_id = ? ORDER BY position, ticker",
                 (watchlist_id,),
             ).fetchall()
         ]
@@ -108,8 +109,8 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
     """Add a ticker to a watchlist.
 
     Upserts the ticker into the stocks table (if absent) then inserts the
-    junction row.  Returns True on success, False if the watchlist does not
-    exist.
+    junction row at the end of the current order.  Returns True on success,
+    False if the watchlist does not exist.
     """
     ticker = ticker.strip().upper()
 
@@ -136,9 +137,15 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
             ).fetchone()
             if wl is None:
                 return False
+            next_pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1"
+                " FROM watchlist_stocks WHERE watchlist_id = ?",
+                (watchlist_id,),
+            ).fetchone()[0]
             conn.execute(
-                "INSERT OR IGNORE INTO watchlist_stocks (watchlist_id, ticker) VALUES (?, ?)",
-                (watchlist_id, ticker),
+                "INSERT OR IGNORE INTO watchlist_stocks"
+                " (watchlist_id, ticker, position) VALUES (?, ?, ?)",
+                (watchlist_id, ticker, next_pos),
             )
         # Invalidate stale cache so next ratings fetch recomputes fresh
         with db_session() as conn:
@@ -147,6 +154,56 @@ def add_stock_to_watchlist(watchlist_id: int, ticker: str, name: Optional[str] =
     except Exception as exc:
         logger.error("Error adding %s to watchlist %d: %s", ticker, watchlist_id, exc)
         return False
+
+
+def reorder_stocks(watchlist_id: int, tickers: List[str]) -> bool:
+    """Atomically rewrite positions for all stocks in a watchlist.
+
+    Parameters
+    ----------
+    watchlist_id : int
+        The watchlist whose stocks should be reordered.
+    tickers : list[str]
+        Ticker symbols in the desired display order (position 0, 1, 2 ...).
+        Every ticker currently in the watchlist must be included — no more,
+        no less.
+
+    Returns
+    -------
+    bool
+        True on success, False if the watchlist does not exist.
+
+    Raises
+    ------
+    ValueError
+        If the provided ticker list does not exactly match the watchlist's
+        current set of tickers.
+    """
+    with db_session() as conn:
+        wl = conn.execute(
+            "SELECT id FROM watchlists WHERE id = ?", (watchlist_id,)
+        ).fetchone()
+        if wl is None:
+            return False
+
+        existing = {
+            r["ticker"]
+            for r in conn.execute(
+                "SELECT ticker FROM watchlist_stocks WHERE watchlist_id = ?",
+                (watchlist_id,),
+            ).fetchall()
+        }
+        if set(tickers) != existing:
+            raise ValueError("Ticker list does not match watchlist contents exactly")
+
+        for idx, ticker in enumerate(tickers):
+            conn.execute(
+                "UPDATE watchlist_stocks SET position = ?"
+                " WHERE watchlist_id = ? AND ticker = ?",
+                (idx, watchlist_id, ticker),
+            )
+
+    return True
 
 
 def remove_stock_from_watchlist(watchlist_id: int, ticker: str) -> bool:

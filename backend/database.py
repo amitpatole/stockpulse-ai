@@ -271,6 +271,7 @@ _NEW_TABLES_SQL = [
     CREATE TABLE IF NOT EXISTS watchlist_stocks (
         watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
         ticker       TEXT NOT NULL REFERENCES stocks(ticker),
+        position     INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (watchlist_id, ticker)
     )
     """,
@@ -398,6 +399,27 @@ def _migrate_data_providers_config(cursor) -> None:
         logger.info(f"Migration applied: {sql}")
 
 
+def _migrate_watchlist_stocks_position(cursor) -> None:
+    """Add position column to watchlist_stocks and assign sequential values if missing."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(watchlist_stocks)").fetchall()}
+    if not cols:
+        return  # table doesn't exist yet; CREATE TABLE will handle it
+    if 'position' not in cols:
+        cursor.execute(
+            "ALTER TABLE watchlist_stocks ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+        )
+        # Assign sequential positions ordered by ticker within each watchlist
+        cursor.execute("""
+            UPDATE watchlist_stocks
+            SET position = (
+              SELECT COUNT(*) FROM watchlist_stocks ws2
+              WHERE ws2.watchlist_id = watchlist_stocks.watchlist_id
+                AND ws2.ticker < watchlist_stocks.ticker
+            )
+        """)
+        logger.info("Migration applied: added position to watchlist_stocks")
+
+
 def init_all_tables(db_path: str | None = None) -> None:
     """Create every table (existing + new v3.0) and apply indexes.
 
@@ -414,6 +436,7 @@ def init_all_tables(db_path: str | None = None) -> None:
         _migrate_agent_runs(cursor)
         _migrate_news(cursor)
         _migrate_data_providers_config(cursor)
+        _migrate_watchlist_stocks_position(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)
