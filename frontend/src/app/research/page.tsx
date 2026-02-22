@@ -160,6 +160,11 @@ export default function ResearchPage() {
       : selectedIds.size === 0
       ? 'Select briefs to export'
       : `Export ${selectedIds.size} brief${selectedIds.size !== 1 ? 's' : ''}`;
+  const exportAriaLabel = exporting
+    ? 'Exporting, please wait'
+    : selectedIds.size === 0
+      ? 'Export briefs, none selected'
+      : `Export ${selectedIds.size} brief${selectedIds.size === 1 ? '' : 's'} as ${exportFormat.toUpperCase()}`;
 
   return (
     <div className="flex flex-col">
@@ -228,6 +233,7 @@ export default function ResearchPage() {
                     className="text-slate-400 hover:text-slate-200 transition-colors"
                     title={allSelected ? 'Deselect all' : 'Select all'}
                     aria-label={allSelected ? 'Deselect all' : 'Select all'}
+                    aria-pressed={allSelected}
                   >
                     {allSelected ? (
                       <CheckSquare className="h-4 w-4 text-blue-400" />
@@ -244,9 +250,18 @@ export default function ResearchPage() {
                 )}
               </div>
 
+              {/* Always-rendered live region so screen readers register it before the count changes */}
+              <span
+                className="sr-only"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {selectedIds.size > 0 ? `${selectedIds.size} brief${selectedIds.size === 1 ? '' : 's'} selected` : ''}
+              </span>
+
               {/* Batch export toolbar — visible when at least one brief is selected */}
               {selectedIds.size > 0 && (
-                <div className="border-b border-slate-700/50 px-4 py-2.5 bg-slate-900/60 flex flex-wrap items-center gap-2">
+                <div role="toolbar" aria-label="Batch export" className="border-b border-slate-700/50 px-4 py-2.5 bg-slate-900/60 flex flex-wrap items-center gap-2">
                   <select
                     value={exportFormat}
                     onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
@@ -262,6 +277,7 @@ export default function ResearchPage() {
                     onClick={handleExport}
                     disabled={exportDisabled}
                     title={exportTitle}
+                    aria-label={exportAriaLabel}
                     className={clsx(
                       'flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors',
                       exportDisabled
@@ -284,7 +300,7 @@ export default function ResearchPage() {
               )}
 
               {exportError && (
-                <div className="px-4 py-2 bg-red-900/20 border-b border-red-800/40">
+                <div role="alert" className="px-4 py-2 bg-red-900/20 border-b border-red-800/40">
                   <p className="text-xs text-red-400">{exportError}</p>
                 </div>
               )}
@@ -328,6 +344,7 @@ export default function ResearchPage() {
                           }}
                           className="mt-0.5 shrink-0 text-slate-400 hover:text-slate-200 transition-colors"
                           aria-label={selectedIds.has(brief.id) ? `Deselect ${brief.title}` : `Select ${brief.title}`}
+                          aria-pressed={selectedIds.has(brief.id)}
                         >
                           {selectedIds.has(brief.id) ? (
                             <CheckSquare className="h-4 w-4 text-blue-400" />
