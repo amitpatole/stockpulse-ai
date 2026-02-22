@@ -30,6 +30,9 @@ def _parse_pagination(args):
     if not (1 <= page_size <= 100):
         return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
 
+    if page < 1:
+        return None, None, (jsonify({'error': 'page must be a positive integer'}), 400)
+
     return page, page_size, None
 
 
