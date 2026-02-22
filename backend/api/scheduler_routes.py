@@ -225,7 +225,11 @@ def job_execution_history():
         JSON object with ``history`` array and ``total`` count.
     """
     job_id = request.args.get('job_id', None)
-    limit = min(int(request.args.get('limit', 50)), 200)
+    raw_limit = request.args.get('limit', 50)
+    try:
+        limit = min(int(raw_limit), 200)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid limit: must be an integer.'}), 400
 
     history = get_job_history(job_id=job_id, limit=limit)
     return jsonify({
