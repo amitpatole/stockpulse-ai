@@ -10,6 +10,8 @@ import concurrent.futures
 
 from flask import Blueprint, jsonify, request
 
+from backend.core.error_handlers import handle_api_errors, ValidationError
+
 logger = logging.getLogger(__name__)
 
 compare_bp = Blueprint('compare', __name__, url_prefix='/api/stocks')
@@ -104,6 +106,7 @@ def _fetch_series(symbol: str, period: str, interval: str) -> dict:
 
 
 @compare_bp.route('/compare', methods=['GET'])
+@handle_api_errors
 def compare_stocks():
     """Return % return series for up to 4 symbols, each rebased to 0% at period start.
 
@@ -115,24 +118,24 @@ def compare_stocks():
         200 — JSON dict keyed by symbol. Each value is one of:
             { "points": [{"time": int, "value": float}, ...], "current_pct": float }
             { "error": "No data for selected range" }
-        400 — { "error": "..." } when symbols is missing or exceeds 4.
+        400 — typed error envelope when symbols is missing or exceeds 4.
     """
     symbols_param = request.args.get('symbols', '').strip()
     if not symbols_param:
-        return jsonify({'error': 'symbols parameter is required'}), 400
+        raise ValidationError('symbols parameter is required', error_code='MISSING_FIELD')
 
     symbols = [s.strip().upper() for s in symbols_param.split(',') if s.strip()]
     if not symbols:
-        return jsonify({'error': 'symbols parameter is required'}), 400
+        raise ValidationError('symbols parameter is required', error_code='MISSING_FIELD')
 
     if len(symbols) > _MAX_SYMBOLS:
-        return jsonify({'error': f'Maximum {_MAX_SYMBOLS} symbols allowed'}), 400
+        raise ValidationError(f'Maximum {_MAX_SYMBOLS} symbols allowed')
 
     timeframe = request.args.get('timeframe', '1M').strip()
     if timeframe not in _TIMEFRAME_MAP:
-        return jsonify({
-            'error': f'Invalid timeframe. Must be one of: {", ".join(_TIMEFRAME_MAP)}'
-        }), 400
+        raise ValidationError(
+            f"Invalid timeframe. Must be one of: {', '.join(_TIMEFRAME_MAP)}"
+        )
 
     period, interval = _TIMEFRAME_MAP[timeframe]
 

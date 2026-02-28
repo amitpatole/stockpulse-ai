@@ -12,6 +12,12 @@ from backend.api.validators.provider_validators import (
     validate_add_provider_request,
     validate_test_provider_request,
 )
+from backend.core.error_handlers import (
+    DatabaseError,
+    NotFoundError,
+    ValidationError,
+    handle_api_errors,
+)
 from backend.core.settings_manager import (
     get_all_ai_providers,
     add_ai_provider,
@@ -29,20 +35,19 @@ settings_bp = Blueprint('settings', __name__, url_prefix='/api')
 def _parse_pagination(args):
     """Parse and validate page/page_size query parameters.
 
-    Returns (page, page_size, error_response). On success, error_response is None.
-    On validation failure, page and page_size are None and error_response is a
-    (response, status_code) tuple ready to return from a Flask view.
+    Raises ValidationError on invalid input.
+    Returns (page, page_size).
     """
     try:
         page = int(args.get('page', 1))
         page_size = int(args.get('page_size', 25))
     except (ValueError, TypeError):
-        return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+        raise ValidationError('page and page_size must be integers')
 
     if not (1 <= page_size <= 100):
-        return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
+        raise ValidationError('page_size must be between 1 and 100')
 
-    return page, page_size, None
+    return page, page_size
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +55,7 @@ def _parse_pagination(args):
 # ---------------------------------------------------------------------------
 
 @settings_bp.route('/settings/ai-providers', methods=['GET'])
+@handle_api_errors
 def get_ai_providers_endpoint():
     """Get all supported AI providers with configuration status.
     ---
@@ -111,9 +117,7 @@ def get_ai_providers_endpoint():
         schema:
           $ref: '#/definitions/Error'
     """
-    page, page_size, err = _parse_pagination(request.args)
-    if err:
-        return err
+    page, page_size = _parse_pagination(request.args)
 
     # All supported providers with their available models
     SUPPORTED_PROVIDERS = {
@@ -136,49 +140,48 @@ def get_ai_providers_endpoint():
     }
 
     try:
-        # Get configured providers from DB
         configured_rows = get_all_ai_providers()
-        configured_map = {row['provider_name']: row for row in configured_rows}
+    except Exception as exc:
+        raise DatabaseError('Failed to load AI provider configuration') from exc
 
-        # Build full result list by merging SUPPORTED_PROVIDERS with DB rows
-        result = []
-        for provider_id, info in SUPPORTED_PROVIDERS.items():
-            db_row = configured_map.get(provider_id)
-            result.append({
-                'name': provider_id,
-                'display_name': info['display_name'],
-                'configured': db_row is not None,
-                'models': info['models'],
-                'default_model': db_row['model'] if db_row else info['models'][0],
-                'is_active': bool(db_row['is_active']) if db_row else False,
-                'status': 'active' if db_row and db_row['is_active'] else ('configured' if db_row else 'unconfigured'),
-                'id': db_row['id'] if db_row else None,
-            })
+    configured_map = {row['provider_name']: row for row in configured_rows}
 
-        total = len(result)
-        total_pages = max(1, (total + page_size - 1) // page_size)
-
-        if page > total_pages:
-            return jsonify({'error': f'page {page} exceeds total_pages {total_pages}'}), 400
-
-        offset = (page - 1) * page_size
-        page_data = result[offset:offset + page_size]
-
-        return jsonify({
-            'data': page_data,
-            'page': page,
-            'page_size': page_size,
-            'total': total,
-            'total_pages': total_pages,
-            'has_next': (page * page_size) < total,
-            'has_prev': page > 1,
+    result = []
+    for provider_id, info in SUPPORTED_PROVIDERS.items():
+        db_row = configured_map.get(provider_id)
+        result.append({
+            'name': provider_id,
+            'display_name': info['display_name'],
+            'configured': db_row is not None,
+            'models': info['models'],
+            'default_model': db_row['model'] if db_row else info['models'][0],
+            'is_active': bool(db_row['is_active']) if db_row else False,
+            'status': 'active' if db_row and db_row['is_active'] else ('configured' if db_row else 'unconfigured'),
+            'id': db_row['id'] if db_row else None,
         })
-    except Exception as e:
-        logger.error(f"Error fetching AI providers: {e}")
-        return jsonify({'data': [], 'page': page, 'page_size': page_size, 'total': 0, 'total_pages': 1, 'has_next': False, 'has_prev': False})
+
+    total = len(result)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    if page > total_pages:
+        raise ValidationError(f'page {page} exceeds total_pages {total_pages}')
+
+    offset = (page - 1) * page_size
+    page_data = result[offset:offset + page_size]
+
+    return jsonify({
+        'data': page_data,
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'total_pages': total_pages,
+        'has_next': (page * page_size) < total,
+        'has_prev': page > 1,
+    })
 
 
 @settings_bp.route('/settings/ai-provider', methods=['POST'])
+@handle_api_errors
 def add_ai_provider_endpoint():
     """Add or update an AI provider configuration.
     ---
@@ -218,20 +221,27 @@ def add_ai_provider_endpoint():
         schema:
           $ref: '#/definitions/Error'
     """
-    data = request.json
-    if not data or 'provider' not in data or 'api_key' not in data:
-        return jsonify({'success': False, 'error': 'Missing required fields: provider, api_key'}), 400
+    data = request.get_json(silent=True) or {}
+    if not data.get('provider'):
+        raise ValidationError('Missing required field: provider', error_code='MISSING_FIELD')
+    if not data.get('api_key'):
+        raise ValidationError('Missing required field: api_key', error_code='MISSING_FIELD')
 
-    success = add_ai_provider(
-        data['provider'],
-        data['api_key'],
-        data.get('model'),
-        set_active=True
-    )
+    try:
+        success = add_ai_provider(
+            data['provider'],
+            data['api_key'],
+            data.get('model'),
+            set_active=True,
+        )
+    except Exception as exc:
+        raise DatabaseError('Failed to save AI provider configuration') from exc
+
     return jsonify({'success': success})
 
 
 @settings_bp.route('/settings/ai-provider/<int:provider_id>/activate', methods=['POST'])
+@handle_api_errors
 def activate_ai_provider_endpoint(provider_id):
     """Activate an AI provider by id (deactivates all others).
     ---
@@ -249,12 +259,23 @@ def activate_ai_provider_endpoint(provider_id):
         description: Provider activated.
         schema:
           $ref: '#/definitions/SuccessResponse'
+      404:
+        description: Provider not found.
+        schema:
+          $ref: '#/definitions/Error'
     """
-    success = set_active_provider(provider_id)
+    try:
+        success = set_active_provider(provider_id)
+    except Exception as exc:
+        raise DatabaseError('Failed to activate AI provider') from exc
+
+    if not success:
+        raise NotFoundError(f'AI provider {provider_id} not found')
     return jsonify({'success': success})
 
 
 @settings_bp.route('/settings/ai-provider/<int:provider_id>', methods=['DELETE'])
+@handle_api_errors
 def delete_ai_provider_endpoint(provider_id):
     """Delete an AI provider configuration.
     ---
@@ -272,12 +293,23 @@ def delete_ai_provider_endpoint(provider_id):
         description: Provider deleted.
         schema:
           $ref: '#/definitions/SuccessResponse'
+      404:
+        description: Provider not found.
+        schema:
+          $ref: '#/definitions/Error'
     """
-    success = delete_ai_provider(provider_id)
+    try:
+        success = delete_ai_provider(provider_id)
+    except Exception as exc:
+        raise DatabaseError('Failed to delete AI provider') from exc
+
+    if not success:
+        raise NotFoundError(f'AI provider {provider_id} not found')
     return jsonify({'success': success})
 
 
 @settings_bp.route('/settings/ai-provider/<provider_name>/test', methods=['POST'])
+@handle_api_errors
 def test_stored_ai_provider(provider_name):
     """Test an AI provider connection using the stored API key.
     ---
@@ -295,48 +327,48 @@ def test_stored_ai_provider(provider_name):
         description: Test result.
         schema:
           $ref: '#/definitions/SuccessResponse'
+      404:
+        description: Provider not configured.
+        schema:
+          $ref: '#/definitions/Error'
       500:
         description: Internal error during test.
         schema:
           $ref: '#/definitions/Error'
     """
-    from backend.core.settings_manager import get_active_ai_provider, get_all_ai_providers
+    from backend.core.settings_manager import get_all_ai_providers
 
-    # Find the stored provider
-    providers = get_all_ai_providers()
-    stored = None
-    for p in providers:
-        if p['provider_name'] == provider_name:
-            stored = p
-            break
+    try:
+        providers = get_all_ai_providers()
+    except Exception as exc:
+        raise DatabaseError('Failed to load provider configuration') from exc
 
+    stored = next((p for p in providers if p['provider_name'] == provider_name), None)
     if not stored:
-        return jsonify({
-            'success': False,
-            'error': f'Provider "{provider_name}" is not configured. Add an API key first.'
-        })
+        raise NotFoundError(
+            f'Provider "{provider_name}" is not configured. Add an API key first.'
+        )
 
-    # Get the full provider record (with API key) from DB
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             'SELECT api_key, model FROM ai_providers WHERE provider_name = ?',
-            (provider_name,)
+            (provider_name,),
         ).fetchone()
         conn.close()
+    except Exception as exc:
+        raise DatabaseError('Failed to read provider credentials') from exc
 
-        if not row:
-            return jsonify({'success': False, 'error': 'Provider not found in database'})
+    if not row:
+        raise NotFoundError(f'Provider "{provider_name}" not found in database')
 
-        result = test_provider_connection(provider_name, row['api_key'], row['model'])
-        return jsonify(result)
-    except Exception as e:
-        logger.exception(f"Error testing provider {provider_name}: {e}")
-        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    result = test_provider_connection(provider_name, row['api_key'], row['model'])
+    return jsonify(result)
 
 
 @settings_bp.route('/settings/test-ai', methods=['POST'])
+@handle_api_errors
 def test_ai_provider_endpoint():
     """Test an AI provider connection with a simple prompt.
     ---
@@ -374,14 +406,16 @@ def test_ai_provider_endpoint():
         schema:
           $ref: '#/definitions/Error'
     """
-    data = request.json
-    if not data or 'provider' not in data or 'api_key' not in data:
-        return jsonify({'success': False, 'error': 'Missing required fields: provider, api_key'}), 400
+    data = request.get_json(silent=True) or {}
+    if not data.get('provider'):
+        raise ValidationError('Missing required field: provider', error_code='MISSING_FIELD')
+    if not data.get('api_key'):
+        raise ValidationError('Missing required field: api_key', error_code='MISSING_FIELD')
 
     result = test_provider_connection(
         data['provider'],
         data['api_key'],
-        data.get('model')
+        data.get('model'),
     )
     return jsonify(result)
 
