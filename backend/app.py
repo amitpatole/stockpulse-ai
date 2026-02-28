@@ -1,4 +1,5 @@
 ```python
+
 """
 TickerPulse AI v3.0 - Flask Application Factory
 Creates and configures the Flask app, registers blueprints, sets up SSE,
@@ -385,6 +386,8 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.providers':        'providers_bp',
         'backend.api.compare':          'compare_bp',
         'backend.api.watchlist':        'watchlist_bp',
+        'backend.api.ai_compare':       'ai_compare_bp',
+        'backend.api.comparison':       'comparison_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():

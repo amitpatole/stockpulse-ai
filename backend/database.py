@@ -1,5 +1,4 @@
 ```python
-
 """
 TickerPulse AI v3.0 - Database Connection Manager
 Thread-safe SQLite helper with context-manager support and table initialisation.
@@ -699,6 +698,22 @@ _NEW_TABLES_SQL = [
         error         TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ai_ratings_comparison (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker     TEXT NOT NULL,
+        provider   TEXT NOT NULL,
+        model      TEXT,
+        rating     TEXT,
+        score      REAL,
+        confidence REAL,
+        summary    TEXT,
+        latency_ms INTEGER,
+        error      TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(ticker, provider)
+    )
+    """,
 ]
 
 _INDEXES_SQL = [
@@ -739,6 +754,11 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_earnings_events_date_ticker ON earnings_events (earnings_date, ticker)",
     "CREATE INDEX IF NOT EXISTS idx_api_request_log_ts          ON api_request_log (log_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_error_log_ts                ON error_log (created_at DESC)",
+    # Covering index added in v3.2 — accelerates news queries filtered by ticker + sentiment
+    "CREATE INDEX IF NOT EXISTS idx_news_ticker_sentiment_created ON news (ticker, sentiment_score, created_at DESC)",
+    # Multi-model comparison indexes added in v3.3
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_comparison_ticker   ON ai_ratings_comparison (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_comparison_provider ON ai_ratings_comparison (ticker, provider)",
 ]
 
 
@@ -890,6 +910,40 @@ def _migrate_earnings_events(cursor) -> None:
         logger.info(f"Migration applied: {sql}")
 
 
+def _migrate_comparison_runs(cursor) -> None:
+    """Add market context columns to comparison_runs if missing (schema v3.2)."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(comparison_runs)").fetchall()}
+    if not cols:
+        return
+    migrations = []
+    if 'market_price' not in cols:
+        migrations.append("ALTER TABLE comparison_runs ADD COLUMN market_price REAL")
+    if 'market_rsi' not in cols:
+        migrations.append("ALTER TABLE comparison_runs ADD COLUMN market_rsi REAL")
+    if 'market_sentiment' not in cols:
+        migrations.append("ALTER TABLE comparison_runs ADD COLUMN market_sentiment REAL")
+    for sql in migrations:
+        cursor.execute(sql)
+        logger.info(f"Migration applied: {sql}")
+
+
+def _migrate_comparison_results(cursor) -> None:
+    """Add structured result columns to comparison_results if missing (schema v3.3)."""
+    cols = {row[1] for row in cursor.execute("PRAGMA table_info(comparison_results)").fetchall()}
+    if not cols:
+        return
+    migrations = []
+    if 'rating' not in cols:
+        migrations.append("ALTER TABLE comparison_results ADD COLUMN rating TEXT")
+    if 'score' not in cols:
+        migrations.append("ALTER TABLE comparison_results ADD COLUMN score REAL")
+    if 'confidence' not in cols:
+        migrations.append("ALTER TABLE comparison_results ADD COLUMN confidence REAL")
+    for sql in migrations:
+        cursor.execute(sql)
+        logger.info(f"Migration applied: {sql}")
+
+
 def _migrate_ai_ratings_price_columns(cursor) -> None:
     """Add live price columns to ai_ratings if missing.
 
@@ -934,6 +988,8 @@ def init_all_tables(db_path: str | None = None) -> None:
         _migrate_ai_ratings_price_columns(cursor)
         _migrate_error_log(cursor)
         _migrate_earnings_events(cursor)
+        _migrate_comparison_runs(cursor)
+        _migrate_comparison_results(cursor)
 
         for sql in _NEW_TABLES_SQL:
             cursor.execute(sql)
