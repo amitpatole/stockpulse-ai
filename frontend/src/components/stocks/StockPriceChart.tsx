@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -59,7 +58,7 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
 
   const fetcher = useCallback(
     () => getStockDetail(ticker, timeframe),
-    [ticker, timeframe]
+    [ticker, timeframe],
   );
   const { data, loading, error } = useApi<StockDetail>(fetcher, [ticker, timeframe]);
 
@@ -211,8 +210,12 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
                   aria-pressed={isSelected}
                   title={
                     isSelected
-                      ? isDisabled ? 'Minimum 2 timeframes required' : 'Remove from grid'
-                      : isDisabled ? 'Maximum 4 timeframes reached' : 'Add to grid'
+                      ? isDisabled
+                        ? 'Minimum 2 timeframes required'
+                        : 'Remove from grid'
+                      : isDisabled
+                        ? 'Maximum 4 timeframes reached'
+                        : 'Add to grid'
                   }
                   className={clsx(
                     'min-h-[32px] min-w-[32px] rounded-md px-2 text-[11px] font-semibold transition-colors',
@@ -294,4 +297,3 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
     </div>
   );
 }
-```

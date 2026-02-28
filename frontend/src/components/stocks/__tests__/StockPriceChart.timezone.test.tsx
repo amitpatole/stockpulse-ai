@@ -1,4 +1,3 @@
-```typescript
 /**
  * StockPriceChart - Timezone Integration Tests
  * Covers: TimezoneToggle rendering, mode persistence wiring, integration with useTimezoneMode
@@ -130,4 +129,3 @@ describe('StockPriceChart - Timezone Integration', () => {
     expect(timezoneGroup).not.toBeInTheDocument();
   });
 });
-```

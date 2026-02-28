@@ -1,4 +1,3 @@
-```typescript
 /**
  * Test StockPriceChart: view-mode toggle and multi-timeframe integration.
  *
@@ -39,6 +38,13 @@ vi.mock('@/hooks/useChartTimeframes', () => ({
 }));
 vi.mock('@/hooks/useApi', () => ({
   useApi: vi.fn(),
+}));
+vi.mock('@/hooks/useTimezoneMode', () => ({
+  useTimezoneMode: vi.fn().mockReturnValue({
+    mode: 'local' as const,
+    setMode: vi.fn(),
+    isLoading: false,
+  }),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -312,4 +318,3 @@ describe('StockPriceChart', () => {
     expect(mockToggle).toHaveBeenCalledTimes(1);
   });
 });
-```

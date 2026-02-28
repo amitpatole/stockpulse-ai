@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { clsx } from 'clsx';
@@ -30,7 +29,7 @@ export default function TimezoneToggle({ mode, onModeChange }: TimezoneTogglePro
             'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50',
             mode === opt.value
               ? 'bg-blue-600 text-white'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-white',
           )}
         >
           {opt.label}
@@ -39,4 +38,3 @@ export default function TimezoneToggle({ mode, onModeChange }: TimezoneTogglePro
     </div>
   );
 }
-```

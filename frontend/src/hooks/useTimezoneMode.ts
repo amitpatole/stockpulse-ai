@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useCallback } from 'react';
@@ -32,4 +31,3 @@ export function useTimezoneMode(): UseTimezoneModeResult {
 
   return { mode, setMode, isLoading };
 }
-```

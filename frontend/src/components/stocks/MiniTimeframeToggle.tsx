@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import type { Timeframe } from '@/lib/types';
@@ -12,4 +11,3 @@ interface MiniTimeframeToggleProps {
 export default function MiniTimeframeToggle({ selected, onChange }: MiniTimeframeToggleProps) {
   return <TimeframeToggle selected={selected} onChange={onChange} compact />;
 }
-```

@@ -1,4 +1,3 @@
-```typescript
 /**
  * Test MiniTimeframeToggle component: compact timeframe selector for multi-grid mode.
  *
@@ -196,4 +195,3 @@ describe('MiniTimeframeToggle', () => {
     expect(onChange).toHaveBeenCalledWith('1D');
   });
 });
-```
