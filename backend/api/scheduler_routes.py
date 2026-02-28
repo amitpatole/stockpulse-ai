@@ -1,3 +1,4 @@
+```python
 """
 Scheduler REST API routes.
 
@@ -11,6 +12,7 @@ from flask import Blueprint, jsonify, request
 
 from backend.jobs._helpers import get_job_history
 from backend.api.validators.scheduler_validators import validate_job_id, validate_trigger_args
+from backend.core.error_handlers import handle_api_errors, ValidationError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,7 @@ def _get_scheduler_manager():
 # -----------------------------------------------------------------------
 
 @scheduler_bp.route('/jobs', methods=['GET'])
+@handle_api_errors
 def list_jobs():
     """List all registered jobs with their current status.
     ---
@@ -57,6 +60,7 @@ def list_jobs():
 
 
 @scheduler_bp.route('/jobs/<job_id>', methods=['GET'])
+@handle_api_errors
 def get_job(job_id):
     """Get detailed information about a specific scheduled job.
     ---
@@ -86,12 +90,12 @@ def get_job(job_id):
     """
     ok, err = validate_job_id(job_id)
     if not ok:
-        return jsonify({'success': False, 'error': err}), 400
+        raise ValidationError(err)
 
     sm = _get_scheduler_manager()
     job = sm.get_job(job_id)
     if not job:
-        return jsonify({'error': f'Job not found: {job_id}'}), 404
+        raise NotFoundError(f'Job not found: {job_id}')
 
     # Attach recent execution history and scheduler timezone
     job['recent_history'] = get_job_history(job_id=job_id, limit=10)
@@ -104,6 +108,7 @@ def get_job(job_id):
 # -----------------------------------------------------------------------
 
 @scheduler_bp.route('/jobs/<job_id>/pause', methods=['POST'])
+@handle_api_errors
 def pause_job(job_id):
     """Pause a scheduled job.
     ---
@@ -129,16 +134,17 @@ def pause_job(job_id):
     """
     ok, err = validate_job_id(job_id)
     if not ok:
-        return jsonify({'success': False, 'error': err}), 400
+        raise ValidationError(err)
 
     sm = _get_scheduler_manager()
     success = sm.pause_job(job_id)
     if success:
         return jsonify({'success': True, 'job_id': job_id, 'status': 'paused'})
-    return jsonify({'success': False, 'error': f'Failed to pause job: {job_id}'}), 400
+    raise ValidationError(f'Failed to pause job: {job_id}')
 
 
 @scheduler_bp.route('/jobs/<job_id>/resume', methods=['POST'])
+@handle_api_errors
 def resume_job(job_id):
     """Resume a paused scheduled job.
     ---
@@ -164,16 +170,17 @@ def resume_job(job_id):
     """
     ok, err = validate_job_id(job_id)
     if not ok:
-        return jsonify({'success': False, 'error': err}), 400
+        raise ValidationError(err)
 
     sm = _get_scheduler_manager()
     success = sm.resume_job(job_id)
     if success:
         return jsonify({'success': True, 'job_id': job_id, 'status': 'resumed'})
-    return jsonify({'success': False, 'error': f'Failed to resume job: {job_id}'}), 400
+    raise ValidationError(f'Failed to resume job: {job_id}')
 
 
 @scheduler_bp.route('/jobs/<job_id>/trigger', methods=['POST'])
+@handle_api_errors
 def trigger_job(job_id):
     """Trigger immediate execution of a scheduled job.
     ---
@@ -199,7 +206,7 @@ def trigger_job(job_id):
     """
     ok, err = validate_job_id(job_id)
     if not ok:
-        return jsonify({'success': False, 'error': err}), 400
+        raise ValidationError(err)
 
     sm = _get_scheduler_manager()
     success = sm.trigger_job(job_id)
@@ -209,10 +216,11 @@ def trigger_job(job_id):
             'job_id': job_id,
             'message': f'Job {job_id} triggered for immediate execution.',
         })
-    return jsonify({'success': False, 'error': f'Failed to trigger job: {job_id}'}), 400
+    raise ValidationError(f'Failed to trigger job: {job_id}')
 
 
 @scheduler_bp.route('/jobs/<job_id>/schedule', methods=['PUT'])
+@handle_api_errors
 def update_schedule(job_id):
     """Update a job's schedule trigger.
     ---
@@ -239,20 +247,14 @@ def update_schedule(job_id):
             trigger:
               type: string
               enum: [cron, interval, date]
-              description: Trigger type.
-              example: cron
             hour:
               type: integer
-              description: Cron hour field (0–23).
             minute:
               type: integer
-              description: Cron minute field (0–59).
             day_of_week:
               type: string
-              description: Cron day_of_week field (e.g. 'mon-fri').
             minutes:
               type: integer
-              description: Interval trigger — repeat every N minutes.
     responses:
       200:
         description: Schedule updated successfully.
@@ -265,26 +267,22 @@ def update_schedule(job_id):
     """
     ok, err = validate_job_id(job_id)
     if not ok:
-        return jsonify({'success': False, 'error': err}), 400
+        raise ValidationError(err)
 
     data = request.get_json(silent=True)
     if not data or not isinstance(data, dict) or 'trigger' not in data:
-        return jsonify({
-            'success': False,
-            'error': 'Request body must include "trigger" (cron or interval).',
-        }), 400
+        raise ValidationError('Request body must include "trigger" (cron or interval).')
 
     trigger = data.pop('trigger')
     valid_triggers = ('cron', 'interval', 'date')
     if trigger not in valid_triggers:
-        return jsonify({
-            'success': False,
-            'error': f'Invalid trigger type: {trigger}. Must be one of: {", ".join(valid_triggers)}',
-        }), 400
+        raise ValidationError(
+            f'Invalid trigger type: {trigger}. Must be one of: {", ".join(valid_triggers)}'
+        )
 
     ok, err = validate_trigger_args(trigger, data)
     if not ok:
-        return jsonify({'success': False, 'error': err}), 400
+        raise ValidationError(err)
 
     sm = _get_scheduler_manager()
     success = sm.update_job_schedule(job_id, trigger, **data)
@@ -294,7 +292,7 @@ def update_schedule(job_id):
             'job_id': job_id,
             'message': f'Schedule updated to trigger={trigger} with args={data}.',
         })
-    return jsonify({'success': False, 'error': f'Failed to update schedule for: {job_id}'}), 400
+    raise ValidationError(f'Failed to update schedule for: {job_id}')
 
 
 # -----------------------------------------------------------------------
@@ -302,6 +300,7 @@ def update_schedule(job_id):
 # -----------------------------------------------------------------------
 
 @scheduler_bp.route('/history', methods=['GET'])
+@handle_api_errors
 def job_execution_history():
     """Get job execution history.
     ---
@@ -316,48 +315,14 @@ def job_execution_history():
         name: job_id
         type: string
         required: false
-        description: Filter records to a specific job ID.
-        example: news_monitor
       - in: query
         name: limit
         type: integer
         required: false
         default: 50
-        description: Maximum number of records to return (capped at 200).
     responses:
       200:
         description: Execution history with applied filter metadata.
-        schema:
-          type: object
-          properties:
-            history:
-              type: array
-              items:
-                type: object
-                properties:
-                  job_id:
-                    type: string
-                    example: news_monitor
-                  status:
-                    type: string
-                    enum: [completed, failed, running]
-                    example: completed
-                  executed_at:
-                    type: string
-                    format: date-time
-                  result_summary:
-                    type: string
-                    example: Processed 12 articles
-            total:
-              type: integer
-              example: 50
-            filters:
-              type: object
-              properties:
-                job_id:
-                  type: string
-                limit:
-                  type: integer
       400:
         description: Invalid limit parameter.
         schema:
@@ -368,7 +333,7 @@ def job_execution_history():
     try:
         limit = min(int(raw_limit), 200)
     except (ValueError, TypeError):
-        return jsonify({'success': False, 'error': 'Invalid limit: must be an integer.'}), 400
+        raise ValidationError('Invalid limit: must be an integer.')
 
     history = get_job_history(job_id=job_id, limit=limit)
     return jsonify({
@@ -379,3 +344,4 @@ def job_execution_history():
             'limit': limit,
         },
     })
+```

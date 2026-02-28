@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Agents API Routes
 Blueprint for agent management, execution, run history, and cost tracking.
@@ -18,6 +19,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, current_app, jsonify, request
 
 from backend.config import Config
+from backend.core.error_handlers import handle_api_errors, ValidationError, NotFoundError, ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +27,6 @@ agents_bp = Blueprint('agents', __name__, url_prefix='/api')
 
 # ---------------------------------------------------------------------------
 # Stub-to-real agent ID mapping
-# The frontend uses the six original stub names from the old placeholder list.
-# This map resolves them to canonical agent names in the AgentRegistry.
-# Real agent names pass through unchanged so the map is the single source
-# of truth for all name resolution.
 # ---------------------------------------------------------------------------
 
 AGENT_ID_MAP = {
@@ -153,12 +151,12 @@ def _format_agent(stub_name: str, agent_obj) -> dict:
     }
 
 
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @agents_bp.route('/agents', methods=['GET'])
+@handle_api_errors
 def list_agents():
     """List all registered agents with their current status.
 
@@ -177,7 +175,6 @@ def list_agents():
     registry = _get_registry()
 
     # Build the response list from _AGENT_METADATA stub IDs.
-    # Each stub is resolved to a real agent via AGENT_ID_MAP.
     agents = []
     for stub_id in _AGENT_METADATA:
         real_name = AGENT_ID_MAP.get(stub_id, stub_id)
@@ -230,6 +227,7 @@ def list_agents():
 
 
 @agents_bp.route('/agents/<name>', methods=['GET'])
+@handle_api_errors
 def get_agent_detail(name):
     """Get detailed information about a specific agent including run history.
 
@@ -245,15 +243,15 @@ def get_agent_detail(name):
     """
     registry = _get_registry()
     if registry is None:
-        return jsonify({'error': 'Agent registry not initialised'}), 503
+        raise ServiceUnavailableError('Agent registry not initialised')
 
     real_name = AGENT_ID_MAP.get(name)
     if real_name is None:
-        return jsonify({'error': f'Agent not found: {name}'}), 404
+        raise NotFoundError(f'Agent not found: {name}')
 
     agent_obj = registry.get(real_name)
     if agent_obj is None:
-        return jsonify({'error': f'Agent not found: {name}'}), 404
+        raise NotFoundError(f'Agent not found: {name}')
 
     detail = _format_agent(name, agent_obj)
 
@@ -292,6 +290,7 @@ def get_agent_detail(name):
 
 
 @agents_bp.route('/agents/<name>/run', methods=['POST'])
+@handle_api_errors
 def trigger_agent_run(name):
     """Manually trigger an agent run.
 
@@ -302,12 +301,7 @@ def trigger_agent_run(name):
         params (dict): Optional parameters passed to the agent.
 
     Returns:
-        JSON object with:
-        - success (bool): Whether the run succeeded.
-        - run_id (int): DB rowid of the persisted run record.
-        - agent (str): The requested agent identifier (stub name preserved).
-        - status: 'completed' on success, 'error' on failure.
-        - framework, tokens_input, tokens_output, estimated_cost, duration_ms.
+        JSON object with run result details.
 
     Errors:
         404: Agent not found.
@@ -316,28 +310,25 @@ def trigger_agent_run(name):
     """
     registry = _get_registry()
     if registry is None:
-        return jsonify({'error': 'Agent registry not initialised'}), 503
+        raise ServiceUnavailableError('Agent registry not initialised')
 
     real_name = AGENT_ID_MAP.get(name)
     if real_name is None:
-        return jsonify({'error': f'Agent not found: {name}'}), 404
+        raise NotFoundError(f'Agent not found: {name}')
 
     agent_obj = registry.get(real_name)
     if agent_obj is None:
-        return jsonify({'error': f'Agent not found: {name}'}), 404
+        raise NotFoundError(f'Agent not found: {name}')
 
     if not agent_obj.config.enabled:
-        return jsonify({
-            'success': False,
-            'error': f'Agent "{name}" is currently disabled. Enable it in settings first.'
-        }), 400
+        raise ValidationError(
+            f'Agent "{name}" is currently disabled. Enable it in settings first.'
+        )
 
     data = request.get_json(silent=True) or {}
     params = data.get('params', {})
 
     # OpenClaw path: try first when the gateway is configured and reachable.
-    # Persists the result directly then returns early so the native path is
-    # skipped and no double-write occurs.
     if Config.OPENCLAW_ENABLED:
         try:
             from backend.agents.openclaw_engine import OpenClawBridge
@@ -380,11 +371,10 @@ def trigger_agent_run(name):
                 real_name, e,
             )
 
-    # Native path: registry.run_agent() calls agent.run() and persists the
-    # result in a single operation — exactly one row written to agent_runs.
+    # Native path
     result, run_id = registry.run_agent(real_name, params)
     if result is None:
-        return jsonify({'error': f'Agent {real_name} execution failed internally'}), 500
+        raise ServiceUnavailableError(f'Agent {real_name} execution failed internally')
     success = result.status == 'success'
 
     logger.info(
@@ -414,6 +404,7 @@ def trigger_agent_run(name):
 
 
 @agents_bp.route('/agents/runs', methods=['GET'])
+@handle_api_errors
 def list_recent_runs():
     """List recent agent runs across all agents.
 
@@ -423,17 +414,15 @@ def list_recent_runs():
         status (str, optional): Filter by run status (running, success, error).
 
     Returns:
-        JSON object with:
-        - runs: Array of run summary objects.
-        - total: Total count of runs returned.
+        JSON object with runs array and total count.
     """
     raw_limit = request.args.get('limit', '50')
     try:
         limit = int(raw_limit)
     except ValueError:
-        return jsonify({'error': 'limit must be a positive integer'}), 400
+        raise ValidationError('limit must be a positive integer')
     if limit <= 0:
-        return jsonify({'error': 'limit must be a positive integer'}), 400
+        raise ValidationError('limit must be a positive integer')
     limit = min(limit, 200)
 
     agent_filter = request.args.get('agent')
@@ -441,9 +430,9 @@ def list_recent_runs():
     _VALID_STATUSES = {'running', 'success', 'error'}
     status_filter = request.args.get('status')
     if status_filter and status_filter not in _VALID_STATUSES:
-        return jsonify({
-            'error': f"Invalid status. Must be one of: {', '.join(sorted(_VALID_STATUSES))}"
-        }), 400
+        raise ValidationError(
+            f"Invalid status. Must be one of: {', '.join(sorted(_VALID_STATUSES))}"
+        )
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
@@ -453,7 +442,6 @@ def list_recent_runs():
         params = []
 
         if agent_filter:
-            # Resolve stub alias → real name; fall back to the value as-is
             real_name = AGENT_ID_MAP.get(agent_filter, agent_filter)
             query += ' AND agent_name = ?'
             params.append(real_name)
@@ -479,6 +467,8 @@ def list_recent_runs():
             'completed_at': r['completed_at'],
             'framework': r['framework'],
         } for r in rows]
+    except (ValidationError, NotFoundError, ServiceUnavailableError):
+        raise
     except Exception as e:
         logger.error("Failed to query agent runs: %s", e)
         runs = []
@@ -495,6 +485,7 @@ def list_recent_runs():
 
 
 @agents_bp.route('/agents/costs', methods=['GET'])
+@handle_api_errors
 def get_cost_summary():
     """Get cost summary for agent runs (AI API usage).
 
@@ -504,16 +495,14 @@ def get_cost_summary():
 
     Returns:
         JSON object with cost breakdown by period and agent, plus totals.
-        by_agent is keyed by stub/frontend agent IDs (all stubs included, zeros
-        if no runs yet).
     """
     period = request.args.get('period', 'daily')
     valid_periods = ['daily', 'weekly', 'monthly']
 
     if period not in valid_periods:
-        return jsonify({
-            'error': f'Invalid period: {period}. Must be one of: {", ".join(valid_periods)}'
-        }), 400
+        raise ValidationError(
+            f'Invalid period: {period}. Must be one of: {", ".join(valid_periods)}'
+        )
 
     period_days = {'daily': 1, 'weekly': 7, 'monthly': 30}[period]
     range_labels = {'daily': 'Last 24 hours', 'weekly': 'Last 7 days', 'monthly': 'Last 30 days'}
@@ -521,7 +510,6 @@ def get_cost_summary():
     now = datetime.utcnow()
     range_start = (now - timedelta(days=period_days)).isoformat() + 'Z'
 
-    # Helper to build an empty by_agent dict (all stubs with zero values)
     def _empty_by_agent():
         return {
             stub_id: {
@@ -558,7 +546,7 @@ def get_cost_summary():
             'tokens': row['tokens'],
         }
 
-    # Build by_agent keyed by stub IDs; all stubs present even with zero runs
+    # Build by_agent keyed by stub IDs
     by_agent = {}
     for stub_id, meta in _AGENT_METADATA.items():
         real_name = AGENT_ID_MAP.get(stub_id, stub_id)
@@ -581,7 +569,7 @@ def get_cost_summary():
             summary.get('total_tokens_input', 0) + summary.get('total_tokens_output', 0)
         ),
         'by_agent': by_agent,
-        'by_provider': {},  # future: aggregate by model provider
+        'by_provider': {},
         'by_day': summary.get('by_day', []),
     })
 
@@ -616,3 +604,4 @@ def _get_agent_tools(agent_name: str) -> list:
         ],
     }
     return tool_map.get(agent_name, [])
+```

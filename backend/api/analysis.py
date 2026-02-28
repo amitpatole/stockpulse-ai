@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Analysis API Routes
 Blueprint for AI ratings and chart data endpoints.
@@ -11,6 +12,7 @@ import logging
 
 from backend.core.ai_analytics import StockAnalytics
 from backend.config import Config
+from backend.core.error_handlers import handle_api_errors, NotFoundError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +24,19 @@ AI_RATINGS_CACHE_TTL_SECONDS = 300  # 5 minutes, configurable
 def _parse_pagination(args):
     """Parse and validate page/page_size query parameters.
 
-    Returns (page, page_size, error_response). On success, error_response is None.
-    On validation failure, page and page_size are None and error_response is a
-    (response, status_code) tuple ready to return from a Flask view.
+    Raises ValidationError on invalid input instead of returning an error tuple.
+    Returns (page, page_size).
     """
     try:
         page = int(args.get('page', 1))
         page_size = int(args.get('page_size', 25))
     except (ValueError, TypeError):
-        return None, None, (jsonify({'error': 'page and page_size must be integers'}), 400)
+        raise ValidationError('page and page_size must be integers')
 
     if not (1 <= page_size <= 100):
-        return None, None, (jsonify({'error': 'page_size must be between 1 and 100'}), 400)
+        raise ValidationError('page_size must be between 1 and 100')
 
-    return page, page_size, None
+    return page, page_size
 
 
 def _get_cached_ratings():
@@ -75,6 +76,7 @@ def _get_cached_ratings():
 
 
 @analysis_bp.route('/ai/ratings', methods=['GET'])
+@handle_api_errors
 def get_ai_ratings():
     """Get AI ratings for all active stocks.
 
@@ -125,6 +127,7 @@ def get_ai_ratings():
 
 
 @analysis_bp.route('/ai/rating/<ticker>', methods=['GET'])
+@handle_api_errors
 def get_ai_rating(ticker):
     """Get AI rating for a specific stock."""
     # Try cached first
@@ -144,6 +147,7 @@ def get_ai_rating(ticker):
 
 
 @analysis_bp.route('/chart/<ticker>', methods=['GET'])
+@handle_api_errors
 def get_chart_data(ticker):
     """Get historical price data for chart rendering.
 
@@ -166,15 +170,13 @@ def get_chart_data(ticker):
         404: No data available or no valid data points.
     """
     period = request.args.get('period', '1mo')
-    page, page_size, err = _parse_pagination(request.args)
-    if err:
-        return err
+    page, page_size = _parse_pagination(request.args)
 
     analytics = StockAnalytics()
     price_data = analytics.get_stock_price_data(ticker, period)
 
     if not price_data or not price_data.get('close'):
-        return jsonify({'error': 'No data available'}), 404
+        raise NotFoundError('No data available')
 
     # Filter out None values and prepare data
     timestamps = price_data.get('timestamps', [])
@@ -199,7 +201,7 @@ def get_chart_data(ticker):
             })
 
     if not data_points:
-        return jsonify({'error': 'No valid data points'}), 404
+        raise NotFoundError('No valid data points')
 
     # Calculate price change and stats across the full dataset
     first_price = data_points[0]['close']
@@ -238,3 +240,4 @@ def get_chart_data(ticker):
             'total_volume': sum([p['volume'] for p in data_points if p['volume']])
         }
     })
+```

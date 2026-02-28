@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Google OAuth Authentication Routes
 OAuth 2.0 login flow: initiate, callback, logout, and current-user info.
@@ -10,6 +11,7 @@ from flask_login import login_user, logout_user, current_user
 
 from backend.config import Config
 from backend.auth_utils import User
+from backend.core.error_handlers import handle_api_errors
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,7 @@ def logout():
 
 
 @auth_bp.route('/me')
+@handle_api_errors
 def me():
     """Return ``{id, email, name}`` for the authenticated user; 401 otherwise."""
     if not current_user.is_authenticated:
@@ -85,3 +88,4 @@ def me():
         'email': current_user.email,
         'name': current_user.name,
     })
+```

@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Earnings Calendar API
 Blueprint serving upcoming earnings events with watchlist highlighting.
@@ -9,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from flask import Blueprint, jsonify, request
 
 from backend.database import db_session
+from backend.core.error_handlers import handle_api_errors
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ _STALE_THRESHOLD_HOURS = 1
 
 
 @earnings_bp.route('/earnings', methods=['GET'])
+@handle_api_errors
 def get_earnings():
     """Return upcoming earnings events within the requested look-ahead window.
 
@@ -114,3 +117,4 @@ def _is_stale(fetched_at_str: str | None) -> bool:
         return age_hours > _STALE_THRESHOLD_HOURS
     except (ValueError, OverflowError):
         return True
+```

@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, and search stocks.
@@ -11,6 +12,7 @@ from flask import Blueprint, jsonify, request
 from backend.core.stock_manager import get_all_stocks, add_stock, remove_stock, search_stock_ticker
 from backend.core.ai_analytics import StockAnalytics
 from backend.database import get_db_connection
+from backend.core.error_handlers import handle_api_errors, NotFoundError, ValidationError, ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ stocks_bp = Blueprint('stocks', __name__, url_prefix='/api')
 
 
 @stocks_bp.route('/stocks', methods=['GET'])
+@handle_api_errors
 def get_stocks():
     """Get all monitored stocks.
 
@@ -38,6 +41,7 @@ def get_stocks():
 
 
 @stocks_bp.route('/stocks', methods=['POST'])
+@handle_api_errors
 def add_stock_endpoint():
     """Add a new stock to the monitored list.
 
@@ -52,7 +56,7 @@ def add_stock_endpoint():
     """
     data = request.json
     if not data or 'ticker' not in data:
-        return jsonify({'success': False, 'error': 'Missing required field: ticker'}), 400
+        raise ValidationError('Missing required field: ticker')
 
     ticker = data['ticker'].strip().upper()
     name = data.get('name')
@@ -67,15 +71,11 @@ def add_stock_endpoint():
         elif results:
             # No exact match — reject with suggestions
             suggestions = [f"{r['ticker']} ({r['name']})" for r in results[:3]]
-            return jsonify({
-                'success': False,
-                'error': f"Ticker '{ticker}' not found. Did you mean: {', '.join(suggestions)}?"
-            }), 404
+            raise NotFoundError(
+                f"Ticker '{ticker}' not found. Did you mean: {', '.join(suggestions)}?"
+            )
         else:
-            return jsonify({
-                'success': False,
-                'error': f"Ticker '{ticker}' not found on any exchange."
-            }), 404
+            raise NotFoundError(f"Ticker '{ticker}' not found on any exchange.")
 
     market = data.get('market', 'US')
     success = add_stock(ticker, name, market)
@@ -83,6 +83,7 @@ def add_stock_endpoint():
 
 
 @stocks_bp.route('/stocks/<ticker>', methods=['DELETE'])
+@handle_api_errors
 def remove_stock_endpoint(ticker):
     """Remove a stock from monitoring (soft delete).
 
@@ -107,6 +108,7 @@ _TIMEFRAME_MAP = {
 
 
 @stocks_bp.route('/stocks/<ticker>/detail', methods=['GET'])
+@handle_api_errors
 def get_stock_detail(ticker):
     """Aggregate quote, candlestick data, technical indicators, and news for a single ticker.
 
@@ -129,7 +131,7 @@ def get_stock_detail(ticker):
         hist = tk.history(period=period, interval=interval)
 
         if hist.empty:
-            return jsonify({'error': 'ticker not found'}), 404
+            raise NotFoundError('ticker not found')
 
         candles = []
         for ts, row in hist.iterrows():
@@ -149,7 +151,7 @@ def get_stock_detail(ticker):
             })
 
         if not candles:
-            return jsonify({'error': 'ticker not found'}), 404
+            raise NotFoundError('ticker not found')
 
         # Fast quote fields
         fast_info = tk.fast_info
@@ -190,12 +192,14 @@ def get_stock_detail(ticker):
             'currency': currency,
         }
 
+    except (NotFoundError, ValidationError, ServiceUnavailableError):
+        raise
     except ImportError:
         logger.error("yfinance is not installed")
-        return jsonify({'error': 'data provider unavailable'}), 503
+        raise ServiceUnavailableError('data provider unavailable')
     except Exception as e:
         logger.error(f"Error fetching stock detail for {ticker}: {e}")
-        return jsonify({'error': 'ticker not found'}), 404
+        raise NotFoundError('ticker not found')
 
     # Technical indicators via ai_analytics
     analytics = StockAnalytics()
@@ -230,6 +234,7 @@ def get_stock_detail(ticker):
 
 
 @stocks_bp.route('/stocks/search', methods=['GET'])
+@handle_api_errors
 def search_stocks():
     """Search for stock tickers via Yahoo Finance.
 
@@ -246,3 +251,4 @@ def search_stocks():
 
     results = search_stock_ticker(query)
     return jsonify(results)
+```

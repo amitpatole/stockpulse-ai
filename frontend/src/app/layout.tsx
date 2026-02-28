@@ -1,9 +1,11 @@
+```tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import KeyboardShortcutsProvider from "@/components/layout/KeyboardShortcutsProvider";
 import SSEAccessibilityAnnouncer from "@/components/accessibility/SSEAccessibilityAnnouncer";
+import ApiErrorProvider from "@/components/providers/ApiErrorProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,15 +33,18 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-950 text-slate-200`}
       >
         <SSEAccessibilityAnnouncer />
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 min-w-0 overflow-x-hidden">
-            <KeyboardShortcutsProvider>
-              {children}
-            </KeyboardShortcutsProvider>
-          </main>
-        </div>
+        <ApiErrorProvider>
+          <div className="flex min-h-screen">
+            <Sidebar />
+            <main className="flex-1 min-w-0 overflow-x-hidden">
+              <KeyboardShortcutsProvider>
+                {children}
+              </KeyboardShortcutsProvider>
+            </main>
+          </div>
+        </ApiErrorProvider>
       </body>
     </html>
   );
 }
+```

@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Watchlist API
 Blueprint exposing watchlist group management endpoints, including CSV import
@@ -22,6 +23,7 @@ from backend.core.watchlist_manager import (
     reorder_watchlist_groups,
 )
 from backend.database import db_session
+from backend.core.error_handlers import handle_api_errors, ValidationError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,7 @@ _MAX_NAME_LEN = 100
 # ---------------------------------------------------------------------------
 
 @watchlist_bp.route('/', methods=['GET'])
+@handle_api_errors
 def list_watchlists():
     """Return all watchlist groups ordered by sort_order with their stock counts.
     ---
@@ -56,6 +59,7 @@ def list_watchlists():
 
 
 @watchlist_bp.route('/', methods=['POST'])
+@handle_api_errors
 def create_watchlist_route():
     """Create a new named watchlist group.
     ---
@@ -89,17 +93,18 @@ def create_watchlist_route():
     body = request.get_json(silent=True) or {}
     name: str = (body.get('name') or '').strip()
     if not name:
-        return jsonify({'error': 'name is required'}), 400
+        raise ValidationError('name is required')
     if len(name) > _MAX_NAME_LEN:
-        return jsonify({'error': f'name must be {_MAX_NAME_LEN} characters or fewer'}), 400
+        raise ValidationError(f'name must be {_MAX_NAME_LEN} characters or fewer')
     try:
         group = create_watchlist(name)
     except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
+        raise ValidationError(str(exc))
     return jsonify(group), 201
 
 
 @watchlist_bp.route('/<int:watchlist_id>', methods=['GET'])
+@handle_api_errors
 def get_watchlist_route(watchlist_id: int):
     """Return a watchlist with its ordered ticker list.
     ---
@@ -111,8 +116,6 @@ def get_watchlist_route(watchlist_id: int):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
     responses:
       200:
         description: Watchlist with ordered ticker list.
@@ -125,11 +128,12 @@ def get_watchlist_route(watchlist_id: int):
     """
     wl = get_watchlist(watchlist_id)
     if wl is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
     return jsonify(wl), 200
 
 
 @watchlist_bp.route('/<int:watchlist_id>', methods=['PUT'])
+@handle_api_errors
 def rename_watchlist_route(watchlist_id: int):
     """Rename a watchlist group.
     ---
@@ -143,8 +147,6 @@ def rename_watchlist_route(watchlist_id: int):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
       - in: body
         name: body
         required: true
@@ -155,7 +157,6 @@ def rename_watchlist_route(watchlist_id: int):
           properties:
             name:
               type: string
-              example: New Name
     responses:
       200:
         description: Watchlist renamed.
@@ -163,29 +164,26 @@ def rename_watchlist_route(watchlist_id: int):
           $ref: '#/definitions/WatchlistGroup'
       400:
         description: Missing or empty name, name too long, or duplicate name.
-        schema:
-          $ref: '#/definitions/Error'
       404:
         description: Watchlist not found.
-        schema:
-          $ref: '#/definitions/Error'
     """
     body = request.get_json(silent=True) or {}
     name: str = (body.get('name') or '').strip()
     if not name:
-        return jsonify({'error': 'name is required'}), 400
+        raise ValidationError('name is required')
     if len(name) > _MAX_NAME_LEN:
-        return jsonify({'error': f'name must be {_MAX_NAME_LEN} characters or fewer'}), 400
+        raise ValidationError(f'name must be {_MAX_NAME_LEN} characters or fewer')
     try:
         updated = rename_watchlist(watchlist_id, name)
     except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
+        raise ValidationError(str(exc))
     if updated is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
     return jsonify(updated), 200
 
 
 @watchlist_bp.route('/<int:watchlist_id>', methods=['DELETE'])
+@handle_api_errors
 def delete_watchlist_route(watchlist_id: int):
     """Delete a watchlist group and all its stock associations.
     ---
@@ -200,28 +198,20 @@ def delete_watchlist_route(watchlist_id: int):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
     responses:
       200:
         description: Watchlist deleted.
-        schema:
-          $ref: '#/definitions/SuccessResponse'
       400:
         description: Cannot delete the last watchlist.
-        schema:
-          $ref: '#/definitions/Error'
       404:
         description: Watchlist not found.
-        schema:
-          $ref: '#/definitions/Error'
     """
     try:
         deleted = delete_watchlist(watchlist_id)
     except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
+        raise ValidationError(str(exc))
     if not deleted:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
     return jsonify({'ok': True}), 200
 
 
@@ -230,15 +220,13 @@ def delete_watchlist_route(watchlist_id: int):
 # ---------------------------------------------------------------------------
 
 @watchlist_bp.route('/reorder', methods=['PUT'])
+@handle_api_errors
 def reorder_groups():
     """Persist a new drag-and-drop sort order for watchlist groups.
     ---
     tags:
       - Watchlist
     summary: Reorder watchlist groups
-    description: >
-      Assigns each group a new sort_order equal to its index in the
-      supplied ids list.  Used to persist drag-and-drop reordering.
     consumes:
       - application/json
     parameters:
@@ -254,28 +242,23 @@ def reorder_groups():
               type: array
               items:
                 type: integer
-              example: [3, 1, 2]
     responses:
       200:
         description: Groups reordered successfully.
-        schema:
-          $ref: '#/definitions/SuccessResponse'
       400:
         description: Missing or invalid ids field.
-        schema:
-          $ref: '#/definitions/Error'
     """
     body = request.get_json(silent=True) or {}
     ids = body.get('ids')
     if not isinstance(ids, list):
-        return jsonify({'error': 'ids must be a list'}), 400
+        raise ValidationError('ids must be a list')
     if not all(isinstance(i, int) for i in ids):
-        return jsonify({'error': 'All ids must be integers'}), 400
+        raise ValidationError('All ids must be integers')
     if len(ids) > 100:
-        return jsonify({'error': 'Too many group ids'}), 400
+        raise ValidationError('Too many group ids')
 
     if not reorder_watchlist_groups(ids):
-        return jsonify({'error': 'No watchlists found to reorder'}), 400
+        raise ValidationError('No watchlists found to reorder')
 
     return jsonify({'ok': True}), 200
 
@@ -285,6 +268,7 @@ def reorder_groups():
 # ---------------------------------------------------------------------------
 
 @watchlist_bp.route('/<int:watchlist_id>/stocks', methods=['POST'])
+@handle_api_errors
 def add_stock_to_group(watchlist_id: int):
     """Add a ticker to a specific watchlist group.
     ---
@@ -298,8 +282,6 @@ def add_stock_to_group(watchlist_id: int):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
       - in: body
         name: body
         required: true
@@ -310,50 +292,32 @@ def add_stock_to_group(watchlist_id: int):
           properties:
             ticker:
               type: string
-              example: AAPL
-            name:
-              type: string
-              description: >
-                Company name. Optional — looked up from Yahoo Finance when omitted.
-              example: Apple Inc.
     responses:
       200:
         description: Ticker added to watchlist.
-        schema:
-          type: object
-          properties:
-            ok:
-              type: boolean
-              example: true
-            ticker:
-              type: string
-              example: AAPL
       400:
         description: Missing ticker field.
-        schema:
-          $ref: '#/definitions/Error'
       404:
         description: Watchlist not found or ticker unresolvable.
-        schema:
-          $ref: '#/definitions/Error'
     """
     body = request.get_json(silent=True) or {}
     ticker: str = (body.get('ticker') or '').strip().upper()
     if not ticker:
-        return jsonify({'error': 'ticker is required'}), 400
+        raise ValidationError('ticker is required')
 
     wl = get_watchlist(watchlist_id)
     if wl is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
 
     name: str | None = (body.get('name') or '').strip() or None
     success = add_stock_to_watchlist(watchlist_id, ticker, name)
     if not success:
-        return jsonify({'error': f'Failed to add {ticker} to watchlist'}), 404
+        raise NotFoundError(f'Failed to add {ticker} to watchlist')
     return jsonify({'ok': True, 'ticker': ticker}), 200
 
 
 @watchlist_bp.route('/<int:watchlist_id>/stocks/<string:ticker>', methods=['DELETE'])
+@handle_api_errors
 def remove_stock_from_group(watchlist_id: int, ticker: str):
     """Remove a ticker from a specific watchlist group.
     ---
@@ -368,32 +332,24 @@ def remove_stock_from_group(watchlist_id: int, ticker: str):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
       - name: ticker
         in: path
         type: string
         required: true
-        description: Ticker symbol to remove.
-        example: AAPL
     responses:
       200:
         description: Ticker removed from watchlist.
-        schema:
-          $ref: '#/definitions/SuccessResponse'
       404:
         description: Watchlist or stock membership not found.
-        schema:
-          $ref: '#/definitions/Error'
     """
     ticker = ticker.strip().upper()
     wl = get_watchlist(watchlist_id)
     if wl is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
 
     removed = remove_stock_from_watchlist(watchlist_id, ticker)
     if not removed:
-        return jsonify({'error': f'{ticker} is not in watchlist {watchlist_id}'}), 404
+        raise NotFoundError(f'{ticker} is not in watchlist {watchlist_id}')
     return jsonify({'ok': True}), 200
 
 
@@ -402,15 +358,13 @@ def remove_stock_from_group(watchlist_id: int, ticker: str):
 # ---------------------------------------------------------------------------
 
 @watchlist_bp.route('/<int:watchlist_id>/reorder', methods=['PUT'])
+@handle_api_errors
 def reorder_stocks(watchlist_id: int):
     """Persist a new drag-and-drop sort order for stocks in a watchlist.
     ---
     tags:
       - Watchlist
     summary: Reorder stocks within a watchlist
-    description: >
-      Assigns each ticker a new sort_order equal to its index in the
-      supplied tickers list.
     consumes:
       - application/json
     parameters:
@@ -418,8 +372,6 @@ def reorder_stocks(watchlist_id: int):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
       - in: body
         name: body
         required: true
@@ -432,36 +384,30 @@ def reorder_stocks(watchlist_id: int):
               type: array
               items:
                 type: string
-              example: [AAPL, MSFT, GOOG]
     responses:
       200:
         description: Stocks reordered successfully.
-        schema:
-          $ref: '#/definitions/SuccessResponse'
       400:
         description: Missing or invalid tickers field.
-        schema:
-          $ref: '#/definitions/Error'
       404:
         description: Watchlist not found.
-        schema:
-          $ref: '#/definitions/Error'
     """
     body = request.get_json(silent=True) or {}
     tickers = body.get('tickers')
     if not isinstance(tickers, list):
-        return jsonify({'error': 'tickers must be a list'}), 400
+        raise ValidationError('tickers must be a list')
     if not all(isinstance(t, str) for t in tickers):
-        return jsonify({'error': 'All tickers must be strings'}), 400
+        raise ValidationError('All tickers must be strings')
     if len(tickers) > 500:
-        return jsonify({'error': 'Too many tickers'}), 400
+        raise ValidationError('Too many tickers')
 
     wl = get_watchlist(watchlist_id)
     if wl is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
 
     if not reorder_watchlist(watchlist_id, tickers):
-        return jsonify({'error': 'Failed to reorder watchlist'}), 500
+        from backend.core.error_handlers import DatabaseError
+        raise DatabaseError('Failed to reorder watchlist')
 
     return jsonify({'ok': True}), 200
 
@@ -471,6 +417,7 @@ def reorder_stocks(watchlist_id: int):
 # ---------------------------------------------------------------------------
 
 @watchlist_bp.route('/<int:watchlist_id>/import', methods=['POST'])
+@handle_api_errors
 def import_csv(watchlist_id: int):
     """Import tickers from a CSV file into a watchlist.
     ---
@@ -489,64 +436,38 @@ def import_csv(watchlist_id: int):
         in: path
         type: integer
         required: true
-        description: Watchlist identifier.
-        example: 1
       - in: formData
         name: file
         type: file
         required: true
-        description: CSV file with a 'symbol' column (max 1 MB, max 500 rows).
     responses:
       200:
         description: Import summary with counts of added and skipped symbols.
-        schema:
-          type: object
-          properties:
-            added:
-              type: integer
-              example: 10
-            skipped_duplicates:
-              type: integer
-              example: 2
-            skipped_invalid:
-              type: integer
-              example: 1
-            invalid_symbols:
-              type: array
-              items:
-                type: string
-              example: [FAKE]
       400:
         description: Bad file type, empty file, missing symbol column, or too many rows.
-        schema:
-          $ref: '#/definitions/Error'
       404:
         description: Watchlist not found.
-        schema:
-          $ref: '#/definitions/Error'
       413:
         description: File exceeds the 1 MB size limit.
-        schema:
-          $ref: '#/definitions/Error'
     """
     # Verify watchlist exists
     wl = get_watchlist(watchlist_id)
     if wl is None:
-        return jsonify({'error': f'Watchlist {watchlist_id} not found'}), 404
+        raise NotFoundError(f'Watchlist {watchlist_id} not found')
 
     # Validate file presence
     if 'file' not in request.files:
-        return jsonify({'error': 'No file field in request'}), 400
+        raise ValidationError('No file field in request')
 
     upload = request.files['file']
     filename = upload.filename or ''
 
     if not filename.lower().endswith('.csv'):
-        return jsonify({'error': 'Unsupported file type. Please upload a .csv file'}), 400
+        raise ValidationError('Unsupported file type. Please upload a .csv file')
 
     raw = upload.read()
     if not raw:
-        return jsonify({'error': 'Uploaded file is empty'}), 400
+        raise ValidationError('Uploaded file is empty')
 
     if len(raw) > _MAX_FILE_BYTES:
         return jsonify({'error': 'File too large. Maximum size is 1 MB'}), 413
@@ -561,26 +482,26 @@ def import_csv(watchlist_id: int):
 
     # Find the symbol column (case-insensitive)
     if reader.fieldnames is None:
-        return jsonify({'error': 'CSV file has no headers'}), 400
+        raise ValidationError('CSV file has no headers')
 
     symbol_col = next(
         (f for f in reader.fieldnames if f.strip().lower() == 'symbol'),
         None,
     )
     if symbol_col is None:
-        return jsonify({'error': "CSV must contain a 'symbol' column"}), 400
+        raise ValidationError("CSV must contain a 'symbol' column")
 
     # Collect tickers, enforcing row limit
     tickers: list[str] = []
     for i, row in enumerate(reader):
         if i >= _MAX_ROWS:
-            return jsonify({'error': f'CSV exceeds maximum of {_MAX_ROWS} rows'}), 400
+            raise ValidationError(f'CSV exceeds maximum of {_MAX_ROWS} rows')
         val = (row.get(symbol_col) or '').strip().upper()
         if val:
             tickers.append(val)
 
     if not tickers:
-        return jsonify({'error': 'No ticker symbols found in CSV'}), 400
+        raise ValidationError('No ticker symbols found in CSV')
 
     # Look up which symbols exist in the stocks table
     with db_session() as conn:
@@ -610,7 +531,6 @@ def import_csv(watchlist_id: int):
             added += 1
             already_in_watchlist.add(ticker)
         else:
-            # watchlist disappeared mid-import (extremely unlikely)
             skipped_invalid += 1
             invalid_symbols.append(ticker)
 
@@ -620,3 +540,4 @@ def import_csv(watchlist_id: int):
         'skipped_invalid': skipped_invalid,
         'invalid_symbols': invalid_symbols,
     }), 200
+```
