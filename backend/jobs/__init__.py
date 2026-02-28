@@ -1,4 +1,5 @@
 ```python
+
 """
 Job definitions for TickerPulse AI scheduler.
 
@@ -20,12 +21,19 @@ from backend.config import Config
 def register_all_jobs(scheduler_manager) -> None:
     """Register every scheduled job with the given SchedulerManager.
 
+    Pre-warms the DB connection pool so the first job execution does not
+    pay the cost of pool initialisation.
+
     Parameters
     ----------
     scheduler_manager : backend.scheduler.SchedulerManager
         The manager instance that will hold the job registry and ultimately
         schedule them via APScheduler.
     """
+    # Pre-warm the connection pool so pool creation cost is paid once at
+    # startup rather than on the first job execution.
+    from backend.database import get_pool
+    get_pool()
 
     # ---- Morning Briefing: 8:30 AM ET, weekdays ----
     scheduler_manager.register_job(

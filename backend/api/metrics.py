@@ -27,6 +27,18 @@ def _days_param(default: int = 30) -> int:
         return default
 
 
+@metrics_bp.route('/db-pool')
+@handle_api_errors
+def get_db_pool_stats():
+    """Current DB connection pool utilisation snapshot.
+
+    Returns ``{size, available, in_use, timeout_s}``.
+    Read-only; no auth required (internal health surface).
+    """
+    from backend.database import get_pool
+    return jsonify(get_pool().stats())
+
+
 @metrics_bp.route('/summary')
 @handle_api_errors
 def get_summary():
