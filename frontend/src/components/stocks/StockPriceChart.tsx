@@ -1,3 +1,4 @@
+```typescript
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -297,3 +298,4 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
     </div>
   );
 }
+```
