@@ -10,8 +10,6 @@ const MIN_SELECTED = 2;
 const MAX_SELECTED = 4;
 const DEFAULT_TIMEFRAMES: Timeframe[] = ['1D', '1W', '1M', '3M'];
 
-// Timeframes are persisted as { timeframes: Timeframe[] } so the value is
-// always a JSON object — required by the PATCH /api/app-state API contract.
 interface PersistedTimeframes {
   timeframes?: Timeframe[];
 }

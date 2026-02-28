@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from backend.core.stock_manager import get_all_stocks, add_stock, remove_stock, search_stock_ticker
 from backend.core.ai_analytics import StockAnalytics
-from backend.database import get_db_connection
+from backend.database import pooled_session
 from backend.core.error_handlers import handle_api_errors, NotFoundError, ValidationError, ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,6 @@ def get_stocks():
     market = request.args.get('market', None)
     stocks = get_all_stocks()
 
-    # Filter by market if specified
     if market and market != 'All':
         stocks = [s for s in stocks if s.get('market') == market]
 
@@ -61,15 +60,12 @@ def add_stock_endpoint():
     ticker = data['ticker'].strip().upper()
     name = data.get('name')
 
-    # Validate ticker exists and look up name if not provided
     if not name:
         results = search_stock_ticker(ticker)
-        # Check for an exact ticker match
         match = next((r for r in results if r['ticker'].upper() == ticker), None)
         if match:
             name = match.get('name', ticker)
         elif results:
-            # No exact match — reject with suggestions
             suggestions = [f"{r['ticker']} ({r['name']})" for r in results[:3]]
             raise NotFoundError(
                 f"Ticker '{ticker}' not found. Did you mean: {', '.join(suggestions)}?"
@@ -104,6 +100,7 @@ _TIMEFRAME_MAP = {
     '3M': ('3mo', '1d'),
     '6M': ('6mo', '1d'),
     '1Y': ('1y', '1d'),
+    '5Y': ('5y', '1wk'),
 }
 
 
@@ -153,7 +150,6 @@ def get_stock_detail(ticker):
         if not candles:
             raise NotFoundError('ticker not found')
 
-        # Fast quote fields
         fast_info = tk.fast_info
         last_price = getattr(fast_info, 'last_price', None)
         price = float(last_price) if last_price is not None else candles[-1]['close']
@@ -167,7 +163,6 @@ def get_stock_detail(ticker):
         currency = getattr(fast_info, 'currency', 'USD') or 'USD'
         volume = int(getattr(fast_info, 'last_volume', 0) or 0)
 
-        # Extended info for P/E, EPS, and name (best-effort)
         pe_ratio = None
         eps = None
         name = ticker
@@ -201,20 +196,15 @@ def get_stock_detail(ticker):
         logger.error(f"Error fetching stock detail for {ticker}: {e}")
         raise NotFoundError('ticker not found')
 
-    # Technical indicators via ai_analytics
     analytics = StockAnalytics()
     indicators = analytics.get_technical_indicators(ticker)
 
-    # Recent news from database
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        '''SELECT title, source, published_date, url, sentiment_label, sentiment_score
-           FROM news WHERE ticker = ? ORDER BY created_at DESC LIMIT 10''',
-        (ticker,)
-    )
-    news_rows = cursor.fetchall()
-    conn.close()
+    with pooled_session() as conn:
+        news_rows = conn.execute(
+            '''SELECT title, source, published_date, url, sentiment_label, sentiment_score
+               FROM news WHERE ticker = ? ORDER BY created_at DESC LIMIT 10''',
+            (ticker,)
+        ).fetchall()
 
     news = [{
         'title': row['title'],
@@ -231,6 +221,69 @@ def get_stock_detail(ticker):
         'indicators': indicators,
         'news': news,
     })
+
+
+@stocks_bp.route('/stocks/<ticker>/candles', methods=['GET'])
+@handle_api_errors
+def get_candles(ticker):
+    """Return raw OHLCV candle series for a single ticker and timeframe.
+
+    Path Parameters:
+        ticker (str): Stock ticker symbol (e.g. 'AAPL', 'RELIANCE.NS').
+
+    Query Parameters:
+        timeframe (str, optional): One of 1D, 1W, 1M, 3M, 6M, 1Y, 5Y. Default 1M.
+
+    Returns:
+        JSON array of candle objects (Candle[]).
+        Returns 400 for invalid timeframe, 404 for unknown ticker.
+    """
+    ticker = ticker.upper().strip()
+    timeframe = request.args.get('timeframe', '1M')
+
+    if timeframe not in _TIMEFRAME_MAP:
+        raise ValidationError(f"Unsupported timeframe '{timeframe}'. Valid: {', '.join(_TIMEFRAME_MAP)}")
+
+    period, interval = _TIMEFRAME_MAP[timeframe]
+
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
+        hist = tk.history(period=period, interval=interval)
+
+        if hist.empty:
+            raise NotFoundError('ticker not found')
+
+        candles = []
+        for ts, row in hist.iterrows():
+            try:
+                close = float(row['Close'])
+                if math.isnan(close):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            candles.append({
+                'time': int(ts.timestamp()),
+                'open': round(float(row['Open']), 4),
+                'high': round(float(row['High']), 4),
+                'low': round(float(row['Low']), 4),
+                'close': round(close, 4),
+                'volume': int(row.get('Volume', 0) or 0),
+            })
+
+        if not candles:
+            raise NotFoundError('ticker not found')
+
+    except (NotFoundError, ValidationError, ServiceUnavailableError):
+        raise
+    except ImportError:
+        logger.error("yfinance is not installed")
+        raise ServiceUnavailableError('data provider unavailable')
+    except Exception as e:
+        logger.error(f"Error fetching candles for {ticker}: {e}")
+        raise NotFoundError('ticker not found')
+
+    return jsonify(candles)
 
 
 @stocks_bp.route('/stocks/search', methods=['GET'])

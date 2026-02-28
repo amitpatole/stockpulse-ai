@@ -1,4 +1,4 @@
-```typescript
+```tsx
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -46,10 +46,8 @@ function Sparkline({ candles, height = 60 }: SparklineProps) {
     const isPositive = last >= first;
     const color = isPositive ? '#10b981' : '#ef4444';
 
-    // Clear previous content
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-    // Fill area under line
     const fillEl = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     const firstPt = points[0].split(',');
     const lastPt = points[points.length - 1].split(',');
@@ -60,7 +58,6 @@ function Sparkline({ candles, height = 60 }: SparklineProps) {
     fillEl.setAttribute('fill', `${color}22`);
     svg.appendChild(fillEl);
 
-    // Line
     const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', points.join(' '));
     polyline.setAttribute('fill', 'none');

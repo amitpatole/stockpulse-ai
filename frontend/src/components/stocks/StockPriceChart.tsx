@@ -1,4 +1,4 @@
-```typescript
+```tsx
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -63,7 +63,6 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
   );
   const { data, loading, error } = useApi<StockDetail>(fetcher, [ticker, timeframe]);
 
-  // Sync compareSymbols → URL (skip first mount to avoid spurious navigation)
   useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false;
@@ -79,7 +78,6 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
     router.replace(`${window.location.pathname}${qs ? `?${qs}` : ''}`);
   }, [compareSymbols, router]);
 
-  // Fetch comparison data when symbols or timeframe changes
   useEffect(() => {
     if (compareSymbols.length === 0 || timeframe === 'All') {
       setCompareData(null);
@@ -122,7 +120,6 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
 
   const isComparing = compareSymbols.length > 0 && timeframe !== 'All';
 
-  // Build overlays for PriceChart
   const compareOverlays: CompareOverlay[] = compareSymbols
     .map((symbol, idx) => {
       if (!compareData) return null;
@@ -137,7 +134,6 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
     })
     .filter((o): o is CompareOverlay => o !== null);
 
-  // Normalize primary candles to % return when comparing
   const chartData = (() => {
     if (!data?.candles?.length) return [];
     if (!isComparing) {
@@ -151,7 +147,6 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
     }));
   })();
 
-  // Collect per-symbol error warnings
   const warnings: Record<string, string> = {};
   if (compareData) {
     for (const symbol of compareSymbols) {
@@ -235,7 +230,6 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
         )}
       </div>
 
-      {/* Multi-timeframe grid */}
       {viewMode === 'multi' && (
         <MultiTimeframeGrid
           ticker={ticker}
@@ -244,10 +238,8 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
         />
       )}
 
-      {/* Single chart view */}
       {viewMode === 'chart' && (
         <>
-          {/* Comparison input — chips + text field */}
           <CompareInput
             symbols={compareSymbols}
             colors={COMPARISON_PALETTE}
@@ -259,10 +251,7 @@ export default function StockPriceChart({ ticker }: StockPriceChartProps) {
 
           {loading && (
             <div className="flex items-center justify-center py-20">
-              <Loader2
-                className="h-6 w-6 animate-spin text-slate-400"
-                aria-hidden="true"
-              />
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" aria-hidden="true" />
               <span className="sr-only">Loading chart data…</span>
             </div>
           )}
