@@ -1,3 +1,4 @@
+```typescript
 'use client';
 
 import { clsx } from 'clsx';
@@ -38,3 +39,4 @@ export default function TimezoneToggle({ mode, onModeChange }: TimezoneTogglePro
     </div>
   );
 }
+```
