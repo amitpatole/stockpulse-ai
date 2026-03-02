@@ -1,3 +1,4 @@
+```typescript
 // ============================================================
 // TickerPulse AI v3.0 - TypeScript Type Definitions
 // ============================================================
@@ -129,6 +130,17 @@ export interface HealthCheck {
   agents?: Record<string, string>;
 }
 
+export interface ResearchBriefMetrics {
+  ticker?: string;
+  extracted_at?: string;
+  rsi?: number;
+  macd_signal?: string;
+  sentiment_score?: number;
+  price_change_pct?: number;
+  support_level?: number;
+  resistance_level?: number;
+}
+
 export interface ResearchBrief {
   id: number;
   ticker: string;
@@ -137,6 +149,8 @@ export interface ResearchBrief {
   agent_name: string;
   created_at: string;
   model_used?: string;
+  executive_summary?: string;
+  key_metrics?: ResearchBriefMetrics;
 }
 
 // SSE Event Types
@@ -198,3 +212,4 @@ export const AGENT_STATUS_COLORS: Record<string, string> = {
   error: 'bg-red-500',
   disabled: 'bg-slate-500',
 };
+```
