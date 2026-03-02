@@ -1,0 +1,69 @@
+Now update the `_EXISTING_TABLES_SQL` section in database.py to include `asset_type`:
+
+**Change lines 131-139 from:**
+```python
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker   TEXT PRIMARY KEY,
+        name     TEXT,
+        market   TEXT DEFAULT 'US',
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        active   INTEGER DEFAULT 1
+    )
+    """,
+```
+
+**To:**
+```python
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker      TEXT PRIMARY KEY,
+        name        TEXT,
+        market      TEXT DEFAULT 'US',
+        asset_type  TEXT DEFAULT 'stock',
+        added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        active      INTEGER DEFAULT 1
+    )
+    """,
+```
+
+**Also update PostgreSQL version (lines 201-209) from:**
+```python
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker   TEXT PRIMARY KEY,
+        name     TEXT,
+        market   TEXT DEFAULT 'US',
+        added_at TIMESTAMP DEFAULT NOW(),
+        active   INTEGER DEFAULT 1
+    )
+    """,
+```
+
+**To:**
+```python
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker      TEXT PRIMARY KEY,
+        name        TEXT,
+        market      TEXT DEFAULT 'US',
+        asset_type  TEXT DEFAULT 'stock',
+        added_at    TIMESTAMP DEFAULT NOW(),
+        active      INTEGER DEFAULT 1
+    )
+    """,
+```
+
+**Also add index for asset_type (after line 579 in `_INDEXES_SQL`):**
+```python
+    "CREATE INDEX IF NOT EXISTS idx_stocks_asset_type ON stocks (asset_type)",
+```
+
+**And the PostgreSQL version (after line 609 in `_INDEXES_SQL_POSTGRES`):**
+```python
+    "CREATE INDEX IF NOT EXISTS idx_stocks_asset_type ON stocks (asset_type)",
+```
