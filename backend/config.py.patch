@@ -1,0 +1,4 @@
+```python
+# Add to Config class:
+INSIDER_SYNC_ENABLED = os.getenv('INSIDER_SYNC_ENABLED', 'true').lower() == 'true'
+```
