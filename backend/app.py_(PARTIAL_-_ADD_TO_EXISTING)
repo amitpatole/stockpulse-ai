@@ -1,0 +1,5 @@
+# Add this import at the top
+from backend.api import rate_limits
+
+# Add this in the route registration section (likely in the main app setup)
+app.include_router(rate_limits.router)

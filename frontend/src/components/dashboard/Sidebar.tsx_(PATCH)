@@ -1,0 +1,6 @@
+# Add this navigation item to the existing sidebar
+{
+  label: 'API Rate Limits',
+  href: '/api-rate-limits',
+  icon: 'activity', // or appropriate icon
+}
