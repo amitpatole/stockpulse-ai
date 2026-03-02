@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Flask Application Factory
 Creates and configures the Flask app, registers blueprints, sets up SSE,
@@ -15,7 +16,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, send_from_directory
 
 from backend.config import Config
-from backend.database import init_all_tables
+from backend.database import init_all_tables, get_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -121,13 +122,13 @@ def create_app() -> Flask:
     @app.route('/api/health')
     def health():
         """Simple health-check endpoint for load balancers / monitoring."""
-        import sqlite3
         db_status = 'error'
         try:
-            conn = sqlite3.connect(Config.DB_PATH)
-            conn.execute('SELECT 1')
-            conn.close()
-            db_status = 'ok'
+            adapter = get_adapter()
+            with adapter.get_connection() as conn:
+                cursor = adapter.execute(conn, 'SELECT 1')
+                adapter.fetchone(cursor)
+                db_status = 'ok'
         except Exception:
             pass
 
@@ -136,6 +137,7 @@ def create_app() -> Flask:
             'version': '3.0.0',
             'timestamp': datetime.utcnow().isoformat() + 'Z',
             'database': db_status,
+            'database_type': Config.DB_TYPE,
         })
 
     # -- Legacy dashboard fallback -------------------------------------------
@@ -205,6 +207,10 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.settings':         'settings_bp',
         'backend.api.scheduler_routes': 'scheduler_bp',
         'backend.api.downloads':        'bp',
+        'backend.api.backups':          'backups_bp',
+        'backend.api.economic_calendar': 'economic_calendar_bp',
+        'backend.api.health':           'health_bp',
+        'backend.api.options_flows':    'options_flows_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():
@@ -271,3 +277,4 @@ if __name__ == '__main__':
         port=Config.FLASK_PORT,
         debug=Config.FLASK_DEBUG,
     )
+```

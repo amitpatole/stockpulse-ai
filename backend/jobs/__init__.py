@@ -1,3 +1,4 @@
+```python
 """
 Job definitions for TickerPulse AI scheduler.
 
@@ -12,6 +13,10 @@ from backend.jobs.daily_summary import run_daily_summary
 from backend.jobs.weekly_review import run_weekly_review
 from backend.jobs.regime_check import run_regime_check
 from backend.jobs.download_tracker import run_download_tracker
+from backend.jobs.automated_backup import run_automated_backup
+from backend.jobs.sync_economic_calendar import sync_economic_calendar
+from backend.jobs.metrics_collector import collect_metrics_job, cleanup_old_metrics
+from backend.jobs.options_flow_monitor import run_options_flow_monitor
 
 
 def register_all_jobs(scheduler_manager) -> None:
@@ -96,42 +101,78 @@ def register_all_jobs(scheduler_manager) -> None:
         minute=0,
     )
 
-    # ---- Regime Check: Every 2 hours during market hours ----
+    # ---- Regime Check: Every 30 min during market hours ----
     scheduler_manager.register_job(
         job_id='regime_check',
         func=run_regime_check,
         trigger='interval',
         name='Regime Check',
-        description=(
-            'Quick market health pulse check. Classifies current regime '
-            '(bull/bear/neutral/volatile). Runs every 2 hours; skips '
-            'when market is closed.'
-        ),
-        hours=2,
+        description='Monitors market regime (bull/bear/sideways) every 30 minutes.',
+        minutes=30,
     )
 
-    # ---- Download Tracker: 9:00 AM ET daily ----
+    # ---- Download Tracker: Every 10 min ----
     scheduler_manager.register_job(
         job_id='download_tracker',
         func=run_download_tracker,
-        trigger='cron',
+        trigger='interval',
         name='Download Tracker',
-        description=(
-            'Tracks GitHub repository download statistics (clones) via '
-            'GitHub API. Monitors unique and total downloads over time.'
-        ),
-        hour=9,
+        description='Cleanup of old downloads and status checks. Runs every 10 minutes.',
+        minutes=10,
+    )
+
+    # ---- Automated Backup: 2:00 AM ET, daily ----
+    scheduler_manager.register_job(
+        job_id='automated_backup',
+        func=run_automated_backup,
+        trigger='cron',
+        name='Automated Backup',
+        description='Daily automated database backup. Runs at 2:00 AM ET.',
+        hour=2,
         minute=0,
     )
 
+    # ---- Economic Calendar Sync: Every 6 hours ----
+    scheduler_manager.register_job(
+        job_id='sync_economic_calendar',
+        func=sync_economic_calendar,
+        trigger='interval',
+        name='Economic Calendar Sync',
+        description='Synchronize economic calendar events. Runs every 6 hours.',
+        hours=6,
+    )
 
-__all__ = [
-    'register_all_jobs',
-    'run_morning_briefing',
-    'run_technical_monitor',
-    'run_reddit_scan',
-    'run_daily_summary',
-    'run_weekly_review',
-    'run_regime_check',
-    'run_download_tracker',
-]
+    # ---- Metrics Collector: Every 5 min ----
+    scheduler_manager.register_job(
+        job_id='metrics_collector',
+        func=collect_metrics_job,
+        trigger='interval',
+        name='Metrics Collector',
+        description='Collect system metrics and health data. Runs every 5 minutes.',
+        minutes=5,
+    )
+
+    # ---- Metrics Cleanup: 3:00 AM ET, daily ----
+    scheduler_manager.register_job(
+        job_id='metrics_cleanup',
+        func=cleanup_old_metrics,
+        trigger='cron',
+        name='Metrics Cleanup',
+        description='Remove old metrics data. Runs daily at 3:00 AM ET.',
+        hour=3,
+        minute=0,
+    )
+
+    # ---- Options Flow Monitor: Every 60 sec during market hours ----
+    scheduler_manager.register_job(
+        job_id='options_flow_monitor',
+        func=run_options_flow_monitor,
+        trigger='interval',
+        name='Options Flow Monitor',
+        description=(
+            'Monitor options activity for unusual flows and volume spikes. '
+            'Runs every 60 seconds during market hours.'
+        ),
+        seconds=60,
+    )
+```
