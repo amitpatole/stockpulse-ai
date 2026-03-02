@@ -1,4 +1,3 @@
-```tsx
 'use client';
 
 import { useState } from 'react';
@@ -20,11 +19,11 @@ import { clsx } from 'clsx';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/agents', label: 'Agents', icon: Bot },
-  { href: '/research', label: 'Research', icon: FileSearch },
+  { href: '/agents', label: 'Agents', icon: Bot, tourAttr: 'sidebar-agents' },
+  { href: '/research', label: 'Research', icon: FileSearch, tourAttr: 'sidebar-research' },
   { href: '/economic-calendar', label: 'Economic Calendar', icon: TrendingUp },
-  { href: '/scheduler', label: 'Scheduler', icon: Calendar },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/scheduler', label: 'Scheduler', icon: Calendar, tourAttr: 'sidebar-scheduler' },
+  { href: '/settings', label: 'Settings', icon: Settings, tourAttr: 'sidebar-settings' },
 ];
 
 export default function Sidebar() {
@@ -58,7 +57,6 @@ export default function Sidebar() {
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
-            const tourAttr = item.label === 'Dashboard' ? 'dashboard' : `sidebar-${item.label.toLowerCase()}`;
             return (
               <Link
                 key={item.href}
@@ -70,7 +68,7 @@ export default function Sidebar() {
                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                 )}
                 title={collapsed ? item.label : undefined}
-                data-tour={tourAttr}
+                {...(item.tourAttr && { 'data-tour': item.tourAttr })}
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
@@ -103,4 +101,3 @@ export default function Sidebar() {
     </>
   );
 }
-```
