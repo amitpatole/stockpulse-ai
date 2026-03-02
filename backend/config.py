@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Central Configuration
 All settings are driven by environment variables with sensible defaults.
@@ -71,4 +70,3 @@ class Config:
 
     SCHEDULER_API_ENABLED = False  # Disabled -- we use our own scheduler_routes blueprint
     SCHEDULER_API_PREFIX = '/api/scheduler'
-```

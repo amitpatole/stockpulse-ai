@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Database Adapter Base Class
 Defines interface for database backends (SQLite, PostgreSQL, etc.).
@@ -69,4 +68,3 @@ class DatabaseAdapter(ABC):
     def initialize_tables(self, connection):
         """Create all required tables if they don't exist."""
         pass
-```
