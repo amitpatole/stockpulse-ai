@@ -1,4 +1,3 @@
-```sql
 -- Economic Calendar Tables
 -- Tracks economic events, releases, and their impact on monitored stocks
 
@@ -53,4 +52,3 @@ CREATE INDEX IF NOT EXISTS idx_economic_releases_status ON economic_releases(sta
 CREATE INDEX IF NOT EXISTS idx_event_stock_impacts_event_id ON event_stock_impacts(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_stock_impacts_ticker ON event_stock_impacts(ticker);
 CREATE INDEX IF NOT EXISTS idx_event_stock_impacts_sensitivity ON event_stock_impacts(sensitivity_score DESC);
-```
