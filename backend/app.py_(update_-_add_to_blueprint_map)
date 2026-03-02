@@ -1,0 +1,15 @@
+```python
+# In _register_blueprints function, add to blueprint_map:
+blueprint_map = {
+    'backend.api.stocks':           'stocks_bp',
+    'backend.api.news':             'news_bp',
+    'backend.api.analysis':         'analysis_bp',
+    'backend.api.agents':           'agents_bp',
+    'backend.api.research':         'research_bp',
+    'backend.api.chat':             'chat_bp',
+    'backend.api.settings':         'settings_bp',
+    'backend.api.scheduler_routes': 'scheduler_bp',
+    'backend.api.downloads':        'bp',
+    'backend.api.backups':          'backups_bp',  # ADD THIS LINE
+}
+```
