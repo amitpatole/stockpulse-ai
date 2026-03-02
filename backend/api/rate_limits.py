@@ -1,22 +1,22 @@
+```python
 """
-TickerPulse AI - Rate Limits API
+TickerPulse AI v3.0 - Rate Limits API
 Endpoints for retrieving API usage and rate limit metrics.
 """
 
 import logging
-from typing import Dict, List, Optional
-
-from fastapi import APIRouter, HTTPException, Query
+from datetime import datetime
+from flask import Blueprint, jsonify, request
 
 from backend.core.rate_limit_manager import RateLimitManager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix='/api/rate-limits', tags=['rate-limits'])
+bp = Blueprint('rate_limits', __name__, url_prefix='/api/rate-limits')
 
 
-@router.get('')
-async def get_all_rate_limits() -> Dict:
+@bp.route('', methods=['GET'])
+def get_all_rate_limits():
     """
     Get current usage and status for all API providers.
     
@@ -30,39 +30,37 @@ async def get_all_rate_limits() -> Dict:
     try:
         providers = RateLimitManager.get_all_providers()
         
-        return {
+        return jsonify({
             'data': providers,
             'meta': {
                 'total_providers': len(providers),
-                'timestamp': __import__('datetime').datetime.utcnow().isoformat() + 'Z'
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
             },
             'errors': []
-        }
+        }), 200
     except Exception as e:
         logger.error(f"Failed to get rate limits: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail='Failed to retrieve rate limits'
-        )
+        return jsonify({
+            'data': [],
+            'meta': {
+                'total_providers': 0,
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            },
+            'errors': ['Failed to retrieve rate limits']
+        }), 500
 
 
-@router.get('/{provider}/history')
-async def get_provider_history(
-    provider: str,
-    hours: int = Query(24, ge=1, le=720),
-    interval: str = Query('hourly', regex='^(hourly|daily)$')
-) -> Dict:
+@bp.route('/<provider>/history', methods=['GET'])
+def get_provider_history(provider):
     """
     Get historical usage data for a specific provider.
     
-    Parameters
-    ----------
-    provider : str
-        Provider name (CoinGecko, TradingView, SEC)
+    Query Parameters
+    ----------------
     hours : int
-        Number of hours to retrieve (1-720)
+        Number of hours to retrieve (1-720, default 24)
     interval : str
-        Aggregation interval (hourly or daily)
+        Aggregation interval (hourly or daily, default hourly)
     
     Returns
     -------
@@ -72,6 +70,25 @@ async def get_provider_history(
         - errors: List of errors
     """
     try:
+        hours = request.args.get('hours', 24, type=int)
+        interval = request.args.get('interval', 'hourly', type=str)
+        
+        # Validate hours
+        if not (1 <= hours <= 720):
+            return jsonify({
+                'data': [],
+                'meta': {},
+                'errors': ['Invalid hours: must be between 1 and 720']
+            }), 400
+        
+        # Validate interval
+        if interval not in ('hourly', 'daily'):
+            return jsonify({
+                'data': [],
+                'meta': {},
+                'errors': ['Invalid interval: must be hourly or daily']
+            }), 400
+        
         history = RateLimitManager.get_usage_history(
             provider_name=provider,
             hours=hours,
@@ -79,7 +96,7 @@ async def get_provider_history(
         )
         
         if not history:
-            return {
+            return jsonify({
                 'data': [],
                 'meta': {
                     'provider': provider,
@@ -89,12 +106,12 @@ async def get_provider_history(
                     'total_errors': 0
                 },
                 'errors': []
-            }
+            }), 200
         
         total_calls = sum(h['call_count'] for h in history)
         total_errors = sum(h['errors'] for h in history)
         
-        return {
+        return jsonify({
             'data': history,
             'meta': {
                 'provider': provider,
@@ -104,10 +121,12 @@ async def get_provider_history(
                 'total_errors': total_errors
             },
             'errors': []
-        }
+        }), 200
     except Exception as e:
         logger.error(f"Failed to get history for {provider}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail='Failed to retrieve usage history'
-        )
+        return jsonify({
+            'data': [],
+            'meta': {},
+            'errors': ['Failed to retrieve usage history']
+        }), 500
+```

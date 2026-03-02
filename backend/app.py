@@ -16,7 +16,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, send_from_directory
 
 from backend.config import Config
-from backend.database import init_all_tables, get_adapter
+from backend.database import init_all_tables, init_rate_limit_indexes, init_default_rate_limits, get_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,9 @@ def create_app() -> Flask:
     # -- Database ------------------------------------------------------------
     with app.app_context():
         init_all_tables()
-        logger.info("Database tables initialised")
+        init_rate_limit_indexes()
+        init_default_rate_limits()
+        logger.info("Database tables and indexes initialized")
 
     # -- Register API blueprints ---------------------------------------------
     _register_blueprints(app)
@@ -150,6 +152,9 @@ def _register_blueprints(app: Flask) -> None:
     from backend.api.economic_calendar import bp as economic_calendar_bp
     from backend.api.health import bp as health_bp
     from backend.api.backups import bp as backups_bp
+    from backend.api.options_flows import options_flows_bp
+    from backend.api.quotas import quotas_bp
+    from backend.api.rate_limits import bp as rate_limits_bp
 
     # Register each blueprint
     app.register_blueprint(stocks_bp, url_prefix='/api/stocks')
@@ -163,8 +168,11 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(ratings_bp, url_prefix='/api/ratings')
     app.register_blueprint(crypto_bp, url_prefix='/api/crypto')
     app.register_blueprint(economic_calendar_bp, url_prefix='/api/economic-calendar')
-    app.register_blueprint(health_bp, url_prefix='/api/health')
+    app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(backups_bp, url_prefix='/api/backups')
+    app.register_blueprint(options_flows_bp)
+    app.register_blueprint(quotas_bp)
+    app.register_blueprint(rate_limits_bp)
 
 
 if __name__ == '__main__':
