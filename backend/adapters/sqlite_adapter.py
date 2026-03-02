@@ -92,3 +92,4 @@ class SQLiteAdapter(DatabaseAdapter):
             cursor.execute(sql)
         connection.commit()
         logger.info("SQLite tables initialized")
+```

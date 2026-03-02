@@ -69,3 +69,4 @@ class DatabaseAdapter(ABC):
     def initialize_tables(self, connection):
         """Create all required tables if they don't exist."""
         pass
+```

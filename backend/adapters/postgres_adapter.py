@@ -121,3 +121,4 @@ class PostgresAdapter(DatabaseAdapter):
             cursor.execute(sql)
         connection.commit()
         logger.info("PostgreSQL tables initialized")
+```

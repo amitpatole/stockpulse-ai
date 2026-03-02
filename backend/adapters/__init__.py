@@ -50,3 +50,4 @@ def get_db_adapter(db_type=None):
 
 
 __all__ = ["get_db_adapter"]
+```

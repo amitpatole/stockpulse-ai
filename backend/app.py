@@ -99,182 +99,75 @@ def create_app() -> Flask:
                             f"data: {json.dumps(data)}\n\n"
                         )
                     except queue.Empty:
-                        # Send a heartbeat so proxies / browsers don't drop
+                        # Heartbeat every 15 seconds
                         yield "event: heartbeat\ndata: {}\n\n"
-            except GeneratorExit:
-                pass
             finally:
                 with sse_lock:
-                    if q in sse_clients:
-                        sse_clients.remove(q)
+                    sse_clients.remove(q)
 
-        return Response(
-            event_stream(),
-            mimetype='text/event-stream',
-            headers={
-                'Cache-Control': 'no-cache',
-                'X-Accel-Buffering': 'no',  # nginx compatibility
-                'Connection': 'keep-alive',
-            },
-        )
-
-    # -- Health check --------------------------------------------------------
-    @app.route('/api/health')
-    def health():
-        """Simple health-check endpoint for load balancers / monitoring."""
-        db_status = 'error'
-        try:
-            adapter = get_adapter()
-            with adapter.get_connection() as conn:
-                cursor = adapter.execute(conn, 'SELECT 1')
-                adapter.fetchone(cursor)
-                db_status = 'ok'
-        except Exception:
-            pass
-
-        return jsonify({
-            'status': 'ok',
-            'version': '3.0.0',
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'database': db_status,
-            'database_type': Config.DB_TYPE,
-        })
-
-    # -- Legacy dashboard fallback -------------------------------------------
-    @app.route('/legacy')
-    def legacy_dashboard():
-        """Serve the original v1/v2 dashboard.html as a fallback."""
-        return send_from_directory(
-            str(Config.BASE_DIR / 'templates'),
-            'dashboard.html',
-        )
-
-    # -- APScheduler ---------------------------------------------------------
-    _init_scheduler(app)
+        return Response(event_stream(), mimetype='text/event-stream')
 
     return app
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
 def _setup_logging(app: Flask) -> None:
-    """Configure application-wide logging with rotating file handler."""
-    log_dir = Path(Config.LOG_DIR)
-    log_dir.mkdir(parents=True, exist_ok=True)
+    """Configure logging for the Flask app."""
+    log_dir = Config.BASE_DIR / 'logs'
+    log_dir.mkdir(exist_ok=True)
 
-    log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
-
-    # Rotating file handler
-    file_handler = RotatingFileHandler(
-        str(log_dir / 'tickerpulse.log'),
-        maxBytes=Config.LOG_MAX_BYTES,
-        backupCount=Config.LOG_BACKUP_COUNT,
+    handler = RotatingFileHandler(
+        log_dir / 'app.log',
+        maxBytes=10_000_000,  # 10 MB
+        backupCount=5,
     )
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(logging.Formatter(Config.LOG_FORMAT))
+    handler.setFormatter(
+        logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    )
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(log_level)
-    console_handler.setFormatter(logging.Formatter(Config.LOG_FORMAT))
+    app.logger.addHandler(handler)
+    app.logger.setLevel(logging.INFO)
 
-    # Apply to root logger so all modules pick it up
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-
-    app.logger.setLevel(log_level)
+    # Reduce noisy libraries
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('apscheduler').setLevel(logging.WARNING)
 
 
 def _register_blueprints(app: Flask) -> None:
-    """Import and register API blueprints.
+    """Register all API blueprints."""
+    # Import blueprints
+    from backend.api.stocks import bp as stocks_bp
+    from backend.api.news import bp as news_bp
+    from backend.api.alerts import bp as alerts_bp
+    from backend.api.settings import bp as settings_bp
+    from backend.api.providers import bp as providers_bp
+    from backend.api.agents import bp as agents_bp
+    from backend.api.cost import bp as cost_bp
+    from backend.api.research import bp as research_bp
+    from backend.api.ratings import bp as ratings_bp
+    from backend.api.crypto import bp as crypto_bp
+    from backend.api.economic_calendar import bp as economic_calendar_bp
+    from backend.api.health import bp as health_bp
+    from backend.api.backups import bp as backups_bp
 
-    Each blueprint lives in ``backend/api/<module>.py`` and exposes a
-    Flask ``Blueprint`` instance named ``<name>_bp``.  Missing modules
-    are logged as warnings so the app can still start during incremental
-    development.
-    """
-    blueprint_map = {
-        'backend.api.stocks':           'stocks_bp',
-        'backend.api.news':             'news_bp',
-        'backend.api.analysis':         'analysis_bp',
-        'backend.api.agents':           'agents_bp',
-        'backend.api.research':         'research_bp',
-        'backend.api.chat':             'chat_bp',
-        'backend.api.settings':         'settings_bp',
-        'backend.api.scheduler_routes': 'scheduler_bp',
-        'backend.api.downloads':        'bp',
-        'backend.api.backups':          'backups_bp',
-        'backend.api.economic_calendar': 'economic_calendar_bp',
-        'backend.api.health':           'health_bp',
-        'backend.api.options_flows':    'options_flows_bp',
-    }
+    # Register each blueprint
+    app.register_blueprint(stocks_bp, url_prefix='/api/stocks')
+    app.register_blueprint(news_bp, url_prefix='/api/news')
+    app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
+    app.register_blueprint(settings_bp, url_prefix='/api/settings')
+    app.register_blueprint(providers_bp, url_prefix='/api/providers')
+    app.register_blueprint(agents_bp, url_prefix='/api/agents')
+    app.register_blueprint(cost_bp, url_prefix='/api/cost')
+    app.register_blueprint(research_bp, url_prefix='/api/research')
+    app.register_blueprint(ratings_bp, url_prefix='/api/ratings')
+    app.register_blueprint(crypto_bp, url_prefix='/api/crypto')
+    app.register_blueprint(economic_calendar_bp, url_prefix='/api/economic-calendar')
+    app.register_blueprint(health_bp, url_prefix='/api/health')
+    app.register_blueprint(backups_bp, url_prefix='/api/backups')
 
-    for module_path, bp_name in blueprint_map.items():
-        try:
-            module = __import__(module_path, fromlist=[bp_name])
-            bp = getattr(module, bp_name)
-            app.register_blueprint(bp)
-            logger.info("Registered blueprint: %s from %s", bp_name, module_path)
-        except (ImportError, AttributeError) as exc:
-            logger.warning(
-                "Could not register blueprint %s from %s -- %s. "
-                "The module may not exist yet; skipping.",
-                bp_name, module_path, exc,
-            )
-
-
-def _init_scheduler(app: Flask) -> None:
-    """Initialise APScheduler and register all scheduled jobs."""
-    try:
-        from flask_apscheduler import APScheduler
-
-        app.config['SCHEDULER_API_ENABLED'] = Config.SCHEDULER_API_ENABLED
-        app.config['SCHEDULER_API_PREFIX'] = Config.SCHEDULER_API_PREFIX
-
-        scheduler = APScheduler()
-        scheduler.init_app(app)
-
-        # Attach to app so backend.scheduler can access it later
-        app.scheduler = scheduler
-        logger.info("APScheduler initialised")
-    except ImportError:
-        logger.warning(
-            "flask-apscheduler is not installed -- scheduler disabled. "
-            "Install with: pip install flask-apscheduler"
-        )
-
-    # Register all jobs with SchedulerManager so they appear in the UI,
-    # regardless of whether APScheduler is running.
-    try:
-        from backend.scheduler import scheduler_manager
-        from backend.jobs import register_all_jobs
-
-        register_all_jobs(scheduler_manager)
-
-        # Initialize with the app (connects to APScheduler if available)
-        if hasattr(app, 'scheduler'):
-            scheduler_manager.init_app(app)
-            scheduler_manager.start_all_jobs()
-            logger.info("SchedulerManager connected to APScheduler, jobs started")
-
-        logger.info("Registered %d scheduled jobs", len(scheduler_manager._job_registry))
-    except Exception as exc:
-        logger.warning("Could not register scheduled jobs: %s", exc)
-
-
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    application = create_app()
-    application.run(
-        host='0.0.0.0',
-        port=Config.FLASK_PORT,
-        debug=Config.FLASK_DEBUG,
-    )
+    app = create_app()
+    app.run(host='0.0.0.0', port=Config.FLASK_PORT, debug=Config.FLASK_DEBUG)
 ```
