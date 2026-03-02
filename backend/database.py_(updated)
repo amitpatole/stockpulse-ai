@@ -1,0 +1,562 @@
+"""
+TickerPulse AI v3.0 - Database Connection Manager
+Thread-safe SQLite helper with context-manager support and table initialisation.
+"""
+
+import sqlite3
+import logging
+from contextlib import contextmanager
+
+from backend.config import Config
+
+logger = logging.getLogger(__name__)
+
+
+# Global adapter instance
+_adapter = None
+
+
+def get_adapter():
+    """Get or create the database adapter instance."""
+    global _adapter
+    if _adapter is None:
+        from backend.adapters import get_db_adapter
+        _adapter = get_db_adapter()
+    return _adapter
+
+
+# ---------------------------------------------------------------------------
+# Connection helpers
+# ---------------------------------------------------------------------------
+
+def get_db_connection(db_path: str | None = None) -> sqlite3.Connection:
+    """Return a new SQLite connection with Row factory enabled.
+
+    Parameters
+    ----------
+    db_path : str, optional
+        Override the default database path from Config.
+
+    Notes
+    -----
+    * ``check_same_thread=False`` is required so Flask (and APScheduler)
+      threads can share the connection safely.  SQLite itself serialises
+      writes, so this is safe for the read-heavy workload of TickerPulse.
+    """
+    path = db_path or Config.DB_PATH
+    conn = sqlite3.connect(path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')  # better concurrent-read perf
+    conn.execute('PRAGMA foreign_keys=ON')
+    return conn
+
+
+@contextmanager
+def db_session(db_path: str | None = None):
+    """Context manager that yields a connection and auto-closes it.
+
+    Usage::
+
+        with db_session() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT ...')
+            conn.commit()
+
+    Note: For multi-database support, this function delegates to the
+    configured adapter (SQLite or PostgreSQL). The db_path parameter
+    is only used for SQLite connections.
+    """
+    # Use adapter-based connection if DB_TYPE is postgres
+    if Config.DB_TYPE.lower() == "postgres":
+        adapter = get_adapter()
+        with adapter.get_connection() as conn:
+            yield conn
+    else:
+        # SQLite path (backward compatible)
+        conn = get_db_connection(db_path)
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Table definitions
+# ---------------------------------------------------------------------------
+
+# Existing tables (carried over from stock_monitor.py / settings_manager.py)
+_EXISTING_TABLES_SQL = [
+    # --- news ---
+    """
+    CREATE TABLE IF NOT EXISTS news (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        description     TEXT,
+        url             TEXT UNIQUE,
+        source          TEXT,
+        published_date  TEXT,
+        sentiment_score REAL,
+        sentiment_label TEXT,
+        engagement_score REAL DEFAULT 0,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- alerts ---
+    """
+    CREATE TABLE IF NOT EXISTS alerts (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker      TEXT NOT NULL,
+        news_id     INTEGER,
+        alert_type  TEXT,
+        message     TEXT,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (news_id) REFERENCES news (id)
+    )
+    """,
+    # --- monitor_status ---
+    """
+    CREATE TABLE IF NOT EXISTS monitor_status (
+        id          INTEGER PRIMARY KEY,
+        last_check  TIMESTAMP,
+        status      TEXT,
+        message     TEXT
+    )
+    """,
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker   TEXT PRIMARY KEY,
+        name     TEXT,
+        market   TEXT DEFAULT 'US',
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        active   INTEGER DEFAULT 1
+    )
+    """,
+    # --- settings ---
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- ai_providers ---
+    """
+    CREATE TABLE IF NOT EXISTS ai_providers (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider_name TEXT NOT NULL,
+        api_key       TEXT NOT NULL,
+        model         TEXT,
+        is_active     INTEGER DEFAULT 0,
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+]
+
+# PostgreSQL versions of existing tables
+_EXISTING_TABLES_SQL_POSTGRES = [
+    # --- news ---
+    """
+    CREATE TABLE IF NOT EXISTS news (
+        id              SERIAL PRIMARY KEY,
+        ticker          TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        description     TEXT,
+        url             TEXT UNIQUE,
+        source          TEXT,
+        published_date  TEXT,
+        sentiment_score REAL,
+        sentiment_label TEXT,
+        engagement_score REAL DEFAULT 0,
+        created_at      TIMESTAMP DEFAULT NOW()
+    )
+    """,
+    # --- alerts ---
+    """
+    CREATE TABLE IF NOT EXISTS alerts (
+        id          SERIAL PRIMARY KEY,
+        ticker      TEXT NOT NULL,
+        news_id     INTEGER,
+        alert_type  TEXT,
+        message     TEXT,
+        created_at  TIMESTAMP DEFAULT NOW(),
+        FOREIGN KEY (news_id) REFERENCES news (id)
+    )
+    """,
+    # --- monitor_status ---
+    """
+    CREATE TABLE IF NOT EXISTS monitor_status (
+        id          INTEGER PRIMARY KEY,
+        last_check  TIMESTAMP,
+        status      TEXT,
+        message     TEXT
+    )
+    """,
+    # --- stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS stocks (
+        ticker   TEXT PRIMARY KEY,
+        name     TEXT,
+        market   TEXT DEFAULT 'US',
+        added_at TIMESTAMP DEFAULT NOW(),
+        active   INTEGER DEFAULT 1
+    )
+    """,
+    # --- settings ---
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+    # --- ai_providers ---
+    """
+    CREATE TABLE IF NOT EXISTS ai_providers (
+        id            SERIAL PRIMARY KEY,
+        provider_name TEXT NOT NULL,
+        api_key       TEXT NOT NULL,
+        model         TEXT,
+        is_active     INTEGER DEFAULT 0,
+        created_at    TIMESTAMP DEFAULT NOW(),
+        updated_at    TIMESTAMP DEFAULT NOW()
+    )
+    """,
+]
+
+# New v3.0 tables
+_NEW_TABLES_SQL = [
+    # --- agent_runs: tracks every AI agent execution ---
+    """
+    CREATE TABLE IF NOT EXISTS agent_runs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_name      TEXT NOT NULL,
+        framework       TEXT NOT NULL DEFAULT 'crewai',  -- 'crewai' | 'openclaw'
+        status          TEXT NOT NULL DEFAULT 'pending',  -- pending | running | completed | failed
+        input_data      TEXT,       -- JSON
+        output_data     TEXT,       -- JSON
+        tokens_input    INTEGER DEFAULT 0,
+        tokens_output   INTEGER DEFAULT 0,
+        estimated_cost  REAL    DEFAULT 0.0,
+        duration_ms     INTEGER DEFAULT 0,
+        error           TEXT,
+        metadata        TEXT,       -- JSON
+        started_at      TIMESTAMP,
+        completed_at    TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- job_history: scheduler / cron job audit log ---
+    """
+    CREATE TABLE IF NOT EXISTS job_history (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id          TEXT NOT NULL,
+        job_name        TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'pending',  -- pending | running | completed | failed
+        result_summary  TEXT,       -- short human-readable outcome
+        agent_name      TEXT,       -- NULL when job does not involve an agent
+        duration_ms     INTEGER DEFAULT 0,
+        cost            REAL    DEFAULT 0.0,
+        executed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- data_providers_config: market-data provider registry ---
+    """
+    CREATE TABLE IF NOT EXISTS data_providers_config (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider_name         TEXT NOT NULL UNIQUE,
+        api_key               TEXT DEFAULT '',
+        is_active             INTEGER DEFAULT 1,
+        is_primary            INTEGER DEFAULT 0,
+        priority              INTEGER DEFAULT 100,  -- lower = higher priority (fallback order)
+        rate_limit_remaining  INTEGER DEFAULT -1,    -- -1 = unknown / unlimited
+        last_used             TIMESTAMP,
+        created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- research_briefs: AI-generated research reports ---
+    """
+    CREATE TABLE IF NOT EXISTS research_briefs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        content         TEXT NOT NULL,
+        agent_name      TEXT NOT NULL DEFAULT 'researcher',
+        model_used      TEXT,
+        tokens_used     INTEGER DEFAULT 0,
+        estimated_cost  REAL    DEFAULT 0.0,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- ai_ratings: cached AI ratings for stocks ---
+    """
+    CREATE TABLE IF NOT EXISTS ai_ratings (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL UNIQUE,
+        rating          TEXT NOT NULL DEFAULT 'HOLD',
+        score           REAL NOT NULL DEFAULT 0,
+        confidence      REAL NOT NULL DEFAULT 0,
+        current_price   REAL,
+        price_change    REAL,
+        price_change_pct REAL,
+        rsi             REAL,
+        sentiment_score REAL,
+        sentiment_label TEXT,
+        technical_score REAL,
+        fundamental_score REAL,
+        summary         TEXT,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- cost_tracking: per-call cost ledger ---
+    """
+    CREATE TABLE IF NOT EXISTS cost_tracking (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        date            TEXT NOT NULL,       -- YYYY-MM-DD
+        agent_name      TEXT,
+        provider_name   TEXT,
+        model           TEXT,
+        tokens_input    INTEGER DEFAULT 0,
+        tokens_output   INTEGER DEFAULT 0,
+        estimated_cost  REAL    DEFAULT 0.0,
+        job_name        TEXT,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- download_stats: aggregate repository download statistics ---
+    """
+    CREATE TABLE IF NOT EXISTS download_stats (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        repo_owner      TEXT NOT NULL,
+        repo_name       TEXT NOT NULL,
+        total_clones    INTEGER DEFAULT 0,
+        unique_clones   INTEGER DEFAULT 0,
+        period_start    TIMESTAMP,
+        period_end      TIMESTAMP,
+        recorded_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- download_daily: daily breakdown of repository downloads ---
+    """
+    CREATE TABLE IF NOT EXISTS download_daily (
+        repo_owner      TEXT NOT NULL,
+        repo_name       TEXT NOT NULL,
+        date            TEXT NOT NULL,       -- YYYY-MM-DD
+        clones          INTEGER DEFAULT 0,
+        unique_clones   INTEGER DEFAULT 0,
+        PRIMARY KEY (repo_owner, repo_name, date)
+    )
+    """,
+    # --- economic_events: master economic event definitions ---
+    """
+    CREATE TABLE IF NOT EXISTS economic_events (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_name      TEXT NOT NULL,
+        country         TEXT NOT NULL,
+        importance      TEXT NOT NULL,       -- 'low' | 'medium' | 'high'
+        scheduled_date  TEXT NOT NULL,       -- YYYY-MM-DD HH:MM:SS
+        source          TEXT DEFAULT 'tradingeconomics',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # --- economic_releases: individual releases with forecast/actual values ---
+    """
+    CREATE TABLE IF NOT EXISTS economic_releases (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id        INTEGER NOT NULL,
+        forecast_value  REAL,
+        actual_value    REAL,
+        previous_value  REAL,
+        surprise_pct    REAL,                -- calculated: (actual - forecast) / forecast * 100
+        status          TEXT DEFAULT 'scheduled',  -- 'scheduled' | 'released'
+        release_date    TEXT,                -- YYYY-MM-DD HH:MM:SS
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (event_id) REFERENCES economic_events (id) ON DELETE CASCADE
+    )
+    """,
+    # --- event_stock_impacts: maps events to monitored tickers with sensitivity scores ---
+    """
+    CREATE TABLE IF NOT EXISTS event_stock_impacts (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id        INTEGER NOT NULL,
+        ticker          TEXT NOT NULL,
+        sensitivity_score REAL NOT NULL,     -- 0.0 to 10.0
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(event_id, ticker),
+        FOREIGN KEY (event_id) REFERENCES economic_events (id) ON DELETE CASCADE,
+        FOREIGN KEY (ticker) REFERENCES stocks (ticker) ON DELETE CASCADE
+    )
+    """,
+    # --- options_flows: tracks options activity anomalies ---
+    """
+    CREATE TABLE IF NOT EXISTS options_flows (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL,
+        flow_type       TEXT NOT NULL,  -- 'call_spike' | 'put_spike' | 'unusual_volume'
+        option_type     TEXT NOT NULL,  -- 'call' | 'put'
+        strike_price    REAL,
+        expiry_date     TEXT,  -- YYYY-MM-DD
+        volume          INTEGER DEFAULT 0,
+        open_interest   INTEGER DEFAULT 0,
+        unusual_ratio   REAL DEFAULT 1.0,  -- current_volume / 20-day_avg
+        price_action    TEXT DEFAULT 'neutral',  -- 'bullish' | 'bearish' | 'neutral'
+        detected_at     TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(ticker) REFERENCES stocks(ticker) ON DELETE CASCADE
+    )
+    """,
+    # --- options_alerts: user-facing alerts with dismissal state ---
+    """
+    CREATE TABLE IF NOT EXISTS options_alerts (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT NOT NULL,
+        flow_id         INTEGER,
+        alert_type      TEXT NOT NULL,  -- 'volume_spike' | 'unusual_ratio' | 'expiry_approaching'
+        severity        TEXT DEFAULT 'medium',  -- 'low' | 'medium' | 'high'
+        message         TEXT NOT NULL,
+        dismissed       INTEGER DEFAULT 0,  -- 0 = unread, 1 = dismissed
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(ticker) REFERENCES stocks(ticker) ON DELETE CASCADE,
+        FOREIGN KEY(flow_id) REFERENCES options_flows(id) ON DELETE CASCADE
+    )
+    """,
+    # --- options_flow_config: per-stock tracking configuration ---
+    """
+    CREATE TABLE IF NOT EXISTS options_flow_config (
+        ticker                  TEXT PRIMARY KEY,
+        enabled                 INTEGER DEFAULT 1,
+        volume_spike_threshold  REAL DEFAULT 2.0,  -- Multiplier of 20-day average
+        updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(ticker) REFERENCES stocks(ticker) ON DELETE CASCADE
+    )
+    """,
+]
+
+# Indexes for new tables
+_NEW_INDEXES_SQL = [
+    "CREATE INDEX IF NOT EXISTS idx_options_flows_ticker ON options_flows(ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_options_flows_detected ON options_flows(detected_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_options_flows_unusual_ratio ON options_flows(unusual_ratio DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_options_alerts_ticker ON options_alerts(ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_options_alerts_severity ON options_alerts(severity)",
+    "CREATE INDEX IF NOT EXISTS idx_options_alerts_dismissed ON options_alerts(dismissed)",
+]
+
+# PostgreSQL versions of new v3.0 tables (continued from earlier)
+_NEW_TABLES_SQL_POSTGRES = [
+    # ... (existing postgres tables)
+    # --- options_flows: tracks options activity anomalies ---
+    """
+    CREATE TABLE IF NOT EXISTS options_flows (
+        id              SERIAL PRIMARY KEY,
+        ticker          TEXT NOT NULL,
+        flow_type       TEXT NOT NULL,
+        option_type     TEXT NOT NULL,
+        strike_price    REAL,
+        expiry_date     TEXT,
+        volume          INTEGER DEFAULT 0,
+        open_interest   INTEGER DEFAULT 0,
+        unusual_ratio   REAL DEFAULT 1.0,
+        price_action    TEXT DEFAULT 'neutral',
+        detected_at     TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT NOW(),
+        FOREIGN KEY(ticker) REFERENCES stocks(ticker) ON DELETE CASCADE
+    )
+    """,
+    # --- options_alerts ---
+    """
+    CREATE TABLE IF NOT EXISTS options_alerts (
+        id              SERIAL PRIMARY KEY,
+        ticker          TEXT NOT NULL,
+        flow_id         INTEGER,
+        alert_type      TEXT NOT NULL,
+        severity        TEXT DEFAULT 'medium',
+        message         TEXT NOT NULL,
+        dismissed       INTEGER DEFAULT 0,
+        created_at      TIMESTAMP DEFAULT NOW(),
+        FOREIGN KEY(ticker) REFERENCES stocks(ticker) ON DELETE CASCADE,
+        FOREIGN KEY(flow_id) REFERENCES options_flows(id) ON DELETE CASCADE
+    )
+    """,
+    # --- options_flow_config ---
+    """
+    CREATE TABLE IF NOT EXISTS options_flow_config (
+        ticker                  TEXT PRIMARY KEY,
+        enabled                 INTEGER DEFAULT 1,
+        volume_spike_threshold  REAL DEFAULT 2.0,
+        updated_at              TIMESTAMP DEFAULT NOW(),
+        FOREIGN KEY(ticker) REFERENCES stocks(ticker) ON DELETE CASCADE
+    )
+    """,
+]
+
+
+def init_all_tables():
+    """Initialize all database tables (both existing and new v3.0 tables)."""
+    if Config.DB_TYPE.lower() == "postgres":
+        _init_postgres_tables()
+    else:
+        _init_sqlite_tables()
+
+
+def _init_sqlite_tables():
+    """Initialize SQLite tables."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Existing tables
+        for sql in _EXISTING_TABLES_SQL:
+            cursor.execute(sql)
+
+        # New v3.0 tables
+        for sql in _NEW_TABLES_SQL:
+            cursor.execute(sql)
+
+        # Indexes
+        for sql in _NEW_INDEXES_SQL:
+            cursor.execute(sql)
+
+        conn.commit()
+        logger.info("All SQLite tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing tables: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _init_postgres_tables():
+    """Initialize PostgreSQL tables."""
+    adapter = get_adapter()
+
+    try:
+        with adapter.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Existing tables
+            for sql in _EXISTING_TABLES_SQL_POSTGRES:
+                cursor.execute(sql)
+
+            # New v3.0 tables
+            for sql in _NEW_TABLES_SQL_POSTGRES:
+                cursor.execute(sql)
+
+            # Indexes
+            for sql in _NEW_INDEXES_SQL:
+                cursor.execute(sql)
+
+            conn.commit()
+            logger.info("All PostgreSQL tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing PostgreSQL tables: {e}")
+        raise
