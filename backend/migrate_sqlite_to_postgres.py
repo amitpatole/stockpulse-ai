@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - SQLite to PostgreSQL Migration Script
 
@@ -331,4 +330,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
