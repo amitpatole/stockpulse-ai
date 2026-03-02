@@ -6,23 +6,30 @@ Provides factory function for multi-database support (SQLite, PostgreSQL).
 
 import logging
 import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def get_db_adapter(db_type=None):
-    """
-    Factory function to create appropriate database adapter.
+def get_db_adapter(db_type: str | None = None) -> Any:
+    """Factory function to create appropriate database adapter.
 
     Parameters
     ----------
     db_type : str, optional
         Database type ('sqlite' or 'postgres'). Defaults to Config.DB_TYPE.
-
+        
     Returns
     -------
-    DatabaseAdapter
+    Any
         Instance of SQLiteAdapter or PostgresAdapter
+        
+    Raises
+    ------
+    ValueError
+        If db_type is not 'sqlite' or 'postgres'
+    ImportError
+        If PostgreSQL adapter dependencies are missing
     """
     from backend.config import Config
 
