@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Flask Application Factory
 Creates and configures the Flask app, registers blueprints, sets up SSE,
@@ -178,4 +177,3 @@ def _register_blueprints(app: Flask) -> None:
 if __name__ == '__main__':
     app = create_app()
     app.run(host='0.0.0.0', port=Config.FLASK_PORT, debug=Config.FLASK_DEBUG)
-```
