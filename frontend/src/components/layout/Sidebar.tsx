@@ -1,3 +1,4 @@
+```tsx
 'use client';
 
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import {
   ChevronRight,
   Activity,
   Zap,
+  TrendingUp,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -20,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/agents', label: 'Agents', icon: Bot },
   { href: '/research', label: 'Research', icon: FileSearch },
+  { href: '/economic-calendar', label: 'Economic Calendar', icon: TrendingUp },
   { href: '/scheduler', label: 'Scheduler', icon: Calendar },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -55,6 +58,7 @@ export default function Sidebar() {
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
+            const tourAttr = item.label === 'Dashboard' ? 'dashboard' : `sidebar-${item.label.toLowerCase()}`;
             return (
               <Link
                 key={item.href}
@@ -66,6 +70,7 @@ export default function Sidebar() {
                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                 )}
                 title={collapsed ? item.label : undefined}
+                data-tour={tourAttr}
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
@@ -98,3 +103,4 @@ export default function Sidebar() {
     </>
   );
 }
+```
