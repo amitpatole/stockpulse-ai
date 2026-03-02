@@ -1,4 +1,3 @@
-```tsx
 import React from 'react';
 import { EconomicEvent } from '@/hooks/useEconomicEvents';
 import { StockImpactBadge } from './StockImpactBadge';
@@ -54,4 +53,3 @@ export function EconomicEventCard({ event }: EconomicEventCardProps) {
     </tr>
   );
 }
-```

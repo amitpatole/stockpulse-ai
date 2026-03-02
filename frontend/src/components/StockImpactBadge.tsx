@@ -1,4 +1,3 @@
-```tsx
 import React from 'react';
 
 export interface StockImpactBadgeProps {
@@ -28,4 +27,3 @@ export function StockImpactBadge({ ticker, sensitivity_score }: StockImpactBadge
     </span>
   );
 }
-```

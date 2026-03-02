@@ -1,4 +1,3 @@
-```tsx
 import React from 'react';
 import { EconomicEventCard } from './EconomicEventCard';
 import { EconomicEvent, PaginationMeta } from '@/hooks/useEconomicEvents';
@@ -171,4 +170,3 @@ export function EconomicCalendarTable({
     </div>
   );
 }
-```
