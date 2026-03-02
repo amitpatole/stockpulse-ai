@@ -1,3 +1,4 @@
+```
 # TickerPulse AI v3.0 - Backend Dependencies
 # ==========================================
 
@@ -35,6 +36,14 @@ apscheduler>=3.10.0
 pytz>=2024.1
 
 # ==========================================
+# Database Adapters
+# ==========================================
+# SQLite: built-in to Python
+# PostgreSQL support (optional - install only if using PostgreSQL)
+psycopg[binary]>=3.1.0              # PostgreSQL client library
+sqlalchemy>=2.0.0                    # ORM for both SQLite and PostgreSQL
+
+# ==========================================
 # OPTIONAL: Premium Data Providers
 # Install only what you use
 # ==========================================
@@ -43,3 +52,4 @@ pytz>=2024.1
 # pip install finnhub-python>=2.4.0         # Finnhub
 # pip install twelvedata>=1.2.0             # Twelve Data
 # pip install alpaca-py>=0.28.0             # Alpaca
+```
