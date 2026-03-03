@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs.
@@ -19,25 +18,25 @@ research_bp = Blueprint('research', __name__, url_prefix='/api')
 
 
 @research_bp.route('/research/briefs', methods=['GET'])
-def list_briefs() -> tuple[Dict[str, Any], int]:
+def list_briefs():
     """List paginated research briefs, optionally filtered by ticker.
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
-        limit (int, optional): Max briefs to return. Default: 50, Max: 200.
+        limit (int, optional): Max briefs to return. Default: 25, Max: 100.
         offset (int, optional): Number of records to skip. Default: 0.
 
     Returns:
         JSON object with 'data' array of briefs and 'meta' containing pagination info.
     """
     ticker = request.args.get('ticker', None)
-    
+
     # Validate and parse pagination parameters
     try:
-        limit = min(int(request.args.get('limit', 50)), 200)
+        limit = min(int(request.args.get('limit', 25)), 100)
         offset = max(int(request.args.get('offset', 0)), 0)
     except (ValueError, TypeError):
-        limit = 50
+        limit = 25
         offset = 0
 
     try:
@@ -66,7 +65,7 @@ def list_briefs() -> tuple[Dict[str, Any], int]:
                 'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
                 (limit, offset)
             ).fetchall()
-        
+
         conn.close()
 
         briefs = [{
@@ -98,7 +97,7 @@ def list_briefs() -> tuple[Dict[str, Any], int]:
 
 
 @research_bp.route('/research/briefs', methods=['POST'])
-def generate_brief() -> Dict[str, Any]:
+def generate_brief():
     """Trigger generation of a new research brief.
 
     Request Body (JSON, optional):
@@ -276,4 +275,3 @@ Reddit and social media analysis indicates:
             'model_used': 'claude-sonnet-4-5 (stub)',
             'created_at': now,
         }
-```

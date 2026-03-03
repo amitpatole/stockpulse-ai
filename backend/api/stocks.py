@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, and search stocks.
@@ -21,23 +20,26 @@ def get_stocks() -> tuple[Dict[str, Any], int]:
 
     Query Parameters:
         market (str, optional): Filter by market (e.g. 'US', 'India'). 'All' returns everything.
-        limit (int, optional): Number of records to return per page. Default: 50, Max: 200.
+        limit (int, optional): Number of records to return per page. Default: 20, Max: 100.
         offset (int, optional): Number of records to skip. Default: 0.
 
     Returns:
         JSON object with 'data' array of stocks and 'meta' containing pagination info.
     """
     market = request.args.get('market', None)
-    
+
     # Validate and parse pagination parameters
     try:
-        limit = min(int(request.args.get('limit', 50)), 200)
+        limit = min(int(request.args.get('limit', 20)), 100)
         offset = max(int(request.args.get('offset', 0)), 0)
     except (ValueError, TypeError):
-        limit = 50
+        limit = 20
         offset = 0
 
     stocks = get_all_stocks()
+
+    # Filter by active stocks only
+    stocks = [s for s in stocks if s.get('active', 1) == 1]
 
     # Filter by market if specified
     if market and market != 'All':
@@ -136,4 +138,3 @@ def search_stocks() -> tuple[List[Dict[str, str]], int]:
 
     results = search_stock_ticker(query)
     return jsonify(results)
-```
