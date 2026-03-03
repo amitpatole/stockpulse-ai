@@ -1,6 +1,7 @@
+```typescript
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Key,
   CheckCircle,
@@ -16,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import { useApi } from '@/hooks/useApi';
-import { getAIProviders, getHealth, saveAIProvider, setAgentFramework, saveBudgetSettings } from '@/lib/api';
+import { getAIProviders, getHealth, saveAIProvider, testAIProvider, setAgentFramework, saveBudgetSettings, getBudgetSettings, getAgentFramework } from '@/lib/api';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import type { AIProvider, HealthCheck } from '@/lib/types';
 
@@ -50,21 +51,23 @@ function ProviderCard({ provider, onSave, onSuccess, onError }: ProviderCardProp
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
 
   const colorClass = PROVIDER_COLORS[provider.name] || 'border-slate-500/30 bg-slate-500/5';
+  const providerId = `provider-${provider.name}`;
 
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`/api/settings/ai-provider/${provider.name}/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json();
+      const data = await testAIProvider(provider.name);
       setTestResult(data.success ? 'success' : 'error');
-    } catch {
+      if (!data.success) {
+        onError(`Failed to test ${provider.display_name}: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      onError(`Failed to test ${provider.display_name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setTestResult('error');
+    } finally {
+      setTesting(false);
     }
-    setTesting(false);
   };
 
   const handleSave = async () => {
@@ -79,29 +82,29 @@ function ProviderCard({ provider, onSave, onSuccess, onError }: ProviderCardProp
       onSuccess(`${provider.display_name} configuration saved`);
       setApiKey('');
     } catch (err) {
-      onError(`Failed to save ${provider.display_name} configuration`);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      onError(`Failed to save ${provider.display_name} configuration: ${message}`);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className={clsx('rounded-xl border p-5', colorClass)}>
+    <article className={clsx('rounded-xl border p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500', colorClass)}>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700/50">
-            <Brain className="h-5 w-5 text-slate-300" />
+            <Brain className="h-5 w-5 text-slate-300" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">
+            <h3 id={providerId} className="text-sm font-semibold text-white">
               {provider.display_name || PROVIDER_ICONS[provider.name] || provider.name}
             </h3>
             <span
-              className={clsx(
-                'text-xs',
-                provider.configured ? 'text-emerald-400' : 'text-slate-500'
-              )}
+              className={clsx('text-xs', provider.configured ? 'text-emerald-400' : 'text-slate-500')}
+              role="status"
+              aria-label={`${provider.display_name} configuration status: ${provider.configured ? 'Configured' : 'Not configured'}`}
             >
               {provider.configured ? 'Configured' : 'Not configured'}
             </span>
@@ -109,40 +112,48 @@ function ProviderCard({ provider, onSave, onSuccess, onError }: ProviderCardProp
         </div>
 
         {provider.configured ? (
-          <CheckCircle className="h-5 w-5 text-emerald-400" />
+          <CheckCircle className="h-5 w-5 text-emerald-400" aria-hidden="true" />
         ) : (
-          <XCircle className="h-5 w-5 text-slate-600" />
+          <XCircle className="h-5 w-5 text-slate-600" aria-hidden="true" />
         )}
       </div>
 
       {/* API Key Input */}
       <div className="mt-4">
-        <label className="mb-1.5 block text-xs text-slate-400">API Key</label>
+        <label htmlFor={`api-key-${provider.name}`} className="mb-1.5 block text-xs text-slate-400">
+          API Key <span aria-label="required">*</span>
+        </label>
         <div className="relative">
           <input
+            id={`api-key-${provider.name}`}
             type={showKey ? 'text' : 'password'}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={`Enter ${provider.display_name || provider.name} API key`}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 pr-10 text-sm text-white placeholder-slate-600 outline-none focus:border-blue-500"
+            aria-required="true"
+            className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 pr-10 text-sm text-white placeholder-slate-600 outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           />
           <button
             type="button"
             onClick={() => setShowKey(!showKey)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+            aria-label={showKey ? 'Hide API key' : 'Show API key'}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
-            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showKey ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
       </div>
 
       {/* Model Selector */}
       <div className="mt-3">
-        <label className="mb-1.5 block text-xs text-slate-400">Default Model</label>
+        <label htmlFor={`model-${provider.name}`} className="mb-1.5 block text-xs text-slate-400">
+          Default Model
+        </label>
         <select
+          id={`model-${provider.name}`}
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value)}
-          className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+          className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
         >
           {provider.models && provider.models.length > 0 ? (
             provider.models.map((model) => (
@@ -151,7 +162,9 @@ function ProviderCard({ provider, onSave, onSuccess, onError }: ProviderCardProp
               </option>
             ))
           ) : (
-            <option value="" className="bg-slate-800">No models available</option>
+            <option value="" className="bg-slate-800">
+              No models available
+            </option>
           )}
         </select>
       </div>
@@ -161,41 +174,37 @@ function ProviderCard({ provider, onSave, onSuccess, onError }: ProviderCardProp
         <button
           onClick={handleSave}
           disabled={saving || !apiKey.trim()}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-busy={saving}
+          aria-label={`Save ${provider.display_name} configuration`}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
         >
-          {saving ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <CheckCircle className="h-3 w-3" />
-          )}
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <CheckCircle className="h-3 w-3" aria-hidden="true" />}
           Save
         </button>
 
         <button
           onClick={handleTest}
           disabled={testing || !provider.configured}
-          className="flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-600 disabled:opacity-50"
+          aria-busy={testing}
+          aria-label={`Test ${provider.display_name} connection`}
+          className="flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
         >
-          {testing ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Key className="h-3 w-3" />
-          )}
+          {testing ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Key className="h-3 w-3" aria-hidden="true" />}
           Test Connection
         </button>
 
         {testResult === 'success' && (
-          <span className="flex items-center gap-1 text-xs text-emerald-400">
-            <CheckCircle className="h-3 w-3" /> Connected
+          <span className="flex items-center gap-1 text-xs text-emerald-400" role="status">
+            <CheckCircle className="h-3 w-3" aria-hidden="true" /> Connected
           </span>
         )}
         {testResult === 'error' && (
-          <span className="flex items-center gap-1 text-xs text-red-400">
-            <XCircle className="h-3 w-3" /> Failed
+          <span className="flex items-center gap-1 text-xs text-red-400" role="status">
+            <XCircle className="h-3 w-3" aria-hidden="true" /> Failed
           </span>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -211,8 +220,26 @@ export default function SettingsPage() {
 
   const { toasts, removeToast, success: showSuccess, error: showError } = useToast();
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const [budgetData, frameworkData] = await Promise.all([getBudgetSettings(), getAgentFramework()]);
+        setMonthlyBudget(budgetData.monthly_budget);
+        setDailyWarning(budgetData.daily_warning);
+        setFramework((frameworkData.current_framework as 'crewai' | 'openclaw') || 'crewai');
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+      }
+    };
+    loadSettings();
+  }, []);
+
   const handleSaveProvider = async (provider: string, apiKey: string, model: string) => {
-    await saveAIProvider(provider, apiKey, model);
+    try {
+      await saveAIProvider(provider, apiKey, model);
+    } catch (err) {
+      throw err;
+    }
   };
 
   const handleSetFramework = async () => {
@@ -253,11 +280,11 @@ export default function SettingsPage() {
     <div className="flex flex-col">
       <Header title="Settings" subtitle="Configure AI providers and system settings" />
 
-      <div className="flex-1 p-6">
+      <main id="main" className="flex-1 p-6">
         <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-        {/* AI Providers */}
-        <div className="mb-8">
+        {/* AI Providers Section */}
+        <section className="mb-8">
           <h2 className="mb-4 text-sm font-semibold text-white">AI Providers</h2>
 
           {providersLoading && !providers && (
@@ -287,64 +314,69 @@ export default function SettingsPage() {
               <p className="text-sm text-slate-500">No AI providers found. Check backend configuration.</p>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Agent Framework */}
-        <div className="mb-8">
+        {/* Agent Framework Section */}
+        <section className="mb-8">
           <h2 className="mb-4 text-sm font-semibold text-white">Agent Framework</h2>
-          <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5">
+          <article className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
             <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-blue-400" />
+              <Shield className="h-5 w-5 text-blue-400" aria-hidden="true" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-white">Framework Selection</p>
                 <p className="text-xs text-slate-400">Choose the AI agent orchestration framework</p>
               </div>
             </div>
 
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={() => setFramework('crewai')}
-                className={clsx(
-                  'flex-1 rounded-lg border px-4 py-3 text-left transition-colors',
-                  framework === 'crewai'
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
-                )}
-              >
-                <p className="text-sm font-medium text-white">CrewAI</p>
-                <p className="mt-0.5 text-xs text-slate-400">Default framework - stable and well-tested</p>
-              </button>
-              <button
-                onClick={() => setFramework('openclaw')}
-                className={clsx(
-                  'flex-1 rounded-lg border px-4 py-3 text-left transition-colors',
-                  framework === 'openclaw'
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
-                )}
-              >
-                <p className="text-sm font-medium text-white">OpenClaw</p>
-                <p className="mt-0.5 text-xs text-slate-400">Alternative framework - experimental</p>
-              </button>
-            </div>
+            <fieldset data-testid="framework-selection" className="mt-4">
+              <legend className="sr-only">Framework Selection</legend>
+              <div className="flex gap-3">
+                <button
+                  data-testid="framework-crewai"
+                  onClick={() => setFramework('crewai')}
+                  aria-pressed={framework === 'crewai'}
+                  className={clsx(
+                    'flex-1 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900',
+                    framework === 'crewai' ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+                  )}
+                >
+                  <p className="text-sm font-medium text-white">CrewAI</p>
+                  <p className="mt-0.5 text-xs text-slate-400">Default framework - stable and well-tested</p>
+                </button>
+                <button
+                  data-testid="framework-openclaw"
+                  onClick={() => setFramework('openclaw')}
+                  aria-pressed={framework === 'openclaw'}
+                  className={clsx(
+                    'flex-1 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900',
+                    framework === 'openclaw' ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+                  )}
+                >
+                  <p className="text-sm font-medium text-white">OpenClaw</p>
+                  <p className="mt-0.5 text-xs text-slate-400">Alternative framework - experimental</p>
+                </button>
+              </div>
+            </fieldset>
 
             <button
+              data-testid="save-framework-button"
               onClick={handleSetFramework}
               disabled={frameworkSaving}
-              className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              aria-busy={frameworkSaving}
+              className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
             >
-              {frameworkSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {frameworkSaving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               Save Framework Selection
             </button>
-          </div>
-        </div>
+          </article>
+        </section>
 
-        {/* Cost Budget */}
-        <div className="mb-8">
+        {/* Budget Settings Section */}
+        <section className="mb-8">
           <h2 className="mb-4 text-sm font-semibold text-white">Cost Budget</h2>
-          <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5">
+          <article className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
             <div className="flex items-center gap-3 mb-4">
-              <DollarSign className="h-5 w-5 text-amber-400" />
+              <DollarSign className="h-5 w-5 text-amber-400" aria-hidden="true" />
               <div>
                 <p className="text-sm font-medium text-white">Budget Controls</p>
                 <p className="text-xs text-slate-400">Set spending limits for AI agent operations</p>
@@ -353,52 +385,68 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs text-slate-400">Monthly Budget Limit</label>
+                <label htmlFor="monthly-budget" className="mb-1.5 block text-xs text-slate-400">
+                  Monthly Budget Limit <span aria-label="required">*</span>
+                </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500" aria-hidden="true">
+                    $
+                  </span>
                   <input
+                    id="monthly-budget"
+                    data-testid="monthly-budget"
                     type="number"
                     value={monthlyBudget}
                     onChange={(e) => setMonthlyBudget(parseFloat(e.target.value) || 0)}
                     step="1"
                     min="0"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2 pl-7 pr-3 text-sm text-white outline-none focus:border-blue-500 font-mono"
+                    aria-label="Monthly budget limit in dollars"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2 pl-7 pr-3 text-sm text-white outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 font-mono"
                   />
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs text-slate-400">Daily Warning Threshold</label>
+                <label htmlFor="daily-warning" className="mb-1.5 block text-xs text-slate-400">
+                  Daily Warning Threshold <span aria-label="required">*</span>
+                </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500" aria-hidden="true">
+                    $
+                  </span>
                   <input
+                    id="daily-warning"
+                    data-testid="daily-warning"
                     type="number"
                     value={dailyWarning}
                     onChange={(e) => setDailyWarning(parseFloat(e.target.value) || 0)}
                     step="0.50"
                     min="0"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2 pl-7 pr-3 text-sm text-white outline-none focus:border-blue-500 font-mono"
+                    aria-label="Daily warning threshold in dollars"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2 pl-7 pr-3 text-sm text-white outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 font-mono"
                   />
                 </div>
               </div>
             </div>
 
             <button
+              data-testid="save-budget-button"
               onClick={handleSaveBudget}
               disabled={budgetSaving}
-              className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              aria-busy={budgetSaving}
+              className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
             >
-              {budgetSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {budgetSaving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               Save Budget Settings
             </button>
-          </div>
-        </div>
+          </article>
+        </section>
 
-        {/* Data Providers / System Health */}
-        <div>
+        {/* System Health Section */}
+        <section>
           <h2 className="mb-4 text-sm font-semibold text-white">System Status</h2>
-          <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5">
+          <article className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
             <div className="flex items-center gap-3 mb-4">
-              <Database className="h-5 w-5 text-emerald-400" />
+              <Database className="h-5 w-5 text-emerald-400" aria-hidden="true" />
               <div>
                 <p className="text-sm font-medium text-white">Data Providers & Health</p>
                 <p className="text-xs text-slate-400">Current status of system components</p>
@@ -413,30 +461,39 @@ export default function SettingsPage() {
                       'h-2 w-2 rounded-full',
                       health?.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'
                     )}
+                    aria-hidden="true"
                   />
                   <span className="text-sm text-slate-300">Backend API</span>
                 </div>
-                <span className="text-xs text-slate-400">
-                  {health ? (health.status === 'ok' ? 'Healthy' : 'Unhealthy') : 'Checking...'}
+                <span className="text-xs text-slate-400" role="status">
+                  {health ? health.status === 'ok' ? 'Healthy' : 'Unhealthy' : 'Checking...'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between rounded-lg bg-slate-900/50 px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className={clsx('h-2 w-2 rounded-full', health?.database === 'ok' ? 'bg-emerald-500' : health ? 'bg-red-500' : 'bg-slate-500')} />
+                  <span
+                    className={clsx(
+                      'h-2 w-2 rounded-full',
+                      health?.database === 'ok' ? 'bg-emerald-500' : health ? 'bg-red-500' : 'bg-slate-500'
+                    )}
+                    aria-hidden="true"
+                  />
                   <span className="text-sm text-slate-300">Database</span>
                 </div>
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-400" role="status">
                   {health?.database === 'ok' ? 'Connected' : health ? 'Error' : 'Checking...'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between rounded-lg bg-slate-900/50 px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
                   <span className="text-sm text-slate-300">yfinance (Free)</span>
                 </div>
-                <span className="text-xs text-slate-400">Default Provider</span>
+                <span className="text-xs text-slate-400" role="status">
+                  Default Provider
+                </span>
               </div>
 
               {health?.version && (
@@ -446,9 +503,10 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      </div>
+          </article>
+        </section>
+      </main>
     </div>
   );
 }
+```
