@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs.
@@ -8,6 +9,7 @@ from datetime import datetime, timezone
 import sqlite3
 import random
 import logging
+from typing import Dict, List, Any
 
 from backend.config import Config
 
@@ -17,33 +19,54 @@ research_bp = Blueprint('research', __name__, url_prefix='/api')
 
 
 @research_bp.route('/research/briefs', methods=['GET'])
-def list_briefs():
-    """List research briefs, optionally filtered by ticker.
+def list_briefs() -> tuple[Dict[str, Any], int]:
+    """List paginated research briefs, optionally filtered by ticker.
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
-        limit (int, optional): Max briefs to return. Default 50.
+        limit (int, optional): Max briefs to return. Default: 50, Max: 200.
+        offset (int, optional): Number of records to skip. Default: 0.
 
     Returns:
-        JSON array of research brief objects.
+        JSON object with 'data' array of briefs and 'meta' containing pagination info.
     """
     ticker = request.args.get('ticker', None)
-    limit = min(int(request.args.get('limit', 50)), 200)
+    
+    # Validate and parse pagination parameters
+    try:
+        limit = min(int(request.args.get('limit', 50)), 200)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except (ValueError, TypeError):
+        limit = 50
+        offset = 0
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
 
+        # Get total count for pagination
         if ticker:
+            count_row = conn.execute(
+                'SELECT COUNT(*) as count FROM research_briefs WHERE ticker = ?',
+                (ticker.upper(),)
+            ).fetchone()
+            total_count = count_row['count'] if count_row else 0
+
             rows = conn.execute(
-                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ?',
-                (ticker.upper(), limit)
+                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (ticker.upper(), limit, offset)
             ).fetchall()
         else:
+            count_row = conn.execute(
+                'SELECT COUNT(*) as count FROM research_briefs'
+            ).fetchone()
+            total_count = count_row['count'] if count_row else 0
+
             rows = conn.execute(
-                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ?',
-                (limit,)
+                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                (limit, offset)
             ).fetchall()
+        
         conn.close()
 
         briefs = [{
@@ -56,14 +79,26 @@ def list_briefs():
             'created_at': r['created_at'],
         } for r in rows]
 
-        return jsonify(briefs)
+        # Calculate pagination info
+        has_next = (offset + limit) < total_count
+        has_previous = offset > 0
+
+        meta = {
+            'total': total_count,
+            'limit': limit,
+            'offset': offset,
+            'has_next': has_next,
+            'has_previous': has_previous,
+        }
+
+        return jsonify({'data': briefs, 'meta': meta})
     except Exception as e:
         logger.error(f"Error fetching research briefs: {e}")
-        return jsonify([])
+        return jsonify({'data': [], 'meta': {'total': 0, 'limit': limit, 'offset': offset, 'has_next': False, 'has_previous': False}}), 500
 
 
 @research_bp.route('/research/briefs', methods=['POST'])
-def generate_brief():
+def generate_brief() -> Dict[str, Any]:
     """Trigger generation of a new research brief.
 
     Request Body (JSON, optional):
@@ -93,7 +128,7 @@ def generate_brief():
     return jsonify(brief)
 
 
-def _generate_sample_brief(ticker: str) -> dict:
+def _generate_sample_brief(ticker: str) -> Dict[str, Any]:
     """Generate and store a sample research brief for a given ticker."""
 
     # Get current price and rating data if available
@@ -241,3 +276,4 @@ Reddit and social media analysis indicates:
             'model_used': 'claude-sonnet-4-5 (stub)',
             'created_at': now,
         }
+```

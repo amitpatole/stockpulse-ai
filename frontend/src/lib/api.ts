@@ -1,3 +1,4 @@
+```typescript
 // ============================================================
 // TickerPulse AI v3.0 - API Client
 // ============================================================
@@ -26,6 +27,19 @@ class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
   }
+}
+
+interface PaginationMeta {
+  total: number;
+  limit: number;
+  offset: number;
+  has_next: boolean;
+  has_previous: boolean;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  meta: PaginationMeta;
 }
 
 async function request<T>(path: string, options?: RequestInit & { signal?: AbortSignal }): Promise<T> {
@@ -69,10 +83,19 @@ async function request<T>(path: string, options?: RequestInit & { signal?: Abort
 
 // ---- Stocks ----
 
-export async function getStocks(): Promise<Stock[]> {
-  const data = await request<{ stocks: Stock[] } | Stock[]>('/api/stocks');
+export async function getStocks(limit: number = 50, offset: number = 0): Promise<Stock[]> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  
+  const data = await request<PaginatedResponse<Stock> | Stock[]>(
+    `/api/stocks?${params.toString()}`
+  );
+  
+  // Handle both old array format and new paginated format
   if (Array.isArray(data)) return data;
-  return data.stocks || [];
+  if ('data' in data) return data.data;
+  return [];
 }
 
 export async function searchStocks(query: string): Promise<StockSearchResult[]> {
@@ -234,14 +257,20 @@ export async function getHealth(): Promise<HealthCheck> {
 
 // ---- Research ----
 
-export async function getResearchBriefs(ticker?: string): Promise<ResearchBrief[]> {
+export async function getResearchBriefs(ticker?: string, limit: number = 50, offset: number = 0): Promise<ResearchBrief[]> {
   const params = new URLSearchParams();
   if (ticker) params.set('ticker', ticker);
-  params.set('limit', '50');
-  const data = await request<ResearchBrief[]>(
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  
+  const data = await request<PaginatedResponse<ResearchBrief> | ResearchBrief[]>(
     `/api/research/briefs?${params.toString()}`
   );
-  return Array.isArray(data) ? data : [];
+  
+  // Handle both old array format and new paginated format
+  if (Array.isArray(data)) return data;
+  if ('data' in data) return data.data;
+  return [];
 }
 
 export async function generateResearchBrief(ticker?: string): Promise<ResearchBrief> {
@@ -251,4 +280,5 @@ export async function generateResearchBrief(ticker?: string): Promise<ResearchBr
   });
 }
 
-export { ApiError };
+export { ApiError, type PaginationMeta, type PaginatedResponse };
+```

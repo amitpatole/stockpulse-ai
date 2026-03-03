@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, and search stocks.
@@ -5,6 +6,7 @@ Blueprint for stock management endpoints: list, add, remove, and search stocks.
 
 from flask import Blueprint, jsonify, request
 import logging
+from typing import Dict, List, Any
 
 from backend.core.stock_manager import get_all_stocks, add_stock, remove_stock, search_stock_ticker
 
@@ -14,27 +16,52 @@ stocks_bp = Blueprint('stocks', __name__, url_prefix='/api')
 
 
 @stocks_bp.route('/stocks', methods=['GET'])
-def get_stocks():
-    """Get all monitored stocks.
+def get_stocks() -> tuple[Dict[str, Any], int]:
+    """Get paginated monitored stocks.
 
     Query Parameters:
         market (str, optional): Filter by market (e.g. 'US', 'India'). 'All' returns everything.
+        limit (int, optional): Number of records to return per page. Default: 50, Max: 200.
+        offset (int, optional): Number of records to skip. Default: 0.
 
     Returns:
-        JSON array of stock objects with ticker, name, market, added_at, active fields.
+        JSON object with 'data' array of stocks and 'meta' containing pagination info.
     """
     market = request.args.get('market', None)
+    
+    # Validate and parse pagination parameters
+    try:
+        limit = min(int(request.args.get('limit', 50)), 200)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except (ValueError, TypeError):
+        limit = 50
+        offset = 0
+
     stocks = get_all_stocks()
 
     # Filter by market if specified
     if market and market != 'All':
         stocks = [s for s in stocks if s.get('market') == market]
 
-    return jsonify(stocks)
+    # Calculate pagination info
+    total_count = len(stocks)
+    paginated_stocks = stocks[offset : offset + limit]
+    has_next = (offset + limit) < total_count
+    has_previous = offset > 0
+
+    meta = {
+        'total': total_count,
+        'limit': limit,
+        'offset': offset,
+        'has_next': has_next,
+        'has_previous': has_previous,
+    }
+
+    return jsonify({'data': paginated_stocks, 'meta': meta})
 
 
 @stocks_bp.route('/stocks', methods=['POST'])
-def add_stock_endpoint():
+def add_stock_endpoint() -> tuple[Dict[str, Any], int]:
     """Add a new stock to the monitored list.
 
     Request Body (JSON):
@@ -79,7 +106,7 @@ def add_stock_endpoint():
 
 
 @stocks_bp.route('/stocks/<ticker>', methods=['DELETE'])
-def remove_stock_endpoint(ticker):
+def remove_stock_endpoint(ticker: str) -> tuple[Dict[str, bool], int]:
     """Remove a stock from monitoring (soft delete).
 
     Path Parameters:
@@ -93,7 +120,7 @@ def remove_stock_endpoint(ticker):
 
 
 @stocks_bp.route('/stocks/search', methods=['GET'])
-def search_stocks():
+def search_stocks() -> tuple[List[Dict[str, str]], int]:
     """Search for stock tickers via Yahoo Finance.
 
     Query Parameters:
@@ -109,3 +136,4 @@ def search_stocks():
 
     results = search_stock_ticker(query)
     return jsonify(results)
+```
