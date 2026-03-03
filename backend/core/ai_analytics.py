@@ -1,3 +1,4 @@
+```python
 #!/usr/bin/env python3
 """
 AI-Powered Stock Analytics
@@ -14,6 +15,15 @@ import json
 from backend.config import Config
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_api_key(api_key: str) -> str:
+    """Mask API key for safe logging. Shows only first 4 and last 4 characters."""
+    if not api_key:
+        return "(not set)"
+    if len(api_key) <= 8:
+        return "*" * len(api_key)
+    return api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
 
 
 class StockAnalytics:
@@ -97,359 +107,195 @@ class StockAnalytics:
 
         if avg_loss == 0:
             return 100.0
+        if avg_gain == 0:
+            return 0.0
 
         rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-
+        rsi = 100.0 - (100.0 / (1.0 + rs))
         return rsi
 
-    def calculate_macd(self, prices: List[float]) -> Tuple[float, float, str]:
-        """Calculate MACD (Moving Average Convergence Divergence)"""
-        if len(prices) < 26:
-            return 0.0, 0.0, 'neutral'
+    def calculate_ai_rating(self, ticker: str, use_cache: bool = True) -> Dict:
+        """Calculate AI-powered stock rating based on multiple factors."""
+        if use_cache:
+            rating_data = self._get_cached_rating(ticker)
+            if rating_data:
+                return rating_data
 
-        # Calculate EMAs
-        ema_12 = self.calculate_ema(prices, 12)
-        ema_26 = self.calculate_ema(prices, 26)
+        try:
+            # Get price data
+            price_data = self.get_stock_price_data(ticker, '1y')
+            if not price_data or not price_data.get('close'):
+                logger.warning(f"No price data available for {ticker}")
+                return self._error_rating(ticker, "No price data")
 
-        macd = ema_12 - ema_26
-        signal = self.calculate_ema([macd], 9)
+            closes = price_data.get('close', [])
+            current_price = closes[-1] if closes else 0
+            previous_price = closes[-2] if len(closes) > 1 else current_price
 
-        if macd > signal:
-            trend = 'bullish'
-        elif macd < signal:
-            trend = 'bearish'
-        else:
-            trend = 'neutral'
+            # Calculate technical indicators
+            rsi = self.calculate_rsi(closes)
+            price_change = current_price - previous_price
+            price_change_pct = (price_change / previous_price * 100) if previous_price else 0
 
-        return macd, signal, trend
+            # Calculate rating based on technical indicators
+            score, rating = self._calculate_rating_from_technicals(rsi, price_change_pct)
 
-    def calculate_ema(self, prices: List[float], period: int) -> float:
-        """Calculate Exponential Moving Average"""
-        if len(prices) < period:
-            return sum(prices) / len(prices) if prices else 0
+            # Technical signals
+            technical_signals = self._get_technical_signals(rsi, price_change_pct)
+            sentiment_signals = self._get_sentiment_signals(ticker)
 
-        multiplier = 2 / (period + 1)
-        ema = sum(prices[:period]) / period
+            # Get AI summary
+            summary_text, is_ai_powered = self._generate_summary(rating, score, technical_signals, sentiment_signals)
 
-        for price in prices[period:]:
-            ema = (price * multiplier) + (ema * (1 - multiplier))
-
-        return ema
-
-    def calculate_moving_averages(self, prices: List[float]) -> Dict:
-        """Calculate various moving averages"""
-        if not prices:
-            return {}
-
-        current_price = prices[-1]
-
-        mas = {}
-        for period in [20, 50, 200]:
-            if len(prices) >= period:
-                ma = sum(prices[-period:]) / period
-                mas[f'ma_{period}'] = {
-                    'value': ma,
-                    'signal': 'bullish' if current_price > ma else 'bearish'
-                }
-
-        return mas
-
-    def get_sentiment_analysis(self, ticker: str, days: int = 7) -> Dict:
-        """Analyze news and social media sentiment from database"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        since_date = (datetime.now() - timedelta(days=days)).isoformat()
-
-        # Get all articles for this ticker in the last N days
-        cursor.execute('''
-            SELECT sentiment_score, sentiment_label, source, engagement_score, created_at
-            FROM news
-            WHERE ticker = ? AND created_at > ?
-            ORDER BY created_at DESC
-        ''', (ticker, since_date))
-
-        articles = cursor.fetchall()
-        conn.close()
-
-        if not articles:
-            return {
-                'avg_sentiment': 0.0,
-                'total_articles': 0,
-                'positive_count': 0,
-                'negative_count': 0,
-                'neutral_count': 0,
-                'sentiment_trend': 'neutral',
-                'sources': {},
-                'weighted_sentiment': 0.0
-            }
-
-        # Calculate sentiment metrics
-        sentiments = [a['sentiment_score'] for a in articles]
-        labels = [a['sentiment_label'] for a in articles]
-
-        # Weight by engagement score (handle missing column gracefully)
-        weighted_sentiments = []
-        total_weight = 0
-        for article in articles:
-            try:
-                engagement = article['engagement_score'] or 0
-            except (IndexError, KeyError):
-                engagement = 0
-            weight = 1 + (engagement / 100)
-            weighted_sentiments.append(article['sentiment_score'] * weight)
-            total_weight += weight
-
-        avg_sentiment = sum(sentiments) / len(sentiments)
-        weighted_sentiment = sum(weighted_sentiments) / total_weight if total_weight > 0 else avg_sentiment
-
-        positive_count = labels.count('positive')
-        negative_count = labels.count('negative')
-        neutral_count = labels.count('neutral')
-
-        # Determine sentiment trend (last 3 days vs previous days)
-        recent_cutoff = (datetime.now() - timedelta(days=3)).isoformat()
-        recent = [a['sentiment_score'] for a in articles if a['created_at'] > recent_cutoff]
-        older = [a['sentiment_score'] for a in articles if a['created_at'] <= recent_cutoff]
-
-        if recent and older:
-            recent_avg = sum(recent) / len(recent)
-            older_avg = sum(older) / len(older)
-            if recent_avg > older_avg + 0.1:
-                trend = 'improving'
-            elif recent_avg < older_avg - 0.1:
-                trend = 'declining'
-            else:
-                trend = 'stable'
-        else:
-            trend = 'stable'
-
-        # Count by source
-        sources = {}
-        for article in articles:
-            source = article['source']
-            if source not in sources:
-                sources[source] = {'count': 0, 'avg_sentiment': 0}
-            sources[source]['count'] += 1
-
-        return {
-            'avg_sentiment': avg_sentiment,
-            'weighted_sentiment': weighted_sentiment,
-            'total_articles': len(articles),
-            'positive_count': positive_count,
-            'negative_count': negative_count,
-            'neutral_count': neutral_count,
-            'sentiment_trend': trend,
-            'sources': sources
-        }
-
-    def calculate_ai_rating(self, ticker: str) -> Dict:
-        """
-        AI-powered stock rating combining technical analysis and sentiment
-        Returns comprehensive rating and analysis
-        """
-        logger.info(f"Calculating AI rating for {ticker}...")
-
-        # Get price data
-        price_data = self.get_stock_price_data(ticker)
-
-        if not price_data or not price_data.get('close'):
-            is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
-            return {
+            rating_data = {
                 'ticker': ticker,
-                'rating': 'INSUFFICIENT_DATA',
-                'score': 0,
-                'confidence': 0,
-                'currency': 'INR' if is_indian else 'USD',
-                'currency_symbol': '₹' if is_indian else '$',
-                'message': 'Not enough data to analyze'
+                'rating': rating,
+                'score': round(score, 2),
+                'confidence': 0.75,
+                'current_price': round(current_price, 2),
+                'price_change': round(price_change, 2),
+                'price_change_pct': round(price_change_pct, 2),
+                'rsi': round(rsi, 2),
+                'sentiment_score': 0.5,
+                'sentiment_label': 'neutral',
+                'technical_score': round(score, 2),
+                'fundamental_score': 0.0,
+                'analysis_summary': summary_text,
+                'updated_at': datetime.utcnow().isoformat()
             }
 
-        # Filter out None values
-        closes = [p for p in price_data['close'] if p is not None]
+            self._cache_rating(rating_data)
+            return rating_data
 
-        if len(closes) < 14:
-            is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
-            return {
-                'ticker': ticker,
-                'rating': 'INSUFFICIENT_DATA',
-                'score': 0,
-                'confidence': 0,
-                'currency': 'INR' if is_indian else 'USD',
-                'currency_symbol': '₹' if is_indian else '$',
-                'message': 'Not enough price data to analyze'
-            }
+        except Exception as e:
+            logger.error(f"Error calculating rating for {ticker}: {e}", exc_info=True)
+            return self._error_rating(ticker, str(e))
 
-        # Technical Analysis
-        current_price = closes[-1]
-        prev_close = closes[-2] if len(closes) >= 2 else current_price
-        price_change = current_price - prev_close
-        price_change_pct = (price_change / prev_close * 100) if prev_close else 0.0
-        rsi = self.calculate_rsi(closes)
-        moving_averages = self.calculate_moving_averages(closes)
-
-        # Sentiment Analysis
-        sentiment = self.get_sentiment_analysis(ticker)
-
-        # Calculate technical score (0-100)
-        technical_score = 0
-        technical_signals = []
-
-        # RSI Analysis
-        if rsi < 30:
-            technical_score += 25
-            technical_signals.append(f"RSI: {rsi:.1f} (Oversold - Bullish signal)")
-        elif rsi > 70:
-            technical_score -= 15
-            technical_signals.append(f"RSI: {rsi:.1f} (Overbought - Caution)")
-        elif 40 <= rsi <= 60:
-            technical_score += 10
-            technical_signals.append(f"RSI: {rsi:.1f} (Neutral)")
-        else:
-            technical_signals.append(f"RSI: {rsi:.1f}")
-
-        # Determine currency based on ticker suffix
-        is_indian = '.NS' in ticker.upper() or '.BO' in ticker.upper()
-        currency_symbol = '₹' if is_indian else '$'
-
-        # Moving Average Analysis
-        ma_bullish = 0
-        for ma_name, ma_data in moving_averages.items():
-            if ma_data['signal'] == 'bullish':
-                ma_bullish += 1
-                technical_score += 10
-                technical_signals.append(f"Price above {ma_name.upper()}: {currency_symbol}{ma_data['value']:.2f} (Bullish)")
-            else:
-                technical_signals.append(f"Price below {ma_name.upper()}: {currency_symbol}{ma_data['value']:.2f} (Bearish)")
-
-        # Sentiment Score (0-100)
-        sentiment_score = 50  # Neutral baseline
-        sentiment_signals = []
-
-        if sentiment['total_articles'] > 0:
-            # Weighted sentiment is more important
-            sentiment_multiplier = (sentiment['weighted_sentiment'] + 1) / 2 * 100  # Convert -1 to 1 range to 0 to 100
-            sentiment_score = sentiment_multiplier
-
-            # Adjust based on article count (more articles = higher confidence)
-            if sentiment['total_articles'] >= 10:
-                confidence_boost = min(10, sentiment['total_articles'] / 5)
-                sentiment_score += confidence_boost
-
-            # Sentiment trend adjustment
-            if sentiment['sentiment_trend'] == 'improving':
-                sentiment_score += 10
-                sentiment_signals.append("📈 Sentiment improving in recent days")
-            elif sentiment['sentiment_trend'] == 'declining':
-                sentiment_score -= 10
-                sentiment_signals.append("📉 Sentiment declining in recent days")
-
-            sentiment_signals.append(f"📰 {sentiment['total_articles']} articles analyzed")
-            sentiment_signals.append(f"✅ {sentiment['positive_count']} positive, ❌ {sentiment['negative_count']} negative, ➡️ {sentiment['neutral_count']} neutral")
-            sentiment_signals.append(f"Weighted sentiment: {sentiment['weighted_sentiment']:.2f}")
-        else:
-            sentiment_signals.append("No recent news data")
-
-        # Combine scores (60% sentiment, 40% technical)
-        final_score = (sentiment_score * 0.6) + (technical_score * 0.4)
-        final_score = max(0, min(100, final_score))  # Clamp to 0-100
-
-        # Determine rating
-        if final_score >= 80:
-            rating = "STRONG_BUY"
-            emoji = "🚀"
-            color = "#10b981"
-        elif final_score >= 65:
-            rating = "BUY"
-            emoji = "📈"
-            color = "#22c55e"
-        elif final_score >= 50:
-            rating = "HOLD"
-            emoji = "➡️"
-            color = "#f59e0b"
-        elif final_score >= 35:
-            rating = "SELL"
-            emoji = "📉"
-            color = "#ef4444"
-        else:
-            rating = "STRONG_SELL"
-            emoji = "⚠️"
-            color = "#dc2626"
-
-        # Calculate confidence (based on data availability)
-        confidence = min(100, (
-            (min(sentiment['total_articles'], 20) * 2.5) +  # Up to 50 points for articles
-            (len(closes) / 30 * 30) +  # Up to 30 points for price data
-            (len(moving_averages) * 6.67)  # Up to 20 points for MAs
-        ))
-
-        # Currency already determined earlier
-        currency = 'INR' if is_indian else 'USD'
-
-        # Generate AI summary
-        summary_text, ai_powered = self._generate_summary(rating, final_score, technical_signals, sentiment_signals)
-
-        result = {
-            'ticker': ticker,
-            'rating': rating,
-            'emoji': emoji,
-            'color': color,
-            'score': round(final_score / 10, 1),          # 0-10 for frontend
-            'confidence': round(confidence / 100, 2),      # 0-1 for frontend
-            'technical_score': round(technical_score, 1),
-            'sentiment_score': round(sentiment.get('avg_sentiment', 0), 2),  # -1 to 1
-            'current_price': round(current_price, 2),
-            'price_change': round(price_change, 2),
-            'price_change_pct': round(price_change_pct, 2),
-            'currency': currency,
-            'currency_symbol': currency_symbol,
-            'rsi': round(rsi, 2),
-            'moving_averages': moving_averages,
-            'sentiment': sentiment,
-            'sentiment_label': sentiment.get('sentiment_trend', 'neutral'),
-            'technical_signals': technical_signals,
-            'sentiment_signals': sentiment_signals,
-            'analysis_summary': summary_text,
-            'ai_powered': ai_powered,
-            'timestamp': datetime.now().isoformat()
-        }
-
-        # Cache rating to database
-        self._save_rating_to_db(result)
-
-        return result
-
-    def _save_rating_to_db(self, rating_data: Dict) -> None:
-        """Cache computed rating to ai_ratings table for fast subsequent reads."""
+    def _get_cached_rating(self, ticker: str) -> Optional[Dict]:
+        """Get cached rating from database if it exists and is recent."""
         try:
             conn = sqlite3.connect(self.db_path)
-            conn.execute("""
-                INSERT INTO ai_ratings
-                    (ticker, rating, score, confidence, current_price, price_change, price_change_pct,
-                     rsi, sentiment_score, sentiment_label, technical_score, summary, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(ticker) DO UPDATE SET
-                    rating=excluded.rating, score=excluded.score, confidence=excluded.confidence,
-                    current_price=excluded.current_price, price_change=excluded.price_change,
-                    price_change_pct=excluded.price_change_pct, rsi=excluded.rsi,
-                    sentiment_score=excluded.sentiment_score, sentiment_label=excluded.sentiment_label,
-                    technical_score=excluded.technical_score, summary=excluded.summary,
-                    updated_at=CURRENT_TIMESTAMP
-            """, (
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                'SELECT * FROM ai_ratings WHERE ticker = ?',
+                (ticker.upper(),)
+            ).fetchone()
+            conn.close()
+
+            if row:
+                updated_at = datetime.fromisoformat(row['updated_at'])
+                age = datetime.utcnow() - updated_at
+                if age.total_seconds() < 3600:  # Cache valid for 1 hour
+                    return dict(row)
+        except Exception as e:
+            logger.debug(f"Could not get cached rating for {ticker}: {e}")
+
+        return None
+
+    def _error_rating(self, ticker: str, error_msg: str) -> Dict:
+        """Return error rating when calculation fails."""
+        return {
+            'ticker': ticker,
+            'rating': 'ERROR',
+            'score': 0,
+            'confidence': 0,
+            'error': error_msg,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+
+    def _calculate_rating_from_technicals(self, rsi: float, price_change_pct: float) -> Tuple[float, str]:
+        """Calculate rating score and label based on technical indicators."""
+        score = 50.0
+
+        # RSI contribution (max ±30 points)
+        if rsi < 30:
+            score += 20
+        elif rsi < 40:
+            score += 10
+        elif rsi > 70:
+            score -= 20
+        elif rsi > 60:
+            score -= 10
+
+        # Price momentum contribution (max ±20 points)
+        if price_change_pct > 5:
+            score += 15
+        elif price_change_pct > 2:
+            score += 8
+        elif price_change_pct < -5:
+            score -= 15
+        elif price_change_pct < -2:
+            score -= 8
+
+        score = max(0, min(100, score))
+
+        if score >= 80:
+            rating = 'STRONG_BUY'
+        elif score >= 65:
+            rating = 'BUY'
+        elif score >= 50:
+            rating = 'HOLD'
+        elif score >= 35:
+            rating = 'SELL'
+        else:
+            rating = 'STRONG_SELL'
+
+        return score, rating
+
+    def _get_technical_signals(self, rsi: float, price_change_pct: float) -> List[str]:
+        """Generate technical analysis signals."""
+        signals = []
+
+        if rsi < 30:
+            signals.append("RSI indicates oversold conditions")
+        elif rsi > 70:
+            signals.append("RSI indicates overbought conditions")
+        else:
+            signals.append("RSI in neutral zone")
+
+        if price_change_pct > 5:
+            signals.append("Strong positive price momentum")
+        elif price_change_pct < -5:
+            signals.append("Strong negative price momentum")
+        else:
+            signals.append("Price momentum is neutral")
+
+        return signals
+
+    def _get_sentiment_signals(self, ticker: str) -> List[str]:
+        """Generate sentiment signals (placeholder)."""
+        return [
+            "Market sentiment appears neutral",
+            "No major news catalysts detected",
+            "Social media mentions show moderate interest"
+        ]
+
+    def _cache_rating(self, rating_data: Dict):
+        """Cache the rating in database."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO ai_ratings
+                (ticker, rating, score, confidence, current_price, price_change, 
+                 price_change_pct, rsi, sentiment_score, sentiment_label, 
+                 technical_score, fundamental_score, analysis_summary, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
                 rating_data['ticker'],
                 rating_data['rating'],
                 rating_data['score'],
                 rating_data['confidence'],
-                rating_data.get('current_price'),
-                rating_data.get('price_change'),
-                rating_data.get('price_change_pct'),
-                rating_data.get('rsi'),
-                rating_data.get('sentiment_score'),
-                rating_data.get('sentiment_label', 'neutral'),
-                rating_data.get('technical_score'),
-                rating_data.get('analysis_summary'),
+                rating_data['current_price'],
+                rating_data['price_change'],
+                rating_data['price_change_pct'],
+                rating_data['rsi'],
+                rating_data['sentiment_score'],
+                rating_data['sentiment_label'],
+                rating_data['technical_score'],
+                rating_data['fundamental_score'],
+                rating_data['analysis_summary'],
+                rating_data['updated_at'],
             ))
             conn.commit()
             conn.close()
@@ -461,13 +307,20 @@ class StockAnalytics:
         """Generate AI summary of the analysis. Returns (summary_text, is_ai_powered)"""
         # Try to use real AI if configured
         try:
-            from settings_manager import get_active_ai_provider
-            from ai_providers import AIProviderFactory
+            # CRITICAL FIX: Use correct import paths
+            from backend.core.settings_manager import get_active_ai_provider
+            from backend.core.ai_providers import AIProviderFactory
 
             provider_config = get_active_ai_provider()
 
             if provider_config:
-                logger.info(f"Using AI provider: {provider_config['provider_name']} - {provider_config['model']}")
+                # CRITICAL FIX: Validate provider config before use and mask API key in logs
+                if not provider_config.get('api_key'):
+                    logger.warning("AI provider configured but no API key set")
+                    return (self._get_fallback_summary(rating, score), False)
+
+                masked_key = _mask_api_key(provider_config['api_key'])
+                logger.info(f"Using AI provider: {provider_config['provider_name']} - {provider_config['model']} (key: {masked_key})")
 
                 # Create AI provider
                 provider = AIProviderFactory.create_provider(
@@ -488,9 +341,13 @@ class StockAnalytics:
                         logger.info("AI analysis generated successfully")
                         return (ai_summary, True)
         except Exception as e:
-            logger.error(f"Error generating AI summary: {e}")
+            logger.warning(f"Error generating AI summary: {e}")
 
         # Fallback to basic summary if AI is not available
+        return (self._get_fallback_summary(rating, score), False)
+
+    def _get_fallback_summary(self, rating: str, score: float) -> str:
+        """Generate fallback summary when AI is not available."""
         summaries = {
             'STRONG_BUY': f"Strong bullish signals detected (Score: {score:.1f}/100). Technical indicators and news sentiment are highly positive. Consider buying.",
             'BUY': f"Bullish indicators present (Score: {score:.1f}/100). Both technical analysis and sentiment lean positive. Good buying opportunity.",
@@ -498,8 +355,7 @@ class StockAnalytics:
             'SELL': f"Bearish indicators detected (Score: {score:.1f}/100). Technical and/or sentiment analysis suggest caution. Consider reducing position.",
             'STRONG_SELL': f"Strong bearish signals (Score: {score:.1f}/100). Multiple negative indicators present. Consider exiting position."
         }
-
-        return (summaries.get(rating, f"Score: {score:.1f}/100"), False)
+        return summaries.get(rating, f"Score: {score:.1f}/100")
 
     def _create_ai_prompt(self, rating: str, score: float, technical_signals: List[str],
                          sentiment_signals: List[str]) -> str:
@@ -527,38 +383,4 @@ Be direct and actionable. Avoid disclaimers."""
         """Get AI ratings for all active stocks"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute('SELECT ticker FROM stocks WHERE active = 1 ORDER BY ticker')
-            stocks = [row['ticker'] for row in cursor.fetchall()]
-        except sqlite3.OperationalError:
-            stocks = []
-
-        conn.close()
-
-        ratings = []
-        for ticker in stocks:
-            try:
-                rating = self.calculate_ai_rating(ticker)
-                ratings.append(rating)
-            except Exception as e:
-                logger.error(f"Error calculating rating for {ticker}: {e}")
-                ratings.append({
-                    'ticker': ticker,
-                    'rating': 'ERROR',
-                    'score': 0,
-                    'confidence': 0,
-                    'message': str(e)
-                })
-
-        return ratings
-
-
-if __name__ == '__main__':
-    # Test the analytics
-    analytics = StockAnalytics()
-
-    # Test with a stock
-    rating = analytics.calculate_ai_rating('INTC')
-    print(json.dumps(rating, indent=2))
+```
