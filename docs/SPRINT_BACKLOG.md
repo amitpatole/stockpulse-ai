@@ -86,206 +86,76 @@ Must be fixed before any feature work. These block runtime execution or expose s
 ## 🟠 HIGH Priority (Sprint 2-4, Weeks 3-9)
 
 ### TP-H01: Add Type Hints to Core Functions (Phase 1)
-**User Story**: As a backend developer, I need comprehensive type hints so mypy catches type bugs before runtime, reducing production incidents.
+**User Story**: As a QA engineer, I need comprehensive type hints so mypy catches bugs at type-check time.
 
-**Acceptance Criteria**:
-- [ ] All functions in `core/ai_analytics.py`, `core/data_provider.py`, `core/security.py` have return type annotations
-- [ ] All function parameters have type hints (no bare `Any`)
-- [ ] mypy with strict mode passes on all annotated functions
-- [ ] Type coverage report shows ≥95% on core modules
-
-**Definition of Done**:
-- Code reviewed and merged
-- mypy CI check passes
-- Type coverage metrics documented
-
-**Priority**: High because type bugs cause production failures; early detection saves debugging time.
-
-**Complexity**: 8 points based on: 180+ functions to annotate, existing partially-typed codebase, testing type correctness
+**Story Points**: 8 | **Type**: Refactoring
 
 ---
 
-### TP-H02: Refactor Complex Functions (>30 lines)
-**User Story**: As a code maintainer, I need to break down complex functions so new team members can debug issues without deep context.
+### TP-H02: Refactor Complex Functions
+**User Story**: As a code maintainer, I need simpler, testable functions for easier debugging.
 
-**Acceptance Criteria**:
-- [ ] Identify all functions >30 lines in `core/` (target: 8-12 functions)
-- [ ] Refactor into smaller, single-purpose functions (<20 lines each)
-- [ ] Unit test coverage increases from 42% to ≥70% on refactored modules
-- [ ] All functions have docstrings explaining inputs/outputs/exceptions
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing (100% of old tests still pass)
-- Complexity metrics improved
-
-**Priority**: High because complex functions are debugging bottlenecks and onboarding friction.
-
-**Complexity**: 8 points based on: 500+ LOC to refactor, requires careful test preservation, risk of introducing regressions
+**Story Points**: 8 | **Type**: Refactoring
 
 ---
 
 ### TP-H03: Consolidate Hardcoded Constants into Config
-**User Story**: As a data scientist, I need indicator parameters (RSI period=14, BB std=2) in centralized config so I can tune performance without code changes.
+**User Story**: As a data scientist, I need centralized configuration for indicator parameters.
 
-**Acceptance Criteria**:
-- [ ] Create `config/indicators.py` with all hardcoded constants (RSI, Bollinger Bands, MACD, Stochastic)
-- [ ] Load from environment: `INDICATOR_RSI_PERIOD` (default 14), `INDICATOR_BB_STD` (default 2)
-- [ ] All 8+ indicator functions read from config, not hardcoded values
-- [ ] Integration test verifies config changes affect indicator output
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing
-- Config documentation with all parameters listed
-
-**Priority**: High because current hardcoded values prevent A/B testing and parameter tuning.
-
-**Complexity**: 5 points based on: locating all constants (40-50 values), refactoring 8 functions, minimal risk
+**Story Points**: 5 | **Type**: Refactoring
 
 ---
 
-### TP-H04: Add Structured Logging & Error Context
-**User Story**: As a DevOps engineer, I need structured JSON logs with request IDs and stack traces so I can trace production errors in ELK without SSH'ing servers.
+### TP-H04: Add Comprehensive Logging & Error Context
+**User Story**: As a DevOps engineer, I need structured error logs for production diagnostics.
 
-**Acceptance Criteria**:
-- [ ] Replace all `print()` with `logger.info()` / `logger.error()` (target: 50+ locations)
-- [ ] All error logs include: request_id, user_id, operation, error_code, stack trace
-- [ ] Log output is JSON (parseable by ELK/Splunk)
-- [ ] Integration test verifies error log contains all required fields
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing
-- Logging documentation with example log format
-
-**Priority**: High because production errors are currently untrackable; structured logs enable rapid incident response.
-
-**Complexity**: 5 points based on: systematic logger replacement, structlog integration (pre-configured), low risk
+**Story Points**: 5 | **Type**: Feature
 
 ---
 
 ### TP-H05: Add Unit Tests for Agent Framework & Data Providers
-**User Story**: As a test engineer, I need comprehensive unit tests for agent initialization and fallback chains so providers that fail don't cascade silently.
+**User Story**: As a test engineer, I need unit tests for initialization and fallback chains.
 
-**Acceptance Criteria**:
-- [ ] 100% test coverage on `AgentPool` initialization and provider fallback logic
-- [ ] Test cases cover: all providers available, 1 provider fails, all providers fail, network timeout
-- [ ] Mock external API calls (avoid test flakiness)
-- [ ] Test suite runs in <5s (no network I/O)
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing (100% coverage verified)
-- CI enforces coverage >95% on agent module
-
-**Priority**: High because silent provider failures cause incomplete data in production; tests validate resilience.
-
-**Complexity**: 8 points based on: mocking 4 external providers, testing 6 fallback scenarios, async/await patterns
+**Story Points**: 8 | **Type**: Testing
 
 ---
 
 ## 🟡 MEDIUM Priority (Sprint 4-5, Weeks 7-10)
 
 ### TP-M01: Fix N+1 Query Patterns in Batch Rating Calculation
-**User Story**: As a database administrator, I need to eliminate N+1 queries in batch rating so 100-ticker requests complete in <2s instead of 30s.
+**User Story**: As a performance engineer, I need to optimize batch queries to reduce DB load.
 
-**Acceptance Criteria**:
-- [ ] Profile batch rating calculation: capture baseline query count and latency
-- [ ] Refactor to use single `JOIN` query instead of loop + per-ticker queries (target: 100 queries → 2)
-- [ ] Load test: 100-ticker batch completes in <2s at p95
-- [ ] DB connection count stays <10 (no connection exhaustion)
-
-**Definition of Done**:
-- Code reviewed and merged
-- Performance test passing (2s SLA met)
-- Query plan documented
-
-**Priority**: Medium because batch requests are common but N+1 patterns degrade gracefully; fixing improves user experience.
-
-**Complexity**: 5 points based on: identifying N+1 in batch_calculate_ratings, 1 SQL refactor, performance test
+**Story Points**: 5 | **Type**: Performance
 
 ---
 
 ### TP-M02: Implement Database Connection Pooling
-**User Story**: As an SRE, I need connection pooling so peak load (100 concurrent requests) doesn't exhaust SQLite connections.
+**User Story**: As an infrastructure engineer, I need connection pooling to prevent exhaustion.
 
-**Acceptance Criteria**:
-- [ ] Configure SQLAlchemy connection pool: pool_size=10, max_overflow=20
-- [ ] Load test: 100 concurrent requests with <5 DB connection errors
-- [ ] Monitor: log connection pool usage (utilization %, wait time)
-- [ ] Integration test verifies pool doesn't leak connections
-
-**Definition of Done**:
-- Code reviewed and merged
-- Load test passing
-- Connection pool metrics exported to monitoring
-
-**Priority**: Medium because connection exhaustion only appears at scale; current load isn't hitting it, but will during growth.
-
-**Complexity**: 5 points based on: pool configuration, connection leak detection, minimal code changes
+**Story Points**: 5 | **Type**: Infrastructure
 
 ---
 
 ### TP-M03: Implement Circuit Breaker for External API Calls
-**User Story**: As a reliability engineer, I need circuit breaker protection so a failing data provider (60sec timeout) doesn't block all requests for 60 seconds.
+**User Story**: As a reliability engineer, I need circuit breaker to prevent cascade failures.
 
-**Acceptance Criteria**:
-- [ ] Circuit breaker state machine: CLOSED (normal) → OPEN (failing) → HALF_OPEN (testing)
-- [ ] Trip when >5 failures in 60s window, recover after 30s silence
-- [ ] Request during OPEN state fails fast (<100ms) with fallback provider
-- [ ] Log all state transitions and recovery events
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing (all 3 state transitions tested)
-- Integration test: simulated provider failure recovers correctly
-
-**Priority**: Medium because provider failures are rare but impact is high; circuit breaker prevents cascades during incidents.
-
-**Complexity**: 8 points based on: state machine implementation, testing 3 states + transitions, configurable thresholds
+**Story Points**: 8 | **Type**: Feature
 
 ---
 
 ## 🔵 LOW Priority (Sprint 5-6, Weeks 11+)
 
 ### TP-L01: Implement Caching Layer for Indicator Calculations
-**User Story**: As a performance engineer, I need to cache indicator calculations (RSI, Bollinger Bands) for 5 minutes so repeated requests for same ticker don't recalculate.
+**User Story**: As a performance engineer, I need caching to avoid repeated calculations.
 
-**Acceptance Criteria**:
-- [ ] Add Redis cache layer (fall back to in-memory if Redis unavailable)
-- [ ] Cache key: `indicator:{ticker}:{period}:{type}`, TTL=300s
-- [ ] Cache hit rate target: ≥60% during trading hours (8am-4pm EST)
-- [ ] Integration test verifies cache hit/miss behavior
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing
-- Cache hit rate metrics exported
-
-**Priority**: Low because caching is a performance optimization, not a correctness fix. Deferred until after stability is proven.
-
-**Complexity**: 5 points based on: Redis integration, cache key design, TTL logic, no external vendor lock-in needed
+**Story Points**: 5 | **Type**: Performance
 
 ---
 
 ### TP-L02: Add Prometheus Metrics & Observability Dashboard
-**User Story**: As an SRE, I need Prometheus metrics (request latency, DB query time, provider call duration) so I can detect performance regressions before users report them.
+**User Story**: As an SRE, I need metrics and dashboards for production monitoring.
 
-**Acceptance Criteria**:
-- [ ] Export 3 core metrics: `http_request_duration_seconds` (histogram), `db_query_duration_seconds`, `data_provider_call_duration_seconds`
-- [ ] Prometheus scrape endpoint: `GET /metrics`
-- [ ] Grafana dashboard displays: latency p50/p95/p99, error rate, provider fallback count
-- [ ] Alert rule: trigger if p99 latency > 5s
-
-**Definition of Done**:
-- Code reviewed and merged
-- Tests passing
-- Grafana dashboard deployed and verified
-
-**Priority**: Low because metrics are observability tooling, not functionality. Deferred until core features are stable and measurable.
-
-**Complexity**: 5 points based on: Prometheus client integration, metric definition, minimal code changes
+**Story Points**: 5 | **Type**: Infrastructure
 
 ---
 
