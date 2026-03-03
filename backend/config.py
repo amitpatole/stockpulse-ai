@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Central Configuration
 All settings are driven by environment variables with sensible defaults.
@@ -24,7 +25,27 @@ class Config:
     # -------------------------------------------------------------------------
     # Flask
     # -------------------------------------------------------------------------
-    SECRET_KEY = os.getenv('SECRET_KEY', 'tickerpulse-dev-key-change-in-prod')
+    # TP-C04: SECRET_KEY with production enforcement
+    _SECRET_KEY = os.getenv('SECRET_KEY')
+    ENV = os.getenv('ENV', 'development').lower()
+    
+    if not _SECRET_KEY:
+        if ENV == 'production':
+            raise ValueError(
+                "CRITICAL: SECRET_KEY environment variable not set in production mode. "
+                "Set SECRET_KEY to a secure random value before running in production. "
+                "Example: openssl rand -hex 32"
+            )
+        # Development default (NEVER use in production)
+        _SECRET_KEY = 'tickerpulse-dev-key-change-in-prod'
+        if ENV == 'development':
+            import logging
+            logging.getLogger(__name__).warning(
+                "Using development SECRET_KEY. Change SECRET_KEY environment variable for production."
+            )
+    
+    SECRET_KEY: str = _SECRET_KEY
+    
     FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
     FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
