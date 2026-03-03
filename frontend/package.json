@@ -1,5 +1,3 @@
-(Keep all existing content and add these devDependencies)
-```json
 {
   "name": "tickerpulse-frontend",
   "version": "3.0.0",
@@ -44,4 +42,3 @@
     "axe-playwright": "^1.2.0"
   }
 }
-```

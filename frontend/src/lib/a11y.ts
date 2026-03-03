@@ -1,4 +1,3 @@
-```typescript
 /**
  * Accessibility utilities for WCAG 2.1 Level AA compliance
  * Focus management, keyboard event handling, and screen reader support
@@ -154,4 +153,3 @@ export function focusTarget(targetSelector: string): void {
     target.setAttribute('tabindex', '-1');
   }
 }
-```

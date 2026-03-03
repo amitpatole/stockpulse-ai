@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -116,4 +115,3 @@ export function useSkipLink(targetSelector: string) {
     };
   }, [targetSelector]);
 }
-```
