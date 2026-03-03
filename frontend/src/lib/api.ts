@@ -28,7 +28,7 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit & { signal?: AbortSignal }): Promise<T> {
   const url = `${API_BASE}${path}`;
   try {
     const res = await fetch(url, {
@@ -55,6 +55,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     if (!text) return {} as T;
     return JSON.parse(text) as T;
   } catch (err) {
+    // Handle AbortError gracefully - request was cancelled by user/unmount
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
     if (err instanceof ApiError) throw err;
     throw new ApiError(
       `Failed to connect to API: ${err instanceof Error ? err.message : 'Unknown error'}`,
@@ -188,6 +192,38 @@ export async function getAIProviders(): Promise<AIProvider[]> {
   );
   if (Array.isArray(data)) return data;
   return data.providers || [];
+}
+
+export async function saveAIProvider(provider: string, apiKey: string, model?: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('/api/settings/ai-provider', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider,
+      api_key: apiKey,
+      model: model || undefined,
+    }),
+  });
+}
+
+export async function setAgentFramework(framework: string): Promise<{ success: boolean; framework: string }> {
+  return request<{ success: boolean; framework: string }>('/api/settings/agent-framework', {
+    method: 'POST',
+    body: JSON.stringify({ framework }),
+  });
+}
+
+export async function saveBudgetSettings(monthlyBudget: number, dailyWarning: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('/api/settings/budget', {
+    method: 'POST',
+    body: JSON.stringify({
+      monthly_budget: monthlyBudget,
+      daily_warning: dailyWarning,
+    }),
+  });
+}
+
+export async function getBudgetSettings(): Promise<{ monthly_budget: number; daily_warning: number }> {
+  return request<{ monthly_budget: number; daily_warning: number }>('/api/settings/budget');
 }
 
 // ---- Health ----

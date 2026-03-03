@@ -16,7 +16,8 @@ import {
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import { useApi } from '@/hooks/useApi';
-import { getAIProviders, getHealth } from '@/lib/api';
+import { getAIProviders, getHealth, saveAIProvider, setAgentFramework, saveBudgetSettings } from '@/lib/api';
+import { ToastContainer, useToast } from '@/components/ui/Toast';
 import type { AIProvider, HealthCheck } from '@/lib/types';
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -33,9 +34,19 @@ const PROVIDER_ICONS: Record<string, string> = {
   xai: 'xAI',
 };
 
-function ProviderCard({ provider }: { provider: AIProvider }) {
+interface ProviderCardProps {
+  provider: AIProvider;
+  onSave: (provider: string, apiKey: string, model: string) => Promise<void>;
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
+}
+
+function ProviderCard({ provider, onSave, onSuccess, onError }: ProviderCardProps) {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [selectedModel, setSelectedModel] = useState(provider.default_model || '');
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
 
   const colorClass = PROVIDER_COLORS[provider.name] || 'border-slate-500/30 bg-slate-500/5';
@@ -54,6 +65,24 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
       setTestResult('error');
     }
     setTesting(false);
+  };
+
+  const handleSave = async () => {
+    if (!apiKey.trim()) {
+      onError('API key is required');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave(provider.name, apiKey, selectedModel);
+      onSuccess(`${provider.display_name} configuration saved`);
+      setApiKey('');
+    } catch (err) {
+      onError(`Failed to save ${provider.display_name} configuration`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -92,7 +121,8 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
         <div className="relative">
           <input
             type={showKey ? 'text' : 'password'}
-            defaultValue={provider.configured ? '••••••••••••••••••••' : ''}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
             placeholder={`Enter ${provider.display_name || provider.name} API key`}
             className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 pr-10 text-sm text-white placeholder-slate-600 outline-none focus:border-blue-500"
           />
@@ -110,7 +140,8 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
       <div className="mt-3">
         <label className="mb-1.5 block text-xs text-slate-400">Default Model</label>
         <select
-          defaultValue={provider.default_model || ''}
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
           className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
         >
           {provider.models && provider.models.length > 0 ? (
@@ -125,11 +156,24 @@ function ProviderCard({ provider }: { provider: AIProvider }) {
         </select>
       </div>
 
-      {/* Test Connection */}
+      {/* Action Buttons */}
       <div className="mt-4 flex items-center gap-2">
         <button
+          onClick={handleSave}
+          disabled={saving || !apiKey.trim()}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <CheckCircle className="h-3 w-3" />
+          )}
+          Save
+        </button>
+
+        <button
           onClick={handleTest}
-          disabled={testing}
+          disabled={testing || !provider.configured}
           className="flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-600 disabled:opacity-50"
         >
           {testing ? (
@@ -160,12 +204,58 @@ export default function SettingsPage() {
   const { data: health } = useApi<HealthCheck>(getHealth, [], { refreshInterval: 30000 });
 
   const [framework, setFramework] = useState<'crewai' | 'openclaw'>('crewai');
+  const [monthlyBudget, setMonthlyBudget] = useState(50);
+  const [dailyWarning, setDailyWarning] = useState(5);
+  const [frameworkSaving, setFrameworkSaving] = useState(false);
+  const [budgetSaving, setBudgetSaving] = useState(false);
+
+  const { toasts, removeToast, success: showSuccess, error: showError } = useToast();
+
+  const handleSaveProvider = async (provider: string, apiKey: string, model: string) => {
+    await saveAIProvider(provider, apiKey, model);
+  };
+
+  const handleSetFramework = async () => {
+    setFrameworkSaving(true);
+    try {
+      await setAgentFramework(framework);
+      showSuccess(`Agent framework set to ${framework === 'crewai' ? 'CrewAI' : 'OpenClaw'}`);
+    } catch (err) {
+      showError('Failed to save framework selection');
+    } finally {
+      setFrameworkSaving(false);
+    }
+  };
+
+  const handleSaveBudget = async () => {
+    if (monthlyBudget < 0 || dailyWarning < 0) {
+      showError('Budget values must be non-negative');
+      return;
+    }
+
+    if (dailyWarning > monthlyBudget) {
+      showError('Daily warning threshold cannot exceed monthly budget');
+      return;
+    }
+
+    setBudgetSaving(true);
+    try {
+      await saveBudgetSettings(monthlyBudget, dailyWarning);
+      showSuccess('Budget settings saved successfully');
+    } catch (err) {
+      showError('Failed to save budget settings');
+    } finally {
+      setBudgetSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col">
       <Header title="Settings" subtitle="Configure AI providers and system settings" />
 
       <div className="flex-1 p-6">
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+
         {/* AI Providers */}
         <div className="mb-8">
           <h2 className="mb-4 text-sm font-semibold text-white">AI Providers</h2>
@@ -181,7 +271,13 @@ export default function SettingsPage() {
           {providers && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {providers.map((provider) => (
-                <ProviderCard key={provider.name} provider={provider} />
+                <ProviderCard
+                  key={provider.name}
+                  provider={provider}
+                  onSave={handleSaveProvider}
+                  onSuccess={showSuccess}
+                  onError={showError}
+                />
               ))}
             </div>
           )}
@@ -231,6 +327,15 @@ export default function SettingsPage() {
                 <p className="mt-0.5 text-xs text-slate-400">Alternative framework - experimental</p>
               </button>
             </div>
+
+            <button
+              onClick={handleSetFramework}
+              disabled={frameworkSaving}
+              className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {frameworkSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save Framework Selection
+            </button>
           </div>
         </div>
 
@@ -253,7 +358,8 @@ export default function SettingsPage() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
                   <input
                     type="number"
-                    defaultValue="50"
+                    value={monthlyBudget}
+                    onChange={(e) => setMonthlyBudget(parseFloat(e.target.value) || 0)}
                     step="1"
                     min="0"
                     className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2 pl-7 pr-3 text-sm text-white outline-none focus:border-blue-500 font-mono"
@@ -266,7 +372,8 @@ export default function SettingsPage() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
                   <input
                     type="number"
-                    defaultValue="5"
+                    value={dailyWarning}
+                    onChange={(e) => setDailyWarning(parseFloat(e.target.value) || 0)}
                     step="0.50"
                     min="0"
                     className="w-full rounded-lg border border-slate-700 bg-slate-800/50 py-2 pl-7 pr-3 text-sm text-white outline-none focus:border-blue-500 font-mono"
@@ -275,7 +382,12 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <button className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+            <button
+              onClick={handleSaveBudget}
+              disabled={budgetSaving}
+              className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {budgetSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               Save Budget Settings
             </button>
           </div>
