@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Flask Application Factory
 Creates and configures the Flask app, registers blueprints, sets up SSE,
@@ -8,11 +9,12 @@ import json
 import queue
 import logging
 import threading
+import secrets
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, send_from_directory
+from flask import Flask, Response, jsonify, send_from_directory, request, session
 
 from backend.config import Config
 from backend.database import init_all_tables
@@ -43,6 +45,33 @@ def send_sse_event(event_type: str, data: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# CSRF Token Management (TP-C05)
+# ---------------------------------------------------------------------------
+
+CSRF_TOKEN_LENGTH = 32
+CSRF_HEADER_NAME = 'X-CSRF-Token'
+CSRF_PARAM_NAME = '_csrf_token'
+CSRF_SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS', 'TRACE'}
+
+
+def _get_csrf_token() -> str:
+    """Get or create CSRF token in session."""
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_urlsafe(CSRF_TOKEN_LENGTH)
+    return session['_csrf_token']
+
+
+def _validate_csrf_token(token: str | None) -> bool:
+    """Validate CSRF token from request."""
+    if token is None:
+        return False
+    expected = session.get('_csrf_token')
+    if expected is None:
+        return False
+    return secrets.compare_digest(token, expected)
+
+
+# ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
 
@@ -57,6 +86,9 @@ def create_app() -> Flask:
 
     # -- Core Flask config ---------------------------------------------------
     app.config['SECRET_KEY'] = Config.SECRET_KEY
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
     # -- Logging -------------------------------------------------------------
     _setup_logging(app)
@@ -76,8 +108,37 @@ def create_app() -> Flask:
         init_all_tables()
         logger.info("Database tables initialised")
 
+    # -- CSRF Protection Middleware (TP-C05) ---------------------------------
+    @app.before_request
+    def csrf_protection():
+        """Validate CSRF tokens for state-changing operations."""
+        if request.method not in CSRF_SAFE_METHODS:
+            token = request.headers.get(CSRF_HEADER_NAME) or request.form.get(CSRF_PARAM_NAME)
+            if not _validate_csrf_token(token):
+                logger.warning(f"CSRF validation failed for {request.method} {request.path}")
+                return jsonify({
+                    'error': 'CSRF token validation failed',
+                    'message': 'Missing or invalid CSRF token'
+                }), 403
+
     # -- Register API blueprints ---------------------------------------------
     _register_blueprints(app)
+
+    # -- CSRF Token Endpoint (TP-C05) ----------------------------------------
+    @app.route('/api/csrf-token', methods=['GET', 'POST'])
+    def get_csrf_token():
+        """Get CSRF token for form submissions and state-changing operations.
+        
+        Returns:
+            JSON object with 'csrf_token' field
+            
+        Security:
+            - Token stored in secure, httponly session cookie
+            - Token is unique per session
+            - Required for all POST/PUT/DELETE operations
+        """
+        token = _get_csrf_token()
+        return jsonify({'csrf_token': token})
 
     # -- SSE endpoint --------------------------------------------------------
     @app.route('/api/stream')
@@ -271,3 +332,4 @@ if __name__ == '__main__':
         port=Config.FLASK_PORT,
         debug=Config.FLASK_DEBUG,
     )
+```

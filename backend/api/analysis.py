@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Analysis API Routes
 Blueprint for AI ratings and chart data endpoints.
@@ -49,13 +50,92 @@ def _get_cached_ratings():
     return None
 
 
+def _validate_period_parameter(period_str: str | None) -> tuple[int | None, dict | None]:
+    """
+    Validate and parse period parameter as integer (1-252).
+    
+    Returns:
+        (period_value, error_response) - either period value is set, or error_response is set
+    """
+    if period_str is None:
+        return None, None
+    
+    try:
+        period = int(period_str)
+        if period < 1 or period > 252:
+            logger.warning(f"Period out of range: {period} (must be 1-252)")
+            return None, (jsonify({
+                'error': 'Invalid period parameter',
+                'message': 'period must be an integer between 1 and 252',
+                'received': period_str
+            }), 422)
+        return period, None
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid period parameter: {period_str} (not an integer)")
+        return None, (jsonify({
+            'error': 'Invalid period parameter',
+            'message': 'period must be an integer between 1 and 252',
+            'received': period_str
+        }), 422)
+
+
+def _validate_limit_parameter(limit_str: str | None) -> tuple[int | None, dict | None]:
+    """
+    Validate and parse limit parameter as integer (1-1000).
+    
+    Returns:
+        (limit_value, error_response) - either limit value is set, or error_response is set
+    """
+    if limit_str is None:
+        return None, None
+    
+    try:
+        limit = int(limit_str)
+        if limit < 1 or limit > 1000:
+            logger.warning(f"Limit out of range: {limit} (must be 1-1000)")
+            return None, (jsonify({
+                'error': 'Invalid limit parameter',
+                'message': 'limit must be an integer between 1 and 1000',
+                'received': limit_str
+            }), 422)
+        return limit, None
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid limit parameter: {limit_str} (not an integer)")
+        return None, (jsonify({
+            'error': 'Invalid limit parameter',
+            'message': 'limit must be an integer between 1 and 1000',
+            'received': limit_str
+        }), 422)
+
+
 @analysis_bp.route('/ai/ratings', methods=['GET'])
 def get_ai_ratings():
     """Get AI ratings for all active stocks.
 
+    Query Parameters:
+        period (int, optional): Analysis period in days (1-252). Default: None.
+        limit (int, optional): Max ratings to return (1-1000). Default: None.
+
     Serves cached ratings from ai_ratings table, then computes live ratings
     for any active stocks that are missing from the cache.
+    
+    Errors:
+        422: Invalid period or limit parameter
     """
+    # TP-C02: Validate period parameter
+    period_str = request.args.get('period', None)
+    if period_str is not None:
+        period, error = _validate_period_parameter(period_str)
+        if error:
+            return error
+    
+    # TP-C02: Validate limit parameter
+    limit_str = request.args.get('limit', None)
+    if limit_str is not None:
+        limit, error = _validate_limit_parameter(limit_str)
+        if error:
+            return error
+    
     analytics = StockAnalytics()
 
     # Get all active stock tickers
@@ -96,6 +176,11 @@ def get_ai_ratings():
 
     # Return only active stocks, sorted by ticker
     results = [cached_map[t] for t in sorted(active_tickers) if t in cached_map]
+    
+    # Apply limit if specified
+    if limit_str is not None and limit > 0:
+        results = results[:limit]
+    
     return jsonify(results)
 
 
@@ -119,7 +204,7 @@ def get_ai_rating(ticker):
 
 
 @analysis_bp.route('/chart/<ticker>', methods=['GET'])
-def get_chart_data(ticker):
+def get_chart_data(ticker: str):
     """Get historical price data for chart rendering.
 
     Path Parameters:
@@ -138,9 +223,21 @@ def get_chart_data(ticker):
         - stats: Summary statistics (current_price, high, low, change, volume)
 
     Errors:
+        400: Invalid period parameter
         404: No data available or no valid data points.
     """
-    period = request.args.get('period', '1mo')
+    # Validate and sanitize period parameter
+    VALID_PERIODS = {'1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max'}
+    period = request.args.get('period', '1mo').strip().lower()
+
+    if period not in VALID_PERIODS:
+        logger.warning(f"Invalid period requested: {period} for ticker {ticker}")
+        return jsonify({
+            'error': 'Invalid period parameter',
+            'message': f"Period must be one of: {', '.join(sorted(VALID_PERIODS))}",
+            'received': period
+        }), 400
+
     analytics = StockAnalytics()
     price_data = analytics.get_stock_price_data(ticker, period)
 
@@ -197,3 +294,4 @@ def get_chart_data(ticker):
             'total_volume': sum([p['volume'] for p in data_points if p['volume']])
         }
     })
+```
