@@ -1,372 +1,185 @@
-# Sprint Backlog: TickerPulse Checkout v3.2.2+
+# Sprint Backlog: TickerPulse Checkout Backend
 
 **Last Updated**: 2026-03-05
-**Status**: Ready for Sprint Planning
-**Total Capacity**: 48 story points over 6 sprints (8 pts/sprint target)
+**Planning Period**: 18 weeks (6 sprints, 3 weeks per sprint)
+**Target Velocity**: 8-13 story points per sprint
+**Priority Methodology**: Fix critical blocking issues first → High-impact refactoring → Stability → Observability
 
 ---
 
-## CRITICAL Priority (Fix Before Shipping)
+## 📋 Backlog Overview
 
-### 1. Fix Import Path Errors in ai_analytics.py
-
-**User Story**
-As a **backend developer**, I want to fix incorrect module imports in `ai_analytics.py`, so that AI analytics functions don't crash at runtime with `ModuleNotFoundError`.
-
-**Acceptance Criteria**
-- [ ] Lines 464-465 in `backend/core/ai_analytics.py` updated to use correct import paths (`backend.core.settings_manager` and `backend.core.ai_providers`)
-- [ ] All AI analytics functions execute without import errors (verified by running unit tests for `ai_analytics.py`)
-- [ ] No `ModuleNotFoundError` in logs when accessing analytics endpoints
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-CRITICAL because this is a runtime blocker that will crash the application whenever AI analytics code is executed.
-
-**Complexity**
-1 point | Single file fix, straightforward import path correction
-
+| Priority | Count | Points | Target Sprint | Impact |
+|----------|-------|--------|----------------|--------|
+| 🔴 Critical | 5 | 18 | Sprint 1-2 | Blocking runtime errors, security vulnerabilities |
+| 🟠 High | 5 | 21 | Sprint 2-4 | Code quality, maintainability, test coverage |
+| 🟡 Medium | 3 | 13 | Sprint 4-5 | Database stability, N+1 query fixes |
+| 🔵 Low | 2 | 8 | Sprint 5-6 | Observability, performance optimization |
+| **TOTAL** | **15** | **60** | **6 sprints** | **Production readiness** |
 
 ---
 
-### 2. Fix API Key Exposure in Logs
+## 🔴 CRITICAL Priority (Sprint 1-2, Weeks 1-4)
 
-**User Story**
-As a **security engineer**, I want to mask API keys in all log output, so that sensitive credentials are never exposed in logs or debugging output.
+Must be fixed before any feature work. These block runtime execution or expose security vulnerabilities.
 
-**Acceptance Criteria**
-- [ ] Create `_mask_api_key()` utility function that masks all but first 4 and last 4 characters (e.g., `"sk_live_xxxxx...1234"`)
-- [ ] Update `backend/api/settings.py` (line 158+) to mask API key before any logging
-- [ ] Update `backend/core/ai_providers.py` to use masked key in debug logs
-- [ ] Verify logs contain no unmasked API keys (scan logs for full API key patterns)
+### TP-C01: Fix Import Path Errors in ai_analytics.py
+**User Story**: As a DevOps engineer, I need to fix runtime import errors so the app starts without crashing.
 
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
+**Acceptance Criteria**:
+- [ ] Lines 464-465 corrected to valid Python import syntax
+- [ ] Module imports successfully without ImportError
+- [ ] All downstream imports in api/analysis.py resolve correctly
 
-**Priority**
-CRITICAL because unmasked API keys in logs create security vulnerabilities and compliance violations.
-
-**Complexity**
-2 points | Small utility function + updates to 3 files, straightforward masking logic
-
+**Story Points**: 3 | **Type**: Bug Fix
 
 ---
 
-### 3. Fix Hardcoded SECRET_KEY in config.py
+### TP-C02: Add Input Validation to API Period & Limit Parameters
+**User Story**: As a security engineer, I need to validate all user-supplied parameters so the API rejects invalid requests.
 
-**User Story**
-As a **DevOps engineer**, I want to ensure `SECRET_KEY` is always loaded from environment variables with no fallback default, so that sessions are secure in production.
+**Acceptance Criteria**:
+- [ ] Query parameter validators added for period (int, 1-252)
+- [ ] Query parameter validators added for limit (int, 1-1000)
+- [ ] Invalid requests return 400 Bad Request with error message
 
-**Acceptance Criteria**
-- [ ] Remove the hardcoded default value from `backend/config.py` line 27
-- [ ] Raise `ValueError` with clear message if `SECRET_KEY` environment variable is not set
-- [ ] Document required environment variables in `docs/DEPLOYMENT.md`
-- [ ] Verify CI/CD fails with helpful error if SECRET_KEY is missing
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-CRITICAL because hardcoded fallback defeats security in production if env var is accidentally missing.
-
-**Complexity**
-1 point | Single file change + error handling, minimal dependencies
-
+**Story Points**: 5 | **Type**: Security Fix
 
 ---
 
-### 4. Add Input Validation to API Endpoints
+### TP-C03: Mask API Keys in Logs & Responses
+**User Story**: As a security officer, I need to prevent API keys from being logged to avoid credential exposure.
 
-**User Story**
-As a **quality assurance engineer**, I want all API endpoints to validate query parameters (period, limit, ticker), so that invalid data cannot be accepted or processed.
+**Acceptance Criteria**:
+- [ ] API keys masked in all log output (show only last 4 chars)
+- [ ] Config debug logging masks sensitive fields
+- [ ] Data provider initialization logs don't expose keys
 
-**Acceptance Criteria**
-- [ ] `GET /api/analysis/period-analysis/<ticker>`: validate `period` against whitelist `['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']`, return 400 if invalid
-- [ ] `GET /api/research/briefs`: validate `limit` is integer between 1-200, return 400 if invalid
-- [ ] `GET /api/stocks/search`: validate `ticker` is alphanumeric (A-Z, 0-9) max 5 chars, return 400 if invalid
-- [ ] All invalid requests return 400 with clear error message specifying allowed values
-- [ ] Automated tests verify all invalid inputs are rejected (5+ test cases per endpoint)
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-CRITICAL because invalid input can corrupt financial data calculations and confuse users.
-
-**Complexity**
-3 points | Updates to 3+ endpoints, validation logic, test coverage
-
+**Story Points**: 3 | **Type**: Security Fix
 
 ---
 
-### 5. Add Error Boundary Component to Frontend
+### TP-C04: Fix Hardcoded SECRET_KEY in config.py
+**User Story**: As a DevOps engineer, I need to load SECRET_KEY from environment for unique secrets per deployment.
 
-**User Story**
-As a **frontend developer**, I want to add an Error Boundary component to wrap the React app, so that JavaScript errors don't crash the entire page.
+**Acceptance Criteria**:
+- [ ] SECRET_KEY loaded from os.environ.get("SECRET_KEY")
+- [ ] Error raised if SECRET_KEY not set in production
+- [ ] Test uses test-specific SECRET_KEY
 
-**Acceptance Criteria**
-- [ ] Create `ErrorBoundary.tsx` component that catches all JavaScript errors in child components
-- [ ] Error boundary displays user-friendly message when error occurs (not technical stack trace)
-- [ ] Error details are logged with context (timestamp, user_id, URL) for debugging
-- [ ] Component can recover from errors when page is refreshed
-- [ ] Unit tests verify error catching and recovery behavior
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-CRITICAL because unhandled JavaScript errors create poor user experience and hide real issues.
-
-**Complexity**
-2 points | New component, React lifecycle methods, logging integration
+**Story Points**: 2 | **Type**: Security Fix
 
 ---
 
-## HIGH Priority (Next 2 Sprints)
+### TP-C05: Add CSRF Token Protection to State-Changing Operations
+**User Story**: As a security engineer, I need to enforce CSRF tokens on all POST/PUT/DELETE operations.
 
-### 6. Add Type Hints Coverage from 30% to 95%
+**Acceptance Criteria**:
+- [ ] CSRF middleware added to FastAPI app
+- [ ] All POST/PUT/DELETE endpoints validate CSRF token
+- [ ] API returns 403 Forbidden for missing/invalid tokens
 
-**User Story**
-As a **code quality engineer**, I want to increase type hint coverage from 30% to 95% across all backend modules, so that developers catch type errors early and improve code clarity.
-
-**Acceptance Criteria**
-- [ ] Run `mypy --strict` across all backend modules and document baseline (currently ~30%)
-- [ ] Add type hints to all function signatures in `backend/core/`, `backend/api/`, `backend/models/`
-- [ ] Add return type hints to all functions (no implicit `None` returns)
-- [ ] Target 95%+ coverage verified by mypy in strict mode
-- [ ] mypy passes in CI/CD pipeline with no errors or warnings
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-HIGH because type errors cause production bugs and poor developer experience. Strong typing catches errors early.
-
-**Complexity**
-5 points | Affects 40+ files, significant effort across multiple modules
-
+**Story Points**: 5 | **Type**: Security Feature
 
 ---
 
-### 7. Refactor Complex Functions (ai_rating, generate_brief)
+## 🟠 HIGH Priority (Sprint 2-4, Weeks 3-9)
 
-**User Story**
-As a **backend developer**, I want to refactor `calculate_ai_rating()` (175 lines) and `_generate_sample_brief()` (148 lines) into smaller, testable functions, so that code is maintainable and bugs are easier to fix.
+### TP-H01: Add Type Hints to Core Functions (Phase 1)
+**User Story**: As a QA engineer, I need comprehensive type hints so mypy catches bugs at type-check time.
 
-**Acceptance Criteria**
-- [ ] Break `calculate_ai_rating()` into 4+ smaller functions: `_calculate_momentum_rating()`, `_calculate_trend_rating()`, `_aggregate_ratings()`
-- [ ] Break `_generate_sample_brief()` into 3+ functions: `_format_section()`, `_apply_indicators()`, `_compile_brief()`
-- [ ] Each function ≤40 lines, single responsibility, testable in isolation
-- [ ] All new functions have type hints and docstrings
-- [ ] Existing unit tests pass without modification (behavior unchanged)
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-HIGH because complex monolithic functions are hard to test, debug, and maintain. Reduces technical debt.
-
-**Complexity**
-5 points | Significant refactoring, careful testing to avoid behavioral changes
-
+**Story Points**: 8 | **Type**: Refactoring
 
 ---
 
-### 8. Implement Database Connection Pooling
+### TP-H02: Refactor Complex Functions
+**User Story**: As a code maintainer, I need simpler, testable functions for easier debugging.
 
-**User Story**
-As a **DevOps engineer**, I want to implement connection pooling for database operations, so that the application can handle concurrent requests efficiently without connection exhaustion.
-
-**Acceptance Criteria**
-- [ ] Add connection pool (max 10 connections) to `backend/models/database.py`
-- [ ] All database operations use pooled connections (verify no direct `sqlite3.connect()` calls)
-- [ ] Load test shows connection pool handles 50+ concurrent requests without timeouts
-- [ ] Monitor connection pool utilization in logs (info level: pool size, active connections)
-- [ ] Connection failures are caught and logged with retry logic
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-HIGH because current implementation can run out of connections under load, causing request failures.
-
-**Complexity**
-4 points | Database layer changes, integration testing, performance validation
-
+**Story Points**: 8 | **Type**: Refactoring
 
 ---
 
-### 9. Add Request Cancellation (AbortController) to Frontend
+### TP-H03: Consolidate Hardcoded Constants into Config
+**User Story**: As a data scientist, I need centralized configuration for indicator parameters.
 
-**User Story**
-As a **frontend developer**, I want to implement `AbortController` for all fetch requests, so that pending API calls are cancelled when users navigate away or requests take too long.
-
-**Acceptance Criteria**
-- [ ] Add `AbortController` to `lib/api.ts` fetch wrapper
-- [ ] Implement timeout logic: cancel requests after 30 seconds
-- [ ] Cancel pending requests when user navigates to different page (cleanup in useEffect)
-- [ ] Handle `AbortError` gracefully in error handling (don't show as generic error)
-- [ ] Unit tests verify requests are cancelled and errors are handled correctly
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-HIGH because pending requests waste bandwidth and cause memory leaks when users navigate quickly.
-
-**Complexity**
-3 points | Wrapper function changes, cleanup logic, error handling
-
+**Story Points**: 5 | **Type**: Refactoring
 
 ---
 
-### 10. Implement Missing Technical Indicators
+### TP-H04: Add Comprehensive Logging & Error Context
+**User Story**: As a DevOps engineer, I need structured error logs for production diagnostics.
 
-**User Story**
-As a **product manager**, I want to implement all 10 promised technical indicators (RSI, MACD, Bollinger Bands, moving averages, etc.), so that users get the full feature set promised in the product.
-
-**Acceptance Criteria**
-- [ ] Implement 9 missing indicators: MACD, Bollinger Bands, Stochastic, EMA, SMA, ATR, CCI, ADX, VWAP
-- [ ] Each indicator has unit tests verifying correctness against known datasets (e.g., test data for RSI=65 at specific date)
-- [ ] API endpoint `/api/indicators/<ticker>?type=<indicator_type>` returns all 10 indicators
-- [ ] Frontend displays all indicators on stock chart (lazy load if needed)
-- [ ] Documentation updated with indicator definitions and calculation methods
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-HIGH because feature gap (1/10 indicators) is critical for product viability. Users expect promised features.
-
-**Complexity**
-8 points | 9 new algorithms, API endpoint, chart integration, documentation
-
+**Story Points**: 5 | **Type**: Feature
 
 ---
 
-### 11. Fix Settings Page Not Saving Changes
+### TP-H05: Add Unit Tests for Agent Framework & Data Providers
+**User Story**: As a test engineer, I need unit tests for initialization and fallback chains.
 
-**User Story**
-As a **frontend user**, I want to save changes to my settings (API key, preferences, theme) and have them persist, so that my configuration isn't lost on page reload.
-
-**Acceptance Criteria**
-- [ ] Settings form submission calls `PUT /api/settings` with user ID and changed fields
-- [ ] Success shows green toast: "Settings saved successfully"
-- [ ] Validation errors show in toast and fields are highlighted (e.g., "API key must be 32+ characters")
-- [ ] Verify settings persist after page reload (check localStorage + backend API)
-- [ ] Unit tests verify API call is made with correct payload and response is handled
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-HIGH because non-functional feature prevents users from configuring API keys and preferences.
-
-**Complexity**
-3 points | Form submission logic, API integration, validation + error handling
-
+**Story Points**: 8 | **Type**: Testing
 
 ---
 
-## MEDIUM Priority (Sprints 4-5)
+## 🟡 MEDIUM Priority (Sprint 4-5, Weeks 7-10)
 
-### 12. Add Retry Logic to API Calls with Exponential Backoff
+### TP-M01: Fix N+1 Query Patterns in Batch Rating Calculation
+**User Story**: As a performance engineer, I need to optimize batch queries to reduce DB load.
 
-**User Story**
-As a **reliability engineer**, I want to implement automatic retry logic for failed API calls, so that transient network failures don't immediately fail user requests.
-
-**Acceptance Criteria**
-- [ ] Create retry wrapper: `retryFetch(url, options, maxRetries=3, delayMs=100)`
-- [ ] Implement exponential backoff: delay = 100ms * (2 ^ retry_count)
-- [ ] Only retry on transient errors (5xx, timeouts) not permanent errors (4xx)
-- [ ] Log each retry attempt with delay duration (info level)
-- [ ] Unit tests verify retry count, delay timing, and error propagation
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-MEDIUM because network reliability is important but not blocking if requests eventually succeed.
-
-**Complexity**
-3 points | Wrapper function, exponential backoff math, error classification
-
+**Story Points**: 5 | **Type**: Performance
 
 ---
 
-### 13. Extract Hardcoded Constants to Configuration
+### TP-M02: Implement Database Connection Pooling
+**User Story**: As an infrastructure engineer, I need connection pooling to prevent exhaustion.
 
-**User Story**
-As a **DevOps engineer**, I want to move hardcoded constants (RSI=14, MACD=26, rating thresholds=80/65/50/35) to a config file, so that values can be adjusted without redeploying code.
-
-**Acceptance Criteria**
-- [ ] Create `backend/config/constants.py` with all hardcoded values (RSI, MACD, EMA, SMA windows, rating thresholds)
-- [ ] Load constants from environment variables with defaults (e.g., `RSI_WINDOW = int(os.getenv('RSI_WINDOW', 14))`)
-- [ ] Update all references in `ai_analytics.py`, `indicators.py`, etc.
-- [ ] Document all constants in `docs/CONFIGURATION.md` with allowed ranges
-- [ ] Verify tests pass with different constant values
-
-**Definition of Done**
-- Code reviewed and merged
-- Tests written and passing
-- Acceptance criteria verified
-
-**Priority**
-MEDIUM because technical debt but not blocking. Improves flexibility without breaking functionality.
-
-**Complexity**
-3 points | Config file creation, refactoring references, environment variable handling
-
+**Story Points**: 5 | **Type**: Infrastructure
 
 ---
 
-## Sprint Plan
+### TP-M03: Implement Circuit Breaker for External API Calls
+**User Story**: As a reliability engineer, I need circuit breaker to prevent cascade failures.
 
-| Sprint | Focus | Story Points | Target Items | Timeline |
-|--------|-------|--------------|--------------|----------|
-| **Sprint 1** | Critical Fixes | 8 | 1-4 (Import, API Key, SECRET_KEY, Input Validation) | Weeks 1-2 |
-| **Sprint 2** | Frontend + Type Hints | 8 | 5-6 (Error Boundary, Type Hints) | Weeks 3-4 |
-| **Sprint 3** | Refactoring + Pooling | 9 | 7-8 (Complex Functions, Connection Pooling) | Weeks 5-6 |
-| **Sprint 4** | Frontend Completion | 6 | 9, 11 (AbortController, Settings Save) | Weeks 7-8 |
-| **Sprint 5** | Feature Gap + Reliability | 11 | 10, 12-13 (Indicators, Retry, Constants) | Weeks 9-10 |
-| **Sprint 6** | Polish + Monitoring | TBD | Monitoring, Analytics, Polish | Weeks 11+ |
+**Story Points**: 8 | **Type**: Feature
 
 ---
 
-## Success Metrics
+## 🔵 LOW Priority (Sprint 5-6, Weeks 11+)
 
-✅ **Quality Gates** (required before merge):
-- All tests passing (unit + E2E)
-- TypeScript compiles without errors
-- No linting violations (ESLint, Black)
-- Code review approval
-- Acceptance criteria verified
+### TP-L01: Implement Caching Layer for Indicator Calculations
+**User Story**: As a performance engineer, I need caching to avoid repeated calculations.
 
-✅ **Velocity**: Target 8-9 points per sprint (adjust after Sprint 1)
+**Story Points**: 5 | **Type**: Performance
 
-✅ **Shipping**: All CRITICAL items complete before v3.3.0 release
+---
+
+### TP-L02: Add Prometheus Metrics & Observability Dashboard
+**User Story**: As an SRE, I need metrics and dashboards for production monitoring.
+
+**Story Points**: 5 | **Type**: Infrastructure
+
+---
+
+## 📊 Sprint Delivery Schedule
+
+| Sprint | Weeks | Velocity | Focus | Tasks |
+|--------|-------|----------|-------|-------|
+| 1 | 1-3 | 13 pts | Critical runtime fixes | TP-C01-C04 |
+| 2 | 4-6 | 16 pts | Security + type hints | TP-C05, TP-H01, TP-H04 |
+| 3 | 7-9 | 13 pts | Refactoring & config | TP-H02, TP-H03, TP-H05 |
+| 4 | 10-12 | 10 pts | Testing & N+1 fixes | TP-H05, TP-M01 |
+| 5 | 13-15 | 13 pts | Infrastructure | TP-M02, TP-M03, TP-L01 |
+| 6+ | 16-18 | 5 pts | Observability | TP-L02 |
+
+**Total**: 60 points across 15 tasks over 6 sprints (18 weeks)
+
+---
+
+## ✅ Success Criteria
+
+- [ ] All 15 tasks completed and merged
+- [ ] Code review approved for every task
+- [ ] Test coverage > 80% on critical paths
+- [ ] Zero critical/high security findings
+- [ ] Type hints: 95%+ coverage
+- [ ] All tests passing (unit + integration)
+- [ ] Load test: p99 latency < 5s at 100 concurrent requests
