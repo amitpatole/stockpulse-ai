@@ -1,7 +1,7 @@
 ```python
 """
 TickerPulse AI v3.0 - Flask Application Factory
-Creates and configures the Flask app, registers blueprints, sets up SSE,
+Creates and configures the Flask app, registers blueprints, sets up SSE/WebSocket,
 initialises the database and scheduler.
 """
 
@@ -15,11 +15,45 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, send_from_directory, request, session
+from flask_socketio import SocketIO, emit, join_room, leave_room, disconnect
 
 from backend.config import Config
 from backend.database import init_all_tables
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket infrastructure
+# ---------------------------------------------------------------------------
+
+socketio: SocketIO | None = None
+websocket_subscriptions: dict[str, set[str]] = {}  # {ticker: {sid1, sid2, ...}}
+websocket_lock = threading.Lock()
+
+
+def broadcast_price_update(ticker: str, price_data: dict) -> None:
+    """Broadcast a price update to all clients subscribed to a ticker.
+    
+    Args:
+        ticker: Stock ticker symbol
+        price_data: Price update data (e.g. {'price': 125.50, 'timestamp': '...'})
+    """
+    if not socketio:
+        return
+    
+    with websocket_lock:
+        if ticker in websocket_subscriptions:
+            room = f"ticker_{ticker}"
+            socketio.emit(
+                'price_update',
+                {
+                    'ticker': ticker,
+                    **price_data
+                },
+                room=room,
+                namespace='/prices'
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +141,21 @@ def create_app() -> Flask:
     with app.app_context():
         init_all_tables()
         logger.info("Database tables initialised")
+
+    # -- WebSocket/SocketIO --------------------------------------------------
+    global socketio
+    try:
+        socketio = SocketIO(
+            app,
+            cors_allowed_origins=Config.CORS_ORIGINS,
+            async_mode='threading',
+            ping_timeout=60,
+            ping_interval=25,
+        )
+        logger.info("SocketIO initialised for WebSocket support")
+    except Exception as exc:
+        logger.warning("Could not initialise SocketIO: %s. WebSocket disabled.", exc)
+        socketio = None
 
     # -- CSRF Protection Middleware (TP-C05) ---------------------------------
     @app.before_request
@@ -266,6 +315,7 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.settings':         'settings_bp',
         'backend.api.scheduler_routes': 'scheduler_bp',
         'backend.api.downloads':        'bp',
+        'backend.api.prices':           'prices_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():
@@ -327,9 +377,18 @@ def _init_scheduler(app: Flask) -> None:
 
 if __name__ == '__main__':
     application = create_app()
-    application.run(
-        host='0.0.0.0',
-        port=Config.FLASK_PORT,
-        debug=Config.FLASK_DEBUG,
-    )
+    if socketio:
+        socketio.run(
+            application,
+            host='0.0.0.0',
+            port=Config.FLASK_PORT,
+            debug=Config.FLASK_DEBUG,
+            allow_unsafe_werkzeug=True,
+        )
+    else:
+        application.run(
+            host='0.0.0.0',
+            port=Config.FLASK_PORT,
+            debug=Config.FLASK_DEBUG,
+        )
 ```
