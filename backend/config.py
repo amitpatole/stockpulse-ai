@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Central Configuration
 All settings are driven by environment variables with sensible defaults.
@@ -24,7 +25,18 @@ class Config:
     # -------------------------------------------------------------------------
     # Flask
     # -------------------------------------------------------------------------
-    SECRET_KEY = os.getenv('SECRET_KEY', 'tickerpulse-dev-key-change-in-prod')
+    # CRITICAL FIX: Enforce SECRET_KEY in production
+    SECRET_KEY = os.getenv('SECRET_KEY', None)
+    if not SECRET_KEY:
+        flask_env = os.getenv('FLASK_ENV', 'development')
+        if flask_env != 'development':
+            raise RuntimeError(
+                'FATAL: SECRET_KEY environment variable must be set in production. '
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        # Only allow hardcoded default in development
+        SECRET_KEY = 'dev-key-for-local-testing-only'
+
     FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
     FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
@@ -130,3 +142,4 @@ class Config:
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 10_485_760))  # 10 MB
     LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
+```

@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Analysis API Routes
 Blueprint for AI ratings and chart data endpoints.
@@ -14,6 +15,9 @@ from backend.config import Config
 logger = logging.getLogger(__name__)
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api')
+
+# Valid period values for chart data
+ALLOWED_PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '5y', 'max']
 
 
 def _get_cached_ratings():
@@ -138,9 +142,16 @@ def get_chart_data(ticker):
         - stats: Summary statistics (current_price, high, low, change, volume)
 
     Errors:
+        400: Invalid period value
         404: No data available or no valid data points.
     """
+    # CRITICAL FIX: Validate period parameter
     period = request.args.get('period', '1mo')
+    if period not in ALLOWED_PERIODS:
+        return jsonify({
+            'error': f'Invalid period. Allowed values: {", ".join(ALLOWED_PERIODS)}'
+        }), 400
+
     analytics = StockAnalytics()
     price_data = analytics.get_stock_price_data(ticker, period)
 
@@ -197,3 +208,4 @@ def get_chart_data(ticker):
             'total_volume': sum([p['volume'] for p in data_points if p['volume']])
         }
     })
+```

@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs.
@@ -22,13 +23,26 @@ def list_briefs():
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
-        limit (int, optional): Max briefs to return. Default 50.
+        limit (int, optional): Max briefs to return. Default 50, max 200.
 
     Returns:
         JSON array of research brief objects.
+        400: Invalid limit value.
     """
     ticker = request.args.get('ticker', None)
-    limit = min(int(request.args.get('limit', 50)), 200)
+    
+    # CRITICAL FIX: Validate limit parameter
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (ValueError, TypeError):
+        return jsonify({
+            'error': 'Limit must be an integer'
+        }), 400
+    
+    if limit < 1 or limit > 200:
+        return jsonify({
+            'error': 'Limit must be between 1 and 200'
+        }), 400
 
     try:
         conn = sqlite3.connect(Config.DB_PATH)
@@ -241,3 +255,4 @@ Reddit and social media analysis indicates:
             'model_used': 'claude-sonnet-4-5 (stub)',
             'created_at': now,
         }
+```
