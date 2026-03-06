@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { BarChart3, Bell, Activity, TrendingUp } from 'lucide-react';
@@ -111,4 +110,3 @@ export default function KPICards() {
     </section>
   );
 }
-```

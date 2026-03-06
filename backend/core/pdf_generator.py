@@ -1,4 +1,3 @@
-```python
 """
 PDF Generator - Generate PDF reports from research briefs.
 
@@ -244,4 +243,3 @@ def generate_pdf_for_brief(
     """
     generator = PDFGenerator(page_size=page_size)
     return generator.generate_pdf_bytes(brief_data)
-```

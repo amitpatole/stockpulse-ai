@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -111,4 +110,3 @@ export function useToast() {
 
   return { toasts, addToast, removeToast, success, error, info };
 }
-```

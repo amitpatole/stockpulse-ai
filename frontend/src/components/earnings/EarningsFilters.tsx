@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import React, { useState, useCallback } from 'react';
@@ -126,4 +125,3 @@ export const EarningsFilters: React.FC<EarningsFiltersProps> = ({
     </div>
   );
 };
-```

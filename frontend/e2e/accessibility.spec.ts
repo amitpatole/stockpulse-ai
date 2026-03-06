@@ -1,4 +1,3 @@
-```typescript
 import { test, expect } from '@playwright/test';
 
 test.describe('Keyboard Navigation', () => {
@@ -221,4 +220,3 @@ test.describe('Form Accessibility', () => {
     expect(apiKeyInputs.length).toBeGreaterThan(0);
   });
 });
-```

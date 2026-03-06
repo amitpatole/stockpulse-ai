@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -188,4 +187,3 @@ export function PriceAlertsList({ onSelectAlert, onCreateClick }: PriceAlertsLis
     </div>
   );
 }
-```

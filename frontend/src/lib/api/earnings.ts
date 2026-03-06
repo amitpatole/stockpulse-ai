@@ -1,4 +1,3 @@
-```typescript
 /**
  * API helpers for Earnings Calendar endpoints
  */
@@ -122,4 +121,3 @@ export function formatEarningsDate(dateStr: string, today: Date = new Date()): s
 
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-```

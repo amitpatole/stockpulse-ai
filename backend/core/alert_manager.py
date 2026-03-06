@@ -1,4 +1,3 @@
-```python
 """
 Price alert management - CRUD operations and threshold checking.
 """
@@ -261,4 +260,3 @@ def _row_to_response(row: sqlite3.Row) -> PriceAlertResponse:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
-```

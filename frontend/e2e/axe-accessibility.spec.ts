@@ -1,4 +1,3 @@
-```typescript
 import { test, expect } from '@playwright/test';
 import { injectAxe, checkA11y } from 'axe-playwright';
 
@@ -163,4 +162,3 @@ test.describe('axe-core Accessibility Scanning', () => {
     }
   });
 });
-```

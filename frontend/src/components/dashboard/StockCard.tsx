@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { TrendingUp, TrendingDown, Minus, X } from 'lucide-react';
@@ -176,4 +175,3 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
     </article>
   );
 }
-```

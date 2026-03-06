@@ -1,4 +1,3 @@
-```typescript
 /**
  * Type definitions for Earnings Calendar feature
  */
@@ -54,4 +53,3 @@ export interface EarningsDisplayRecord extends EarningsRecord {
   isToday?: boolean;
   daysUntil?: number;
 }
-```

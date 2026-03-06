@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useState } from 'react';
@@ -132,4 +131,3 @@ export function PriceAlertDetailPanel({ alert, onUpdate, onDelete }: PriceAlertD
     </div>
   );
 }
-```

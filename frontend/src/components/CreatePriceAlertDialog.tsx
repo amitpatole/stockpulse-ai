@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -146,4 +145,3 @@ export function CreatePriceAlertDialog({ isOpen, onClose, onSuccess }: CreatePri
     </Dialog>
   );
 }
-```

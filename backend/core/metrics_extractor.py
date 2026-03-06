@@ -1,4 +1,3 @@
-```python
 """
 Metrics Extractor - Extract key metrics from stocks, ratings, and news tables.
 
@@ -228,4 +227,3 @@ def extract_metrics_for_brief(ticker: str, db_path: Optional[str] = None) -> Dic
     """Convenience function to extract metrics for a brief."""
     extractor = MetricsExtractor(db_path)
     return extractor.extract_brief_metrics(ticker)
-```

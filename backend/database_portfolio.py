@@ -1,4 +1,3 @@
-```python
 # Add this section to your existing database.py initialization
 
 import aiosqlite
@@ -80,4 +79,3 @@ async def get_portfolio_with_positions(
         "portfolio": dict(portfolio_row),
         "positions": [dict(p) for p in positions] if positions else []
     }
-```

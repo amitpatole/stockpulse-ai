@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import React, { useMemo } from 'react';
@@ -125,4 +124,3 @@ export const EarningsTable: React.FC<EarningsTableProps> = ({
     </div>
   );
 };
-```

@@ -1,4 +1,3 @@
-```python
 """
 Query Optimizer - Utility functions for optimized database queries.
 
@@ -220,4 +219,3 @@ def get_brief_with_metadata(brief_id: int) -> Optional[Dict[str, Any]]:
             logger.error(f"Error fetching brief with metadata: {e}")
 
     return None
-```

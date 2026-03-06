@@ -1,4 +1,3 @@
-```typescript
 /**
  * Tests for Earnings Calendar components
  */
@@ -220,4 +219,3 @@ describe('Earnings Calendar Components', () => {
     });
   });
 });
-```

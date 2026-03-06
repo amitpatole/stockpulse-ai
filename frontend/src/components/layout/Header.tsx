@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { Bell, Wifi, WifiOff, Search } from 'lucide-react';
@@ -77,4 +76,3 @@ export default function Header({ title, subtitle }: HeaderProps) {
     </header>
   );
 }
-```

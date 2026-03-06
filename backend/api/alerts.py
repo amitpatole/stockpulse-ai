@@ -1,4 +1,3 @@
-```python
 """
 Price alerts API endpoints - CRUD operations and notifications.
 """
@@ -230,4 +229,3 @@ def delete_alert(alert_id: int) -> tuple[Dict[str, Any], int]:
             'message': 'Failed to delete price alert',
             'status_code': 500,
         }, 500
-```

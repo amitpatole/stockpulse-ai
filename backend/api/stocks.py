@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, search, and group management.
@@ -400,4 +399,3 @@ def assign_stock_to_group(ticker: str) -> tuple[Dict[str, Any], int]:
         'ticker': ticker.upper(),
         'group_id': req.group_id,
     })
-```

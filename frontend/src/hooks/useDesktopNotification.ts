@@ -1,4 +1,3 @@
-```typescript
 import { useCallback } from 'react';
 
 export interface NotificationOptions {
@@ -93,4 +92,3 @@ function playNotificationSound() {
     // Notification API typically handles sound, this is a fallback
   }
 }
-```

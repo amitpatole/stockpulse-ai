@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -142,4 +141,3 @@ export const EarningsDetail: React.FC<EarningsDetailProps> = ({
     </>
   );
 };
-```

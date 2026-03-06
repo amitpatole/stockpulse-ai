@@ -1,4 +1,3 @@
-```python
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 import logging
@@ -148,4 +147,3 @@ class PortfolioService:
             "total_gain_loss": round(total_gain_loss, 2),
             "total_gain_loss_percent": round(total_gain_loss_percent, 2),
         }
-```

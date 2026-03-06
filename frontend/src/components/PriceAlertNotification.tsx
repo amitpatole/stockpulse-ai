@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { useEffect } from 'react';
@@ -51,4 +50,3 @@ export function PriceAlertNotification({ alert, onDismiss }: PriceAlertNotificat
     </div>
   );
 }
-```

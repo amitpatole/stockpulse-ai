@@ -1,4 +1,3 @@
-```typescript
 'use client';
 
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -63,4 +62,3 @@ export default function MetricsCard({ metrics }: MetricsCardProps) {
     </div>
   );
 }
-```

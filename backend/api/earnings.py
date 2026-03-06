@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Earnings Calendar API Routes
 Blueprint for earnings calendar endpoints: list, filter, and sync.
@@ -268,4 +267,3 @@ def sync_earnings() -> tuple[Dict[str, Any], int]:
     except Exception as e:
         logger.error(f"Error syncing earnings: {e}")
         return jsonify({"error": "INTERNAL_ERROR", "message": "Failed to sync earnings"}), 500
-```
