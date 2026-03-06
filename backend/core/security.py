@@ -1,4 +1,4 @@
-```python
+
 """
 Security utilities for TickerPulse AI v3.0
 Handles sensitive data masking, credential protection, and secure logging.
@@ -54,8 +54,8 @@ def mask_api_key_for_logging(api_key: Optional[str]) -> str:
         Masked API key safe to log, or "[not configured]" if None
     
     Examples:
-        >>> mask_api_key_for_logging("EXAMPLE_API_KEY_PLACEHOLDER_12345")
-        'sk_test...57j7F8'
+        >>> mask_api_key_for_logging("example_key_XXXXXXXXXXXXXXXXXXXX")
+        'exam...XXXXXX'
     """
     if not api_key:
         return "[not configured]"
