@@ -1,13 +1,23 @@
+```python
 """
 TickerPulse AI v3.0 - Stocks API Routes
 Blueprint for stock management endpoints: list, add, remove, and search stocks.
+
+Input Validation:
+- All inputs validated using Pydantic models in backend.models.requests
+- Validation errors return 400 with details on invalid fields
+- Uses validate_json_request and validate_query_params decorators
 """
 
 from flask import Blueprint, jsonify, request
 import logging
-from typing import Dict, List, Any
+from typing import Dict, Any, List
 
-from backend.core.stock_manager import get_all_stocks, add_stock, remove_stock, search_stock_ticker
+from backend.core.stock_manager import add_stock, remove_stock, search_stock_ticker, get_stocks_with_filter
+from backend.core.validation import get_request_body, get_query_params
+from backend.core.errors import NotFoundError, ValidationError as TickerPulseValidationError
+from backend.models.requests import StockCreateRequest, PaginationParams, StockSearchRequest
+from backend.models.responses import PaginatedResponse, StockResponse, PaginationMeta
 
 logger = logging.getLogger(__name__)
 
@@ -16,50 +26,58 @@ stocks_bp = Blueprint('stocks', __name__, url_prefix='/api')
 
 @stocks_bp.route('/stocks', methods=['GET'])
 def get_stocks() -> tuple[Dict[str, Any], int]:
-    """Get paginated monitored stocks.
+    """Get paginated monitored stocks with database-level filtering.
 
-    Query Parameters:
-        market (str, optional): Filter by market (e.g. 'US', 'India'). 'All' returns everything.
-        limit (int, optional): Number of records to return per page. Default: 20, Max: 100.
-        offset (int, optional): Number of records to skip. Default: 0.
+    Query Parameters (validated by PaginationParams):
+        limit (int, optional): Items per page. Range: 1-100, Default: 20
+        offset (int, optional): Pagination offset. Default: 0
 
-    Returns:
-        JSON object with 'data' array of stocks and 'meta' containing pagination info.
+    Query Parameters (custom):
+        market (str, optional): Filter by market (e.g. 'US', 'India'). Ignored if 'All'.
+
+    Returns (200):
+        {
+            "data": [StockResponse, ...],
+            "meta": {
+                "total": int,
+                "limit": int,
+                "offset": int,
+                "has_next": bool,
+                "has_previous": bool
+            }
+        }
+
+    Errors:
+        400: Invalid limit (>100) or offset (<0)
     """
-    market = request.args.get('market', None)
+    # Validate pagination parameters using Pydantic model
+    params = get_query_params(PaginationParams)
 
-    # Validate and parse pagination parameters
-    try:
-        limit = min(int(request.args.get('limit', 20)), 100)
-        offset = max(int(request.args.get('offset', 0)), 0)
-    except (ValueError, TypeError):
-        limit = 20
-        offset = 0
+    # Get market filter from query params
+    market = request.args.get('market')
 
-    stocks = get_all_stocks()
-
-    # Filter by active stocks only
-    stocks = [s for s in stocks if s.get('active', 1) == 1]
-
-    # Filter by market if specified
-    if market and market != 'All':
-        stocks = [s for s in stocks if s.get('market') == market]
+    # Fetch paginated stocks using SQL-level filtering (OPTIMIZATION: moved from Python to SQL)
+    stocks, total_count = get_stocks_with_filter(market=market, limit=params.limit, offset=params.offset)
 
     # Calculate pagination info
-    total_count = len(stocks)
-    paginated_stocks = stocks[offset : offset + limit]
-    has_next = (offset + limit) < total_count
-    has_previous = offset > 0
+    has_next = (params.offset + params.limit) < total_count
+    has_previous = params.offset > 0
 
-    meta = {
-        'total': total_count,
-        'limit': limit,
-        'offset': offset,
-        'has_next': has_next,
-        'has_previous': has_previous,
-    }
+    # Build response using Pydantic models
+    meta = PaginationMeta(
+        total=total_count,
+        limit=params.limit,
+        offset=params.offset,
+        has_next=has_next,
+        has_previous=has_previous,
+    )
 
-    return jsonify({'data': paginated_stocks, 'meta': meta})
+    response = PaginatedResponse(
+        data=[StockResponse(**stock).model_dump() for stock in stocks],
+        meta=meta,
+    )
+
+    return jsonify(response.model_dump())
 
 
 @stocks_bp.route('/stocks', methods=['POST'])
@@ -138,3 +156,4 @@ def search_stocks() -> tuple[List[Dict[str, str]], int]:
 
     results = search_stock_ticker(query)
     return jsonify(results)
+```

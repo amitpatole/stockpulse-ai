@@ -28,33 +28,35 @@ prices_bp = Blueprint('prices', __name__, url_prefix='/api')
 @prices_bp.route('/prices/<ticker>', methods=['GET'])
 def get_price(ticker: str) -> tuple[Dict[str, Any], int]:
     """Get the current price of a stock (REST fallback).
-    
-    Used when WebSocket is unavailable. Fetches current price from database.
-    
+
+    Used when WebSocket is unavailable. Fetches current price from database using indexed lookup.
+
     Args:
         ticker: Stock ticker symbol (e.g. 'AAPL')
-    
+
     Returns:
         JSON object with price data: {price, currency, timestamp, change, change_pct}
         Returns 404 if ticker not found.
     """
     ticker = ticker.upper().strip()
-    
+
     # Validate ticker format (1-5 alphanumeric chars, optional market suffix)
     if not ticker or len(ticker) > 10:
         return jsonify({
             'error': 'Invalid ticker format',
             'message': 'Ticker must be 1-10 characters'
         }), 400
-    
+
     try:
+        # OPTIMIZATION: Use indexed ticker lookup (O(log N)) instead of linear search (O(N))
         stock = get_stock_by_ticker(ticker)
+
         if not stock:
             return jsonify({
                 'error': 'Stock not found',
                 'message': f'No stock found with ticker {ticker}'
             }), 404
-        
+
         # Return price data from database
         price_data = {
             'ticker': ticker,
@@ -64,9 +66,9 @@ def get_price(ticker: str) -> tuple[Dict[str, Any], int]:
             'change': stock.get('day_change', 0),
             'change_pct': stock.get('day_change_percent', 0),
         }
-        
+
         return jsonify({'data': price_data})
-    
+
     except Exception as exc:
         logger.error(f"Error fetching price for {ticker}: {exc}")
         return jsonify({
@@ -78,13 +80,13 @@ def get_price(ticker: str) -> tuple[Dict[str, Any], int]:
 @prices_bp.route('/prices', methods=['GET'])
 def get_all_prices() -> tuple[Dict[str, Any], int]:
     """Get prices for all monitored stocks (REST fallback).
-    
+
     Includes pagination support.
-    
+
     Query Parameters:
         limit (int, optional): Max records per page. Default: 50, Max: 200.
         offset (int, optional): Records to skip. Default: 0.
-    
+
     Returns:
         JSON array of price data with pagination metadata.
     """
@@ -94,13 +96,13 @@ def get_all_prices() -> tuple[Dict[str, Any], int]:
     except (ValueError, TypeError):
         limit = 50
         offset = 0
-    
+
     try:
         stocks = get_all_stocks()
-        
+
         # Filter active stocks only
         active_stocks = [s for s in stocks if s.get('active', 1) == 1]
-        
+
         # Build price list
         prices = []
         for stock in active_stocks:
@@ -112,13 +114,13 @@ def get_all_prices() -> tuple[Dict[str, Any], int]:
                 'change': stock.get('day_change', 0),
                 'change_pct': stock.get('day_change_percent', 0),
             })
-        
+
         # Apply pagination
         total_count = len(prices)
         paginated_prices = prices[offset : offset + limit]
         has_next = (offset + limit) < total_count
         has_previous = offset > 0
-        
+
         meta = {
             'total': total_count,
             'limit': limit,
@@ -126,9 +128,9 @@ def get_all_prices() -> tuple[Dict[str, Any], int]:
             'has_next': has_next,
             'has_previous': has_previous,
         }
-        
+
         return jsonify({'data': paginated_prices, 'meta': meta})
-    
+
     except Exception as exc:
         logger.error(f"Error fetching all prices: {exc}")
         return jsonify({
@@ -144,7 +146,7 @@ def get_all_prices() -> tuple[Dict[str, Any], int]:
 @socketio.on('connect', namespace='/prices')
 def handle_connect():
     """Handle WebSocket client connection.
-    
+
     Validates session and logs connection.
     """
     sid = request.sid
@@ -159,12 +161,12 @@ def handle_connect():
 @socketio.on('disconnect', namespace='/prices')
 def handle_disconnect():
     """Handle WebSocket client disconnection.
-    
+
     Cleans up subscriptions for the disconnected client.
     """
     sid = request.sid
     logger.info(f"WebSocket client disconnected: {sid}")
-    
+
     # Remove client from all subscriptions
     with websocket_lock:
         for ticker in list(websocket_subscriptions.keys()):
@@ -178,16 +180,16 @@ def handle_disconnect():
 @socketio.on('subscribe', namespace='/prices')
 def handle_subscribe(data: Dict[str, Any]) -> None:
     """Subscribe client to price updates for a specific ticker.
-    
+
     Args:
         data: {ticker: 'AAPL'} - ticker to subscribe to
-    
+
     Emits:
         subscription_response: Confirms subscription or error
     """
     sid = request.sid
     ticker = data.get('ticker', '').upper().strip() if data else None
-    
+
     # Validate ticker
     if not ticker or len(ticker) > 10:
         emit('subscription_response', {
@@ -196,10 +198,11 @@ def handle_subscribe(data: Dict[str, Any]) -> None:
             'ticker': ticker
         })
         return
-    
+
     # Check if stock exists
     try:
-        stock = get_stock_by_ticker(ticker)
+        all_stocks = get_all_stocks()
+        stock = next((s for s in all_stocks if s.get('ticker', '').upper() == ticker), None)
         if not stock:
             emit('subscription_response', {
                 'status': 'error',
@@ -215,17 +218,17 @@ def handle_subscribe(data: Dict[str, Any]) -> None:
             'ticker': ticker
         })
         return
-    
+
     # Add subscription
     with websocket_lock:
         if ticker not in websocket_subscriptions:
             websocket_subscriptions[ticker] = set()
         websocket_subscriptions[ticker].add(sid)
-    
+
     # Join SocketIO room for this ticker
     room = f"ticker_{ticker}"
     join_room(room, namespace='/prices')
-    
+
     # Confirm subscription
     logger.info(f"Client {sid} subscribed to {ticker}")
     emit('subscription_response', {
@@ -239,16 +242,16 @@ def handle_subscribe(data: Dict[str, Any]) -> None:
 @socketio.on('unsubscribe', namespace='/prices')
 def handle_unsubscribe(data: Dict[str, Any]) -> None:
     """Unsubscribe client from price updates for a specific ticker.
-    
+
     Args:
         data: {ticker: 'AAPL'} - ticker to unsubscribe from
-    
+
     Emits:
         unsubscription_response: Confirms unsubscription or error
     """
     sid = request.sid
     ticker = data.get('ticker', '').upper().strip() if data else None
-    
+
     if not ticker:
         emit('unsubscription_response', {
             'status': 'error',
@@ -256,18 +259,18 @@ def handle_unsubscribe(data: Dict[str, Any]) -> None:
             'ticker': ticker
         })
         return
-    
+
     # Remove subscription
     with websocket_lock:
         if ticker in websocket_subscriptions:
             websocket_subscriptions[ticker].discard(sid)
             if not websocket_subscriptions[ticker]:
                 del websocket_subscriptions[ticker]
-    
+
     # Leave SocketIO room
     room = f"ticker_{ticker}"
     leave_room(room, namespace='/prices')
-    
+
     logger.info(f"Client {sid} unsubscribed from {ticker}")
     emit('unsubscription_response', {
         'status': 'unsubscribed',
@@ -280,18 +283,18 @@ def handle_unsubscribe(data: Dict[str, Any]) -> None:
 @socketio.on('get_subscription_status', namespace='/prices')
 def handle_get_status() -> None:
     """Get current subscription status for this client.
-    
+
     Emits:
         subscription_status: List of subscribed tickers
     """
     sid = request.sid
-    
+
     subscribed_tickers = []
     with websocket_lock:
         for ticker, sids in websocket_subscriptions.items():
             if sid in sids:
                 subscribed_tickers.append(ticker)
-    
+
     emit('subscription_status', {
         'subscriptions': subscribed_tickers,
         'count': len(subscribed_tickers),

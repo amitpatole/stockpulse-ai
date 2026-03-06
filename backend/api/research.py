@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs.
@@ -8,9 +9,10 @@ from datetime import datetime, timezone
 import sqlite3
 import random
 import logging
-from typing import Dict, List, Any
+from typing import Dict
 
 from backend.config import Config
+from backend.core.query_optimizer import get_research_briefs_by_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,7 @@ research_bp = Blueprint('research', __name__, url_prefix='/api')
 
 @research_bp.route('/research/briefs', methods=['GET'])
 def list_briefs():
-    """List paginated research briefs, optionally filtered by ticker.
+    """List paginated research briefs with optimized single-query pagination.
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
@@ -40,43 +42,37 @@ def list_briefs():
         offset = 0
 
     try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        conn.row_factory = sqlite3.Row
-
-        # Get total count for pagination
+        # OPTIMIZATION: Use optimized single-query pagination (combines COUNT + SELECT into one query)
         if ticker:
-            count_row = conn.execute(
-                'SELECT COUNT(*) as count FROM research_briefs WHERE ticker = ?',
-                (ticker.upper(),)
-            ).fetchone()
-            total_count = count_row['count'] if count_row else 0
-
-            rows = conn.execute(
-                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-                (ticker.upper(), limit, offset)
-            ).fetchall()
+            briefs_list, total_count = get_research_briefs_by_ticker(ticker, limit=limit, offset=offset)
         else:
+            # For all briefs, fetch all and paginate in Python
+            # (TODO: Could optimize to fetch limit+1 and detect has_next without separate COUNT)
+            conn = sqlite3.connect(Config.DB_PATH)
+            conn.row_factory = sqlite3.Row
+
             count_row = conn.execute(
                 'SELECT COUNT(*) as count FROM research_briefs'
             ).fetchone()
             total_count = count_row['count'] if count_row else 0
 
             rows = conn.execute(
-                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                'SELECT id, ticker, title, content, agent_name, model_used, created_at FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
                 (limit, offset)
             ).fetchall()
+            conn.close()
 
-        conn.close()
+            briefs_list = [dict(row) for row in rows]
 
         briefs = [{
-            'id': r['id'],
-            'ticker': r['ticker'],
-            'title': r['title'],
-            'content': r['content'],
-            'agent_name': r['agent_name'],
-            'model_used': r['model_used'],
-            'created_at': r['created_at'],
-        } for r in rows]
+            'id': b['id'],
+            'ticker': b['ticker'],
+            'title': b['title'],
+            'content': b['content'],
+            'agent_name': b['agent_name'],
+            'model_used': b['model_used'],
+            'created_at': b['created_at'],
+        } for b in briefs_list]
 
         # Calculate pagination info
         has_next = (offset + limit) < total_count
@@ -127,7 +123,7 @@ def generate_brief():
     return jsonify(brief)
 
 
-def _generate_sample_brief(ticker: str) -> Dict[str, Any]:
+def _generate_sample_brief(ticker: str) -> Dict:
     """Generate and store a sample research brief for a given ticker."""
 
     # Get current price and rating data if available
@@ -275,3 +271,4 @@ Reddit and social media analysis indicates:
             'model_used': 'claude-sonnet-4-5 (stub)',
             'created_at': now,
         }
+```

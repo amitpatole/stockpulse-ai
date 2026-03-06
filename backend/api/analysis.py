@@ -10,6 +10,7 @@ import sqlite3
 import logging
 
 from backend.core.ai_analytics import StockAnalytics
+from backend.core.query_optimizer import get_cached_ratings_optimized
 from backend.config import Config
 
 logger = logging.getLogger(__name__)
@@ -17,49 +18,16 @@ logger = logging.getLogger(__name__)
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api')
 
 
-def _get_cached_ratings():
-    """Try to read pre-computed ratings from ai_ratings table."""
-    try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("""
-            SELECT * FROM ai_ratings ORDER BY ticker
-        """).fetchall()
-        conn.close()
-        if rows:
-            return [
-                {
-                    'ticker': r['ticker'],
-                    'rating': r['rating'],
-                    'score': r['score'] or 0,
-                    'confidence': r['confidence'] or 0,
-                    'current_price': r['current_price'] or 0,
-                    'price_change': r['price_change'] or 0,
-                    'price_change_pct': r['price_change_pct'] or 0,
-                    'rsi': r['rsi'] or 0,
-                    'sentiment_score': r['sentiment_score'] or 0,
-                    'sentiment_label': r['sentiment_label'] or 'neutral',
-                    'technical_score': r['technical_score'] or 0,
-                    'fundamental_score': r['fundamental_score'] or 0,
-                    'updated_at': r['updated_at'],
-                }
-                for r in rows
-            ]
-    except Exception as e:
-        logger.debug(f"No cached ratings: {e}")
-    return None
-
-
 def _validate_period_parameter(period_str: str | None) -> tuple[int | None, dict | None]:
     """
     Validate and parse period parameter as integer (1-252).
-    
+
     Returns:
         (period_value, error_response) - either period value is set, or error_response is set
     """
     if period_str is None:
         return None, None
-    
+
     try:
         period = int(period_str)
         if period < 1 or period > 252:
@@ -82,13 +50,13 @@ def _validate_period_parameter(period_str: str | None) -> tuple[int | None, dict
 def _validate_limit_parameter(limit_str: str | None) -> tuple[int | None, dict | None]:
     """
     Validate and parse limit parameter as integer (1-1000).
-    
+
     Returns:
         (limit_value, error_response) - either limit value is set, or error_response is set
     """
     if limit_str is None:
         return None, None
-    
+
     try:
         limit = int(limit_str)
         if limit < 1 or limit > 1000:
@@ -110,15 +78,15 @@ def _validate_limit_parameter(limit_str: str | None) -> tuple[int | None, dict |
 
 @analysis_bp.route('/ai/ratings', methods=['GET'])
 def get_ai_ratings():
-    """Get AI ratings for all active stocks.
+    """Get AI ratings for all active stocks (optimized with indexed queries).
 
     Query Parameters:
         period (int, optional): Analysis period in days (1-252). Default: None.
         limit (int, optional): Max ratings to return (1-1000). Default: None.
 
-    Serves cached ratings from ai_ratings table, then computes live ratings
-    for any active stocks that are missing from the cache.
-    
+    Serves cached ratings from ai_ratings table using optimized SQL queries,
+    then computes live ratings for any active stocks that are missing from the cache.
+
     Errors:
         422: Invalid period or limit parameter
     """
@@ -128,14 +96,15 @@ def get_ai_ratings():
         period, error = _validate_period_parameter(period_str)
         if error:
             return error
-    
+
     # TP-C02: Validate limit parameter
     limit_str = request.args.get('limit', None)
+    limit = None
     if limit_str is not None:
         limit, error = _validate_limit_parameter(limit_str)
         if error:
             return error
-    
+
     analytics = StockAnalytics()
 
     # Get all active stock tickers
@@ -150,8 +119,8 @@ def get_ai_ratings():
     except Exception:
         active_tickers = set()
 
-    # Try cached ratings
-    cached = _get_cached_ratings()
+    # OPTIMIZATION: Use optimized indexed query to fetch cached ratings
+    cached = get_cached_ratings_optimized()
     cached_map = {}
     if cached:
         cached_map = {r['ticker']: r for r in cached}
@@ -176,27 +145,22 @@ def get_ai_ratings():
 
     # Return only active stocks, sorted by ticker
     results = [cached_map[t] for t in sorted(active_tickers) if t in cached_map]
-    
+
     # Apply limit if specified
-    if limit_str is not None and limit > 0:
+    if limit is not None and limit > 0:
         results = results[:limit]
-    
+
     return jsonify(results)
 
 
 @analysis_bp.route('/ai/rating/<ticker>', methods=['GET'])
 def get_ai_rating(ticker):
-    """Get AI rating for a specific stock."""
-    # Try cached first
-    try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT * FROM ai_ratings WHERE ticker = ?", (ticker.upper(),)).fetchone()
-        conn.close()
-        if row:
-            return jsonify(dict(row))
-    except Exception:
-        pass
+    """Get AI rating for a specific stock (optimized with indexed lookup)."""
+    # OPTIMIZATION: Use indexed query to fetch cached rating by ticker
+    cached = get_cached_ratings_optimized(ticker=ticker)
+    if cached:
+        return jsonify(cached[0])
+
     # Fall back to live calculation
     analytics = StockAnalytics()
     rating = analytics.calculate_ai_rating(ticker)
