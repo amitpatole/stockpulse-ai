@@ -1,3 +1,4 @@
+```python
 """SQLite database management with WAL mode and idempotent migrations."""
 
 import sqlite3
@@ -141,6 +142,22 @@ _TABLES_SQL = [
         FOREIGN KEY (ticker) REFERENCES stocks(ticker)
     )
     """,
+    # Price alerts (user-configured thresholds)
+    """
+    CREATE TABLE IF NOT EXISTS price_alerts (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker              TEXT NOT NULL,
+        alert_type          TEXT NOT NULL,
+        threshold           REAL NOT NULL,
+        is_active           INTEGER DEFAULT 1,
+        triggered_count     INTEGER DEFAULT 0,
+        last_triggered_at   TIMESTAMP,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(ticker, alert_type, threshold),
+        FOREIGN KEY (ticker) REFERENCES stocks(ticker) ON DELETE CASCADE
+    )
+    """,
 ]
 
 _INDEXES_SQL = [
@@ -165,6 +182,10 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_news_ticker ON news(ticker)",
     "CREATE INDEX IF NOT EXISTS idx_news_created ON news(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_news_ticker_created ON news(ticker, created_at DESC)",
+
+    # Price alerts indexes
+    "CREATE INDEX IF NOT EXISTS idx_price_alerts_ticker_active ON price_alerts(ticker, is_active)",
+    "CREATE INDEX IF NOT EXISTS idx_price_alerts_created ON price_alerts(created_at DESC)",
 ]
 
 
@@ -178,7 +199,7 @@ def init_all_tables(db_path: Optional[str] = None) -> None:
         for sql in _INDEXES_SQL:
             cursor.execute(sql)
         conn.commit()
-        logger.info("Database tables initialized with research briefs schema")
+        logger.info("Database tables initialized with price alerts schema")
     except Exception as e:
         conn.rollback()
         logger.error(f"Failed to initialize tables: {e}")
@@ -187,73 +208,30 @@ def init_all_tables(db_path: Optional[str] = None) -> None:
         conn.close()
 
 
-def migrate_add_research_briefs(db_path: Optional[str] = None) -> None:
-    """Add research_briefs table if it doesn't exist (idempotent)."""
+def migrate_add_price_alerts_table(db_path: Optional[str] = None) -> None:
+    """Add price_alerts table if it doesn't exist (idempotent)."""
     with db_session(db_path) as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT 1 FROM research_briefs LIMIT 1")
+            cursor.execute("SELECT 1 FROM price_alerts LIMIT 1")
         except sqlite3.OperationalError:
-            logger.info("Creating research_briefs table...")
+            logger.info("Creating price_alerts table...")
             cursor.execute("""
-                CREATE TABLE research_briefs (
+                CREATE TABLE price_alerts (
                     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
                     ticker              TEXT NOT NULL,
-                    title               TEXT NOT NULL,
-                    content             TEXT NOT NULL,
-                    executive_summary   TEXT,
-                    agent_name          TEXT NOT NULL,
-                    model_used          TEXT,
-                    has_metrics         INTEGER DEFAULT 0,
-                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            cursor.execute("CREATE INDEX idx_research_briefs_ticker ON research_briefs(ticker)")
-            cursor.execute("CREATE INDEX idx_research_briefs_created ON research_briefs(created_at DESC)")
-            logger.info("research_briefs table created")
-
-
-def migrate_add_research_metadata(db_path: Optional[str] = None) -> None:
-    """Add research_brief_metadata table if it doesn't exist (idempotent)."""
-    with db_session(db_path) as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute("SELECT 1 FROM research_brief_metadata LIMIT 1")
-        except sqlite3.OperationalError:
-            logger.info("Creating research_brief_metadata table...")
-            cursor.execute("""
-                CREATE TABLE research_brief_metadata (
-                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                    brief_id            INTEGER NOT NULL UNIQUE,
-                    executive_summary   TEXT,
-                    key_insights        TEXT,
-                    key_metrics         TEXT,
-                    metric_sources      TEXT,
-                    pdf_url             TEXT,
-                    pdf_generated_at    TIMESTAMP,
-                    summary_version     INTEGER DEFAULT 1,
+                    alert_type          TEXT NOT NULL,
+                    threshold           REAL NOT NULL,
+                    is_active           INTEGER DEFAULT 1,
+                    triggered_count     INTEGER DEFAULT 0,
+                    last_triggered_at   TIMESTAMP,
                     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (brief_id) REFERENCES research_briefs(id) ON DELETE CASCADE
+                    UNIQUE(ticker, alert_type, threshold),
+                    FOREIGN KEY (ticker) REFERENCES stocks(ticker) ON DELETE CASCADE
                 )
             """)
-            cursor.execute("CREATE INDEX idx_metadata_brief ON research_brief_metadata(brief_id)")
-            cursor.execute("CREATE INDEX idx_metadata_created ON research_brief_metadata(created_at DESC)")
-            logger.info("research_brief_metadata table created")
-
-
-def add_columns_to_research_briefs(db_path: Optional[str] = None) -> None:
-    """Add executive_summary and has_metrics columns if they don't exist."""
-    with db_session(db_path) as conn:
-        cursor = conn.cursor()
-        info = cursor.execute("PRAGMA table_info(research_briefs)").fetchall()
-        col_names = {row[1] for row in info}
-        
-        if "executive_summary" not in col_names:
-            cursor.execute("ALTER TABLE research_briefs ADD COLUMN executive_summary TEXT")
-            logger.info("Added executive_summary column to research_briefs")
-        
-        if "has_metrics" not in col_names:
-            cursor.execute("ALTER TABLE research_briefs ADD COLUMN has_metrics INTEGER DEFAULT 0")
-            logger.info("Added has_metrics column to research_briefs")
+            cursor.execute("CREATE INDEX idx_price_alerts_ticker_active ON price_alerts(ticker, is_active)")
+            cursor.execute("CREATE INDEX idx_price_alerts_created ON price_alerts(created_at DESC)")
+            logger.info("price_alerts table created")
+```
