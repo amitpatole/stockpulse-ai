@@ -150,197 +150,73 @@ def get_filtered_with_pagination(
         # Get paginated data
         order_clause = f" ORDER BY {order_by}" if order_by else ""
         data_sql = f"SELECT {columns_str} FROM {table}{where_clause}{order_clause} LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
+        
         try:
-            cursor.execute(data_sql, params)
+            cursor.execute(data_sql, params + [limit, offset])
             rows = [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            logger.error(f"Select query failed: {e}")
+            logger.error(f"Data query failed: {e}")
             rows = []
 
     return rows, total_count
 
 
-# ============================================================================
-# Specialized Query Patterns
-# ============================================================================
-
-def get_active_records(
-    table: str,
-    limit: int = 20,
-    offset: int = 0,
-    filter_market: Optional[str] = None,
-    order_by: str = 'ticker'
+def get_research_briefs_by_ticker(
+    ticker: str,
+    limit: int = 25,
+    offset: int = 0
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
-    Fetch active (soft-deleted=0) records with pagination.
+    Fetch research briefs for a specific ticker with pagination.
 
-    Optimized for stocks table pattern: WHERE active = 1 AND market = ?
+    Uses composite index: idx_research_briefs_ticker_created
 
     Args:
-        table: Table name
+        ticker: Stock ticker to filter by
         limit: Rows per page
         offset: Starting row
-        filter_market: Optional market filter (e.g., 'US', 'India')
-        order_by: Column to sort by
 
     Returns:
-        Tuple of (rows, total_count)
+        Tuple of (briefs list, total count)
     """
-    filters = {'active': 1}
-    if filter_market and filter_market != 'All':
-        filters['market'] = filter_market
-
     return get_filtered_with_pagination(
-        table,
-        filters=filters,
+        table='research_briefs',
+        filters={'ticker': ticker},
         limit=limit,
         offset=offset,
-        order_by=order_by
+        order_by='created_at DESC',
+        columns=['id', 'ticker', 'title', 'content', 'agent_name', 'model_used', 'created_at']
     )
 
 
-def get_recent_records(
-    table: str,
-    ticker: Optional[str] = None,
-    days: int = 30,
-    limit: int = 20,
-    offset: int = 0,
-    timestamp_column: str = 'created_at'
-) -> Tuple[List[Dict[str, Any]], int]:
+def get_brief_with_metadata(brief_id: int) -> Optional[Dict[str, Any]]:
     """
-    Fetch recent records by ticker with pagination.
-
-    Optimized for research_briefs and news patterns.
+    Fetch research brief with its metadata in a single query.
 
     Args:
-        table: Table name
-        ticker: Optional ticker filter
-        days: How many days back to fetch
-        limit: Rows per page
-        offset: Starting row
-        timestamp_column: Name of timestamp column
+        brief_id: ID of the research brief
 
     Returns:
-        Tuple of (rows, total_count)
+        Combined brief + metadata dict, or None if not found
     """
     with db_session() as conn:
         cursor = conn.cursor()
-
-        # Build dynamic WHERE clause
-        where_parts = [f"{timestamp_column} >= datetime('now', '-{days} days')"]
-        params = []
-
-        if ticker:
-            where_parts.append("ticker = ?")
-            params.append(ticker)
-
-        where_clause = " WHERE " + " AND ".join(where_parts)
-
-        # Count query
-        count_sql = f"SELECT COUNT(*) as cnt FROM {table}{where_clause}"
         try:
-            cursor.execute(count_sql, params)
-            total_count = cursor.fetchone()['cnt']
+            # Join research_briefs with metadata
+            row = cursor.execute("""
+                SELECT 
+                    rb.id, rb.ticker, rb.title, rb.content, rb.executive_summary,
+                    rb.agent_name, rb.model_used, rb.has_metrics, rb.created_at, rb.updated_at,
+                    rbm.executive_summary as meta_summary, rbm.key_insights, rbm.key_metrics,
+                    rbm.metric_sources, rbm.pdf_url, rbm.pdf_generated_at
+                FROM research_briefs rb
+                LEFT JOIN research_brief_metadata rbm ON rb.id = rbm.brief_id
+                WHERE rb.id = ?
+            """, (brief_id,)).fetchone()
+
+            if row:
+                return dict(row)
         except Exception as e:
-            logger.error(f"Count query failed: {e}")
-            total_count = 0
+            logger.error(f"Error fetching brief with metadata: {e}")
 
-        # Data query with ORDER BY for recent first
-        data_sql = (
-            f"SELECT * FROM {table}{where_clause} "
-            f"ORDER BY {timestamp_column} DESC LIMIT ? OFFSET ?"
-        )
-        params.extend([limit, offset])
-
-        try:
-            cursor.execute(data_sql, params)
-            rows = [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            logger.error(f"Select query failed: {e}")
-            rows = []
-
-    return rows, total_count
-
-
-# ============================================================================
-# Query Analysis & Profiling
-# ============================================================================
-
-def explain_query(sql: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
-    """
-    Run EXPLAIN QUERY PLAN to analyze query performance.
-
-    Useful for debugging why indexes aren't being used.
-
-    Args:
-        sql: SQL query to analyze
-        params: Query parameters
-
-    Returns:
-        List of explain plan rows (opcode, p1, p2, p3, p4, p5, comment)
-    """
-    with db_session() as conn:
-        cursor = conn.cursor()
-        explain_sql = f"EXPLAIN QUERY PLAN {sql}"
-
-        try:
-            cursor.execute(explain_sql, params or [])
-            results = [dict(row) for row in cursor.fetchall()]
-            return results
-        except Exception as e:
-            logger.error(f"EXPLAIN QUERY PLAN failed: {e}")
-            return []
-
-
-def get_table_stats(table: str) -> Dict[str, Any]:
-    """
-    Get table statistics: row count, index list, memory usage.
-
-    Args:
-        table: Table name
-
-    Returns:
-        Dict with row_count, indexes, and estimated_size_mb
-    """
-    with db_session() as conn:
-        cursor = conn.cursor()
-
-        # Row count
-        row_count = 0
-        try:
-            cursor.execute(f"SELECT COUNT(*) as cnt FROM {table}")
-            row_count = cursor.fetchone()['cnt']
-        except Exception:
-            pass
-
-        # Indexes
-        indexes = []
-        try:
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
-                (table,)
-            )
-            indexes = [row['name'] for row in cursor.fetchall()]
-        except Exception:
-            pass
-
-        # Estimate size (page_count * page_size)
-        size_mb = 0.0
-        try:
-            cursor.execute("PRAGMA page_count")
-            page_count = cursor.fetchone()[0]
-            cursor.execute("PRAGMA page_size")
-            page_size = cursor.fetchone()[0]
-            size_mb = (page_count * page_size) / (1024 * 1024)
-        except Exception:
-            pass
-
-        return {
-            'row_count': row_count,
-            'index_count': len(indexes),
-            'indexes': indexes,
-            'estimated_size_mb': round(size_mb, 2)
-        }
-```
+    return None

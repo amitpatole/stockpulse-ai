@@ -53,52 +53,190 @@ async def get_async_db(db_path: Optional[str] = None) -> aiosqlite.Connection:
 # ── Schema ──────────────────────────────────────────────────────────
 
 _TABLES_SQL = [
-    # Watchlist Groups (new)
+    # Research briefs (AI-generated research documents)
     """
-    CREATE TABLE IF NOT EXISTS watchlist_groups (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        name            TEXT NOT NULL UNIQUE,
-        description     TEXT,
-        color           TEXT DEFAULT '#6366f1',
-        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CREATE TABLE IF NOT EXISTS research_briefs (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker              TEXT NOT NULL,
+        title               TEXT NOT NULL,
+        content             TEXT NOT NULL,
+        executive_summary   TEXT,
+        agent_name          TEXT NOT NULL,
+        model_used          TEXT,
+        has_metrics         INTEGER DEFAULT 0,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
-    # Stocks (modified with group support)
+    # Research brief metadata (extended info: key insights, metrics, PDF)
+    """
+    CREATE TABLE IF NOT EXISTS research_brief_metadata (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        brief_id            INTEGER NOT NULL UNIQUE,
+        executive_summary   TEXT,
+        key_insights        TEXT,
+        key_metrics         TEXT,
+        metric_sources      TEXT,
+        pdf_url             TEXT,
+        pdf_generated_at    TIMESTAMP,
+        summary_version     INTEGER DEFAULT 1,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (brief_id) REFERENCES research_briefs(id) ON DELETE CASCADE
+    )
+    """,
+    # Stock data (existing table structure for reference)
     """
     CREATE TABLE IF NOT EXISTS stocks (
-        ticker          TEXT PRIMARY KEY,
-        name            TEXT,
-        market          TEXT DEFAULT 'US',
-        group_id        INTEGER REFERENCES watchlist_groups(id) ON DELETE SET NULL,
-        sort_order      INTEGER DEFAULT 0,
-        added_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        active          INTEGER DEFAULT 1
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker              TEXT NOT NULL UNIQUE,
+        company_name        TEXT,
+        current_price       REAL,
+        price_change_pct    REAL,
+        market_cap          TEXT,
+        active              INTEGER DEFAULT 1,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # AI ratings (existing table structure for reference)
+    """
+    CREATE TABLE IF NOT EXISTS ai_ratings (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker              TEXT NOT NULL,
+        rating              TEXT,
+        score               REAL,
+        rsi                 REAL,
+        sentiment_score     REAL,
+        sentiment_label     TEXT,
+        technical_score     REAL,
+        fundamental_score   REAL,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ticker) REFERENCES stocks(ticker)
+    )
+    """,
+    # News articles (existing table structure for reference)
+    """
+    CREATE TABLE IF NOT EXISTS news (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker              TEXT NOT NULL,
+        title               TEXT NOT NULL,
+        content             TEXT,
+        sentiment_label     TEXT,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ticker) REFERENCES stocks(ticker)
     )
     """,
 ]
 
 _INDEXES_SQL = [
-    """CREATE INDEX IF NOT EXISTS idx_stocks_group_order ON stocks(group_id, sort_order)""",
+    # Research briefs indexes
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker ON research_briefs(ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_created ON research_briefs(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker_created ON research_briefs(ticker, created_at DESC)",
+    
+    # Research metadata indexes
+    "CREATE INDEX IF NOT EXISTS idx_metadata_brief ON research_brief_metadata(brief_id)",
+    "CREATE INDEX IF NOT EXISTS idx_metadata_created ON research_brief_metadata(created_at DESC)",
+    
+    # Stock and ratings indexes (for metrics extraction)
+    "CREATE INDEX IF NOT EXISTS idx_stocks_ticker ON stocks(ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_ticker ON ai_ratings(ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_updated ON ai_ratings(updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_news_ticker ON news(ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_news_created ON news(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_news_ticker_created ON news(ticker, created_at DESC)",
 ]
 
 
-def init_db():
-    """Initialize database tables and indexes."""
-    with db_session() as conn:
-        cursor = conn.cursor()
-        
-        # Create all tables
+def init_all_tables(db_path: Optional[str] = None) -> None:
+    """Create every table and apply indexes. Safe to call multiple times."""
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+    try:
         for sql in _TABLES_SQL:
             cursor.execute(sql)
-        
-        # Create all indexes
         for sql in _INDEXES_SQL:
             cursor.execute(sql)
+        conn.commit()
+        logger.info("Database tables initialized with research briefs schema")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to initialize tables: {e}")
+        raise
+    finally:
+        conn.close()
+
+
+def migrate_add_research_briefs(db_path: Optional[str] = None) -> None:
+    """Add research_briefs table if it doesn't exist (idempotent)."""
+    with db_session(db_path) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT 1 FROM research_briefs LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Creating research_briefs table...")
+            cursor.execute("""
+                CREATE TABLE research_briefs (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker              TEXT NOT NULL,
+                    title               TEXT NOT NULL,
+                    content             TEXT NOT NULL,
+                    executive_summary   TEXT,
+                    agent_name          TEXT NOT NULL,
+                    model_used          TEXT,
+                    has_metrics         INTEGER DEFAULT 0,
+                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("CREATE INDEX idx_research_briefs_ticker ON research_briefs(ticker)")
+            cursor.execute("CREATE INDEX idx_research_briefs_created ON research_briefs(created_at DESC)")
+            logger.info("research_briefs table created")
+
+
+def migrate_add_research_metadata(db_path: Optional[str] = None) -> None:
+    """Add research_brief_metadata table if it doesn't exist (idempotent)."""
+    with db_session(db_path) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT 1 FROM research_brief_metadata LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Creating research_brief_metadata table...")
+            cursor.execute("""
+                CREATE TABLE research_brief_metadata (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    brief_id            INTEGER NOT NULL UNIQUE,
+                    executive_summary   TEXT,
+                    key_insights        TEXT,
+                    key_metrics         TEXT,
+                    metric_sources      TEXT,
+                    pdf_url             TEXT,
+                    pdf_generated_at    TIMESTAMP,
+                    summary_version     INTEGER DEFAULT 1,
+                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (brief_id) REFERENCES research_briefs(id) ON DELETE CASCADE
+                )
+            """)
+            cursor.execute("CREATE INDEX idx_metadata_brief ON research_brief_metadata(brief_id)")
+            cursor.execute("CREATE INDEX idx_metadata_created ON research_brief_metadata(created_at DESC)")
+            logger.info("research_brief_metadata table created")
+
+
+def add_columns_to_research_briefs(db_path: Optional[str] = None) -> None:
+    """Add executive_summary and has_metrics columns if they don't exist."""
+    with db_session(db_path) as conn:
+        cursor = conn.cursor()
+        info = cursor.execute("PRAGMA table_info(research_briefs)").fetchall()
+        col_names = {row[1] for row in info}
         
-        logger.info("Database initialized successfully")
-
-
-if __name__ == '__main__':
-    init_db()
-```
+        if "executive_summary" not in col_names:
+            cursor.execute("ALTER TABLE research_briefs ADD COLUMN executive_summary TEXT")
+            logger.info("Added executive_summary column to research_briefs")
+        
+        if "has_metrics" not in col_names:
+            cursor.execute("ALTER TABLE research_briefs ADD COLUMN has_metrics INTEGER DEFAULT 0")
+            logger.info("Added has_metrics column to research_briefs")
