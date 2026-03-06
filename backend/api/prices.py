@@ -1,275 +1,183 @@
-```python
 """
 TickerPulse AI v3.0 - Prices API Routes
+Blueprint for real-time and batch price endpoints.
 
-Real-time price endpoints with batch query optimization to avoid N+1 patterns.
-All price data is fetched via external providers (Yahoo Finance, Alpha Vantage).
-
-Endpoints:
-  GET  /api/prices           - List recent prices (paginated)
-  GET  /api/prices/<ticker>  - Get latest price for ticker
-  POST /api/prices/batch     - Batch fetch prices for multiple tickers (OPTIMIZED)
+Optimization: Uses batch_get_stocks_by_tickers() to avoid N+1 lookups.
 """
 
 from flask import Blueprint, jsonify, request
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 
-from backend.core.query_optimizer import get_batch_by_keys
-from backend.core.validation import get_request_body, get_query_params
-from backend.core.errors import NotFoundError, ValidationError as TickerPulseValidationError
-from backend.models.requests import PaginationParams
-from backend.models.responses import PaginatedResponse, PaginationMeta
+from backend.core.query_optimizer import batch_get_stocks_by_tickers, get_active_stocks_optimized
+from backend.database import db_session
 
 logger = logging.getLogger(__name__)
 
 prices_bp = Blueprint('prices', __name__, url_prefix='/api')
 
 
-# ============================================================================
-# Price Data Models (in-memory cache, external source of truth)
-# ============================================================================
-
-class PriceResponse:
-    """Simple price data model"""
-    def __init__(self, ticker: str, price: float, currency: str, timestamp: str):
-        self.ticker = ticker
-        self.price = price
-        self.currency = currency
-        self.timestamp = timestamp
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'ticker': self.ticker,
-            'price': self.price,
-            'currency': self.currency,
-            'timestamp': self.timestamp
-        }
-
-
-# ============================================================================
-# Price Fetching (External API integration - placeholder for real implementation)
-# ============================================================================
-
-def fetch_price_external(ticker: str) -> Dict[str, Any] | None:
-    """
-    Fetch current price for a ticker from external provider (Yahoo Finance, etc).
-
-    This is a placeholder that would integrate with your price data provider.
-    Real implementation would call Yahoo Finance API or Alpha Vantage.
-
-    Args:
-        ticker: Stock ticker symbol
-
-    Returns:
-        Dict with price data or None if not found
-    """
-    # TODO: Implement actual price fetching from Yahoo Finance / Alpha Vantage
-    # For now, return mock data for testing
-    return {
-        'ticker': ticker,
-        'price': 150.00,
-        'currency': 'INR' if '.NS' in ticker or '.BO' in ticker else 'USD',
-        'timestamp': '2026-03-06T10:30:00Z'
-    }
-
-
-def fetch_prices_batch(tickers: List[str]) -> Dict[str, Dict[str, Any]]:
-    """
-    Fetch prices for multiple tickers in a single batch request (OPTIMIZED).
-
-    This is the key optimization: instead of making N individual price requests,
-    batch them together. External API may also support batch endpoints.
-
-    Args:
-        tickers: List of ticker symbols
-
-    Returns:
-        Dict mapping ticker to price data
-    """
-    if not tickers:
-        return {}
-
-    results: Dict[str, Dict[str, Any]] = {}
-
-    # Real implementation would batch into single API call or use bulk endpoint
-    # For now, fetch individually but with logging
-    for ticker in tickers:
-        try:
-            price_data = fetch_price_external(ticker)
-            if price_data:
-                results[ticker] = price_data
-                logger.debug(f"Fetched price for {ticker}: {price_data['price']}")
-        except Exception as e:
-            logger.warning(f"Failed to fetch price for {ticker}: {e}")
-
-    return results
-
-
-# ============================================================================
-# API Endpoints
-# ============================================================================
-
 @prices_bp.route('/prices', methods=['GET'])
-def get_prices() -> tuple[Dict[str, Any], int]:
-    """
-    Get paginated list of recent prices.
+def get_all_prices() -> tuple[Dict[str, Any], int]:
+    """Get current prices for all monitored stocks.
 
     Query Parameters:
-        limit (int, optional): Items per page. Range: 1-100, Default: 20
-        offset (int, optional): Pagination offset. Default: 0
-        ticker (str, optional): Filter by specific ticker
+        tickers (str, optional): Comma-separated list of tickers to fetch prices for.
+                                 If omitted, returns all active stocks.
+        market (str, optional): Filter by market ('US', 'India', 'All'). Default: 'All'.
 
     Returns (200):
         {
-            "data": [{"ticker": str, "price": float, "currency": str, "timestamp": str}, ...],
-            "meta": {"total": int, "limit": int, "offset": int, "has_next": bool, "has_previous": bool}
+            "data": [
+                {
+                    "ticker": "AAPL",
+                    "price": 175.50,
+                    "currency": "USD",
+                    "change": 2.30,
+                    "change_pct": 1.32,
+                    "timestamp": "2026-03-03T15:30:00Z",
+                    "market": "US"
+                },
+                ...
+            ],
+            "meta": {
+                "count": 45,
+                "timestamp": "2026-03-03T15:30:00Z"
+            }
         }
 
-    Errors:
-        400: Invalid pagination parameters
+    Optimization:
+        - Batch lookup with IN clause (one query, not N queries)
+        - SQL-side market filtering (idx_stocks_active_market)
+        - Selects only needed columns
     """
-    # Validate pagination parameters
-    params = get_query_params(PaginationParams)
-    ticker_filter = request.args.get('ticker', '').upper()
+    try:
+        # Get requested tickers (comma-separated)
+        tickers_param = request.args.get('tickers', '')
+        market = request.args.get('market', 'All')
 
-    # In a real implementation, this would fetch from a price history table
-    # For now, return empty paginated response
-    stocks_list = []
-    total_count = 0
+        tickers_to_fetch = []
+        if tickers_param:
+            # User specified specific tickers
+            tickers_to_fetch = [t.strip().upper() for t in tickers_param.split(',') if t.strip()]
+        else:
+            # Fetch all active stocks (SQL-side filtered)
+            stocks, _ = get_active_stocks_optimized(market=market, limit=1000, offset=0)
+            tickers_to_fetch = [s['ticker'] for s in stocks]
 
-    has_next = (params.offset + params.limit) < total_count
-    has_previous = params.offset > 0
+        if not tickers_to_fetch:
+            return jsonify({
+                'data': [],
+                'meta': {'count': 0, 'timestamp': ''}
+            }), 200
 
-    meta = PaginationMeta(
-        total=total_count,
-        limit=params.limit,
-        offset=params.offset,
-        has_next=has_next,
-        has_previous=has_previous,
-    )
+        # Batch fetch all stocks in a single query (OPTIMIZATION: NOT O(n) loop)
+        stocks_dict = batch_get_stocks_by_tickers(tickers_to_fetch)
 
-    response = PaginatedResponse(
-        data=stocks_list,
-        meta=meta,
-    )
+        # Format response
+        prices_data = [
+            {
+                'ticker': ticker,
+                'price': stock.get('current_price', 0),
+                'currency': 'USD' if not ticker.endswith(('.NS', '.BO')) else 'INR',
+                'change': stock.get('price_change', 0),
+                'change_pct': stock.get('price_change_pct', 0),
+                'timestamp': stock.get('updated_at', ''),
+                'market': stock.get('market', 'US')
+            }
+            for ticker, stock in stocks_dict.items()
+        ]
 
-    return jsonify(response.model_dump()), 200
+        from datetime import datetime, timezone
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        return jsonify({
+            'data': prices_data,
+            'meta': {
+                'count': len(prices_data),
+                'timestamp': timestamp
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching prices: {e}")
+        return jsonify({
+            'error': 'Internal server error',
+            'data': [],
+            'meta': {'count': 0}
+        }), 500
 
 
 @prices_bp.route('/prices/<ticker>', methods=['GET'])
 def get_price(ticker: str) -> tuple[Dict[str, Any], int]:
-    """
-    Get latest price for a specific ticker.
+    """Get current price for a specific stock.
 
     Path Parameters:
-        ticker (str): Stock ticker symbol
+        ticker (str): Stock ticker symbol (e.g., 'AAPL', 'RELIANCE.NS')
 
     Returns (200):
         {
-            "ticker": str,
-            "price": float,
-            "currency": str,
-            "timestamp": str
+            "ticker": "AAPL",
+            "price": 175.50,
+            "currency": "USD",
+            "change": 2.30,
+            "change_pct": 1.32,
+            "rsi": 65.4,
+            "sentiment_score": 0.72,
+            "rating": "BUY",
+            "timestamp": "2026-03-03T15:30:00Z",
+            "market": "US"
         }
 
     Errors:
-        404: Ticker not found
+        404: Ticker not found in database
+
+    Optimization:
+        - Uses batch_get_stocks_by_tickers (single indexed lookup, not linear search)
+        - Selects only needed columns
     """
-    ticker = ticker.upper()
+    ticker_upper = ticker.upper()
 
     try:
-        price_data = fetch_price_external(ticker)
-        if not price_data:
+        # Batch fetch (even for single ticker, uses indexed path)
+        stocks_dict = batch_get_stocks_by_tickers([ticker_upper])
+
+        if not stocks_dict:
             return jsonify({
-                'error': 'TICKER_NOT_FOUND',
-                'message': f"Ticker '{ticker}' not found"
+                'error': 'Ticker not found',
+                'message': f'No price data available for ticker: {ticker_upper}'
             }), 404
+
+        stock = stocks_dict[ticker_upper]
+
+        # Get rating data for additional context
+        with db_session() as conn:
+            cursor = conn.cursor()
+            rating_row = cursor.execute(
+                'SELECT rating, rsi, sentiment_score FROM ai_ratings WHERE ticker = ?',
+                (ticker_upper,)
+            ).fetchone()
+
+        price_data = {
+            'ticker': ticker_upper,
+            'price': stock.get('current_price', 0),
+            'currency': 'USD' if not ticker_upper.endswith(('.NS', '.BO')) else 'INR',
+            'change': stock.get('price_change', 0),
+            'change_pct': stock.get('price_change_pct', 0),
+            'market': stock.get('market', 'US'),
+            'timestamp': stock.get('updated_at', '')
+        }
+
+        # Add rating info if available
+        if rating_row:
+            price_data.update({
+                'rsi': rating_row['rsi'] or 0,
+                'sentiment_score': rating_row['sentiment_score'] or 0,
+                'rating': rating_row['rating'] or 'UNKNOWN'
+            })
 
         return jsonify(price_data), 200
 
     except Exception as e:
         logger.error(f"Error fetching price for {ticker}: {e}")
-        return jsonify({
-            'error': 'PRICE_FETCH_ERROR',
-            'message': 'Failed to fetch price data'
-        }), 500
-
-
-@prices_bp.route('/prices/batch', methods=['POST'])
-def get_prices_batch() -> tuple[Dict[str, Any], int]:
-    """
-    Batch fetch prices for multiple tickers (OPTIMIZED - avoids N+1 queries).
-
-    Request Body (JSON):
-        tickers (list[str]): List of ticker symbols (max 100)
-
-    Returns (200):
-        {
-            "data": {
-                "AAPL": {"ticker": str, "price": float, "currency": str, "timestamp": str},
-                "MSFT": {...},
-                ...
-            },
-            "meta": {
-                "requested": int,
-                "found": int,
-                "missing": [str]
-            }
-        }
-
-    Errors:
-        400: Invalid request format or too many tickers (>100)
-        500: Internal error
-    """
-    try:
-        data = request.json or {}
-        tickers = data.get('tickers', [])
-
-        if not isinstance(tickers, list):
-            return jsonify({
-                'error': 'INVALID_REQUEST',
-                'message': 'tickers must be a list'
-            }), 400
-
-        if not tickers:
-            return jsonify({
-                'error': 'INVALID_REQUEST',
-                'message': 'tickers list cannot be empty'
-            }), 400
-
-        if len(tickers) > 100:
-            return jsonify({
-                'error': 'INVALID_REQUEST',
-                'message': f'Too many tickers. Maximum is 100, got {len(tickers)}'
-            }), 400
-
-        # Normalize tickers
-        tickers = [t.upper().strip() for t in tickers if t]
-
-        # OPTIMIZATION: Batch fetch instead of individual requests (avoids N+1)
-        prices = fetch_prices_batch(tickers)
-
-        # Find missing tickers
-        found_tickers = set(prices.keys())
-        requested_tickers = set(tickers)
-        missing = list(requested_tickers - found_tickers)
-
-        response = {
-            'data': prices,
-            'meta': {
-                'requested': len(requested_tickers),
-                'found': len(found_tickers),
-                'missing': missing
-            }
-        }
-
-        return jsonify(response), 200
-
-    except Exception as e:
-        logger.error(f"Error in batch price fetch: {e}")
-        return jsonify({
-            'error': 'INTERNAL_ERROR',
-            'message': 'Failed to fetch batch prices'
-        }), 500
-```
+        return jsonify({'error': 'Internal server error'}), 500
