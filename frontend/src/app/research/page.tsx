@@ -1,11 +1,13 @@
+```typescript
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, Loader2, Calendar, Bot, Filter, Play } from 'lucide-react';
+import { FileText, Loader2, Calendar, Bot, Filter, Play, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
+import MetricsCard from '@/components/research/MetricsCard';
 import { useApi } from '@/hooks/useApi';
-import { getResearchBriefs, generateResearchBrief, getStocks } from '@/lib/api';
+import { getResearchBriefs, generateResearchBrief, getStocks, exportBriefPDF } from '@/lib/api';
 import type { ResearchBrief, Stock } from '@/lib/types';
 
 function formatDate(dateStr: string): string {
@@ -46,6 +48,8 @@ export default function ResearchPage() {
   const [filterTicker, setFilterTicker] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { data: briefs, loading, error, refetch } = useApi<ResearchBrief[]>(
     () => getResearchBriefs(filterTicker || undefined),
@@ -73,6 +77,19 @@ export default function ResearchPage() {
     } catch (err) {
       setGenError(err instanceof Error ? err.message : 'Failed to generate brief');
       setGenerating(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!selectedBrief) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportBriefPDF(selectedBrief.id, true);
+      setExporting(false);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Failed to export PDF');
+      setExporting(false);
     }
   };
 
@@ -199,15 +216,30 @@ export default function ResearchPage() {
             {selectedBrief ? (
               <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
                 <div className="mb-4 border-b border-slate-700/50 pb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-                      {selectedBrief.ticker}
-                    </span>
-                    {selectedBrief.model_used && (
-                      <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
-                        {selectedBrief.model_used}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+                        {selectedBrief.ticker}
                       </span>
-                    )}
+                      {selectedBrief.model_used && (
+                        <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
+                          {selectedBrief.model_used}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleExportPDF}
+                      disabled={exporting}
+                      className="flex items-center gap-2 rounded-lg bg-slate-700/50 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-600 disabled:opacity-50"
+                      title="Export as PDF"
+                    >
+                      {exporting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Download className="h-3 w-3" />
+                      )}
+                      Export PDF
+                    </button>
                   </div>
                   <h2 className="text-lg font-bold text-white">{selectedBrief.title}</h2>
                   <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
@@ -221,6 +253,25 @@ export default function ResearchPage() {
                     </span>
                   </div>
                 </div>
+
+                {exportError && (
+                  <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/30 p-3">
+                    <p className="text-xs text-red-400">{exportError}</p>
+                  </div>
+                )}
+
+                {selectedBrief.executive_summary && (
+                  <div className="mb-6 rounded-lg border border-slate-700/30 bg-slate-800/20 p-4">
+                    <h3 className="text-sm font-semibold text-slate-200 mb-2">Executive Summary</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      {selectedBrief.executive_summary}
+                    </p>
+                  </div>
+                )}
+
+                {selectedBrief.key_metrics && (
+                  <MetricsCard metrics={selectedBrief.key_metrics} />
+                )}
 
                 <MarkdownContent content={selectedBrief.content} />
               </div>
@@ -238,3 +289,4 @@ export default function ResearchPage() {
     </div>
   );
 }
+```

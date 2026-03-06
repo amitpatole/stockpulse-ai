@@ -1,3 +1,4 @@
+```typescript
 // ============================================================
 // TickerPulse AI v3.0 - API Client
 // ============================================================
@@ -196,6 +197,38 @@ export async function getHealth(): Promise<HealthCheck> {
   return request<HealthCheck>('/api/health');
 }
 
+// ---- Chart Data ----
+
+export interface ChartDataPoint {
+  timestamp: number;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartResponse {
+  ticker: string;
+  period: string;
+  data: ChartDataPoint[];
+  currency_symbol: string;
+  stats: {
+    current_price: number;
+    open_price: number;
+    high_price: number;
+    low_price: number;
+    price_change: number;
+    price_change_percent: number;
+    total_volume: number;
+  };
+}
+
+export async function getChartData(ticker: string, period = '1mo'): Promise<ChartResponse> {
+  return request<ChartResponse>(`/api/chart/${ticker.toUpperCase()}?period=${period}`);
+}
+
 // ---- Research ----
 
 export async function getResearchBriefs(ticker?: string): Promise<ResearchBrief[]> {
@@ -215,4 +248,38 @@ export async function generateResearchBrief(ticker?: string): Promise<ResearchBr
   });
 }
 
+export async function exportBriefPDF(briefId: number, includeMetrics = true): Promise<void> {
+  const url = `${API_BASE}/api/research/briefs/${briefId}/export`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ include_metrics: includeMetrics }),
+    });
+
+    if (!response.ok) {
+      throw new ApiError(`Failed to export PDF: ${response.status}`, response.status);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `brief_${briefId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(
+      `Failed to download PDF: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      0
+    );
+  }
+}
+
 export { ApiError };
+```
