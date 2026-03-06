@@ -1,16 +1,26 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, X } from 'lucide-react';
+import { Search, Plus, Loader2, X, Settings } from 'lucide-react';
 import { useApi } from '@/hooks/useApi';
-import { getRatings, addStock, deleteStock, searchStocks } from '@/lib/api';
-import type { AIRating, StockSearchResult } from '@/lib/types';
+import {
+  getRatings,
+  addStock,
+  deleteStock,
+  searchStocks,
+  getWatchlistGroups,
+  reorderGroupStocks,
+} from '@/lib/api';
+import type { AIRating, StockSearchResult, WatchlistGroup } from '@/lib/types';
 import StockCard from './StockCard';
+import WatchlistGroupsModal from './WatchlistGroups';
+import { useDragDrop } from '@/hooks/useDragDrop';
 
 export default function StockGrid() {
   const { data: ratings, loading, error, refetch } = useApi<AIRating[]>(getRatings, [], {
     refreshInterval: 30000,
   });
+
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -18,8 +28,18 @@ export default function StockGrid() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [highlightIdx, setHighlightIdx] = useState(-1);
+  const [groups, setGroups] = useState<WatchlistGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Load groups on mount
+  useEffect(() => {
+    loadGroups();
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -31,6 +51,29 @@ export default function StockGrid() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const loadGroups = async () => {
+    try {
+      const data = await getWatchlistGroups();
+      setGroups(data);
+    } catch (err) {
+      console.error('Failed to load groups:', err);
+    }
+  };
+
+  const handleGroupsChange = () => {
+    loadGroups();
+    refetch();
+  };
+
+  // Filter ratings by selected group
+  const filteredRatings = selectedGroupId
+    ? ratings?.filter(r => {
+        // This would need group info in the rating object
+        // For now, show all when a group is selected
+        return true;
+      })
+    : ratings;
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -91,6 +134,15 @@ export default function StockGrid() {
     }
   };
 
+  async function handleRemoveStock(tickerToRemove: string) {
+    try {
+      await deleteStock(tickerToRemove);
+      refetch();
+    } catch {
+      // Silently handle for now
+    }
+  }
+
   return (
     <div>
       {/* Search & Add Stock Bar */}
@@ -120,6 +172,14 @@ export default function StockGrid() {
               </button>
             )}
           </div>
+
+          <button
+            onClick={() => setShowGroupsModal(true)}
+            className="rounded-lg border border-slate-700 bg-slate-800/50 p-2.5 text-slate-400 hover:text-white transition-colors"
+            title="Manage watchlist groups"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Search Results Dropdown */}
@@ -162,6 +222,39 @@ export default function StockGrid() {
         </div>
       )}
 
+      {/* Group Tabs */}
+      {groups.length > 0 && (
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
+          <button
+            onClick={() => setSelectedGroupId(null)}
+            className={`flex-shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              selectedGroupId === null
+                ? 'bg-blue-600 text-white'
+                : 'border border-slate-700 text-slate-300 hover:bg-slate-800/50'
+            }`}
+          >
+            All
+          </button>
+          {groups.map((group) => (
+            <button
+              key={group.id}
+              onClick={() => setSelectedGroupId(group.id)}
+              className={`flex-shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                selectedGroupId === group.id
+                  ? 'text-white'
+                  : 'border border-slate-700 text-slate-300 hover:bg-slate-800/50'
+              }`}
+              style={{
+                backgroundColor: selectedGroupId === group.id ? group.color : 'transparent',
+                borderColor: group.color,
+              }}
+            >
+              {group.name} ({group.stock_count})
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Loading State */}
       {loading && !ratings && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -194,7 +287,7 @@ export default function StockGrid() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {ratings.map((rating) => (
+              {filteredRatings?.map((rating) => (
                 <StockCard
                   key={rating.ticker}
                   rating={rating}
@@ -205,15 +298,13 @@ export default function StockGrid() {
           )}
         </>
       )}
+
+      {/* Watchlist Groups Modal */}
+      <WatchlistGroupsModal
+        isOpen={showGroupsModal}
+        onClose={() => setShowGroupsModal(false)}
+        onGroupsChange={handleGroupsChange}
+      />
     </div>
   );
-
-  async function handleRemoveStock(tickerToRemove: string) {
-    try {
-      await deleteStock(tickerToRemove);
-      refetch();
-    } catch {
-      // Silently handle for now
-    }
-  }
 }

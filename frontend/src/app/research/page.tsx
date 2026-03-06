@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, Loader2, Calendar, Bot, Filter, Play } from 'lucide-react';
+import { FileText, Loader2, Calendar, Bot, Filter, Play, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
+import MetricsCard from '@/components/research/MetricsCard';
 import { useApi } from '@/hooks/useApi';
-import { getResearchBriefs, generateResearchBrief, getStocks } from '@/lib/api';
+import { getResearchBriefs, generateResearchBrief, getStocks, exportBriefPDF } from '@/lib/api';
 import type { ResearchBrief, Stock } from '@/lib/types';
 
 function formatDate(dateStr: string): string {
@@ -19,33 +20,13 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function MarkdownContent({ content }: { content: string }) {
-  // Simple markdown-to-HTML rendering for common patterns
-  const html = content
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-white mt-4 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-white mt-5 mb-2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-white mt-6 mb-3">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-slate-300 mb-1">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-slate-300 mb-1">$2</li>')
-    .replace(/`(.+?)`/g, '<code class="rounded bg-slate-700 px-1.5 py-0.5 text-xs text-blue-400 font-mono">$1</code>')
-    .replace(/\n\n/g, '</p><p class="text-sm text-slate-300 leading-relaxed mb-3">')
-    .replace(/\n/g, '<br />');
-
-  return (
-    <div
-      className="prose prose-invert max-w-none text-sm text-slate-300 leading-relaxed"
-      dangerouslySetInnerHTML={{ __html: `<p class="text-sm text-slate-300 leading-relaxed mb-3">${html}</p>` }}
-    />
-  );
-}
-
 export default function ResearchPage() {
   const [selectedBrief, setSelectedBrief] = useState<ResearchBrief | null>(null);
   const [filterTicker, setFilterTicker] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { data: briefs, loading, error, refetch } = useApi<ResearchBrief[]>(
     () => getResearchBriefs(filterTicker || undefined),
@@ -73,6 +54,19 @@ export default function ResearchPage() {
     } catch (err) {
       setGenError(err instanceof Error ? err.message : 'Failed to generate brief');
       setGenerating(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!selectedBrief) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportBriefPDF(selectedBrief.id, true);
+      setExporting(false);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Failed to export PDF');
+      setExporting(false);
     }
   };
 
@@ -199,15 +193,30 @@ export default function ResearchPage() {
             {selectedBrief ? (
               <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
                 <div className="mb-4 border-b border-slate-700/50 pb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-                      {selectedBrief.ticker}
-                    </span>
-                    {selectedBrief.model_used && (
-                      <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
-                        {selectedBrief.model_used}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+                        {selectedBrief.ticker}
                       </span>
-                    )}
+                      {selectedBrief.model_used && (
+                        <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
+                          {selectedBrief.model_used}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleExportPDF}
+                      disabled={exporting}
+                      className="flex items-center gap-2 rounded-lg bg-slate-700/50 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-600 disabled:opacity-50"
+                      title="Export as PDF"
+                    >
+                      {exporting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Download className="h-3 w-3" />
+                      )}
+                      Export PDF
+                    </button>
                   </div>
                   <h2 className="text-lg font-bold text-white">{selectedBrief.title}</h2>
                   <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
@@ -221,6 +230,25 @@ export default function ResearchPage() {
                     </span>
                   </div>
                 </div>
+
+                {exportError && (
+                  <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/30 p-3">
+                    <p className="text-xs text-red-400">{exportError}</p>
+                  </div>
+                )}
+
+                {selectedBrief.executive_summary && (
+                  <div className="mb-6 rounded-lg border border-slate-700/30 bg-slate-800/20 p-4">
+                    <h3 className="text-sm font-semibold text-slate-200 mb-2">Executive Summary</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      {selectedBrief.executive_summary}
+                    </p>
+                  </div>
+                )}
+
+                {selectedBrief.key_metrics && (
+                  <MetricsCard metrics={selectedBrief.key_metrics} />
+                )}
 
                 <MarkdownContent content={selectedBrief.content} />
               </div>

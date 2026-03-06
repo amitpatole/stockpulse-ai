@@ -1,3 +1,4 @@
+```txt
 # TickerPulse AI v3.0 - Backend Dependencies
 # ==========================================
 
@@ -5,6 +6,10 @@
 flask==3.0.0
 flask-cors>=4.0.0
 flask-apscheduler>=1.13.0
+
+# WebSocket Support
+python-socketio>=5.10.0
+python-engineio>=4.8.0
 
 # HTTP Requests
 requests==2.31.0
@@ -43,3 +48,4 @@ pytz>=2024.1
 # pip install finnhub-python>=2.4.0         # Finnhub
 # pip install twelvedata>=1.2.0             # Twelve Data
 # pip install alpaca-py>=0.28.0             # Alpaca
+```
