@@ -71,8 +71,9 @@ def get_index_used(plan: List[Dict[str, Any]]) -> Optional[str]:
             # Extract index name: "USING INDEX idx_name"
             parts = detail.split('USING INDEX')
             if len(parts) > 1:
-                index_name = parts[1].strip().split()[0]
-                return index_name
+                tokens = parts[1].strip().split()
+                if tokens:
+                    return tokens[0]
     return None
 
 

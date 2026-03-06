@@ -16,6 +16,7 @@ import type {
   AIProvider,
   HealthCheck,
   ResearchBrief,
+  ResearchBriefDetail,
   WatchlistGroup,
   WatchlistGroupDetail,
 } from './types';
@@ -333,6 +334,29 @@ export async function generateResearchBrief(ticker?: string): Promise<ResearchBr
     method: 'POST',
     body: JSON.stringify(ticker ? { ticker } : {}),
   });
+}
+
+export async function getResearchBriefDetail(briefId: number): Promise<ResearchBriefDetail> {
+  return request<ResearchBriefDetail>(`/api/research/briefs/${briefId}`);
+}
+
+export async function getResearchBriefMetrics(briefId: number): Promise<{ data: any; meta: any }> {
+  return request<{ data: any; meta: any }>(`/api/research/briefs/${briefId}/metrics`);
+}
+
+export async function exportResearchBriefPDF(briefId: number): Promise<Blob> {
+  const url = `${API_BASE}/api/research/briefs/${briefId}/export-pdf`;
+  const res = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    throw new ApiError(`Failed to export PDF: ${res.status}`, res.status);
+  }
+
+  return res.blob();
 }
 
 export { ApiError, type PaginationMeta, type PaginatedResponse };

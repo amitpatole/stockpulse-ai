@@ -1,4 +1,3 @@
-```python
 """SQLite database management with WAL mode and idempotent migrations."""
 
 import sqlite3
@@ -53,6 +52,17 @@ async def get_async_db(db_path: Optional[str] = None) -> aiosqlite.Connection:
 # ── Schema ──────────────────────────────────────────────────────────
 
 _TABLES_SQL = [
+    # Watchlist groups (for organizing stocks)
+    """
+    CREATE TABLE IF NOT EXISTS watchlist_groups (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        name                TEXT NOT NULL UNIQUE,
+        description         TEXT,
+        color               TEXT DEFAULT '#6366f1',
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
     # Research briefs (AI-generated research documents)
     """
     CREATE TABLE IF NOT EXISTS research_briefs (
@@ -85,7 +95,7 @@ _TABLES_SQL = [
         FOREIGN KEY (brief_id) REFERENCES research_briefs(id) ON DELETE CASCADE
     )
     """,
-    # Stock data (existing table structure for reference)
+    # Stock data (with watchlist group support)
     """
     CREATE TABLE IF NOT EXISTS stocks (
         id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,8 +105,11 @@ _TABLES_SQL = [
         price_change_pct    REAL,
         market_cap          TEXT,
         active              INTEGER DEFAULT 1,
+        group_id            INTEGER,
+        sort_order          INTEGER DEFAULT 0,
         created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (group_id) REFERENCES watchlist_groups(id) ON DELETE SET NULL
     )
     """,
     # AI ratings (existing table structure for reference)
@@ -131,15 +144,19 @@ _TABLES_SQL = [
 ]
 
 _INDEXES_SQL = [
+    # Watchlist group indexes
+    "CREATE INDEX IF NOT EXISTS idx_stocks_group_order ON stocks(group_id, sort_order)",
+    "CREATE INDEX IF NOT EXISTS idx_stocks_active_group ON stocks(active, group_id)",
+
     # Research briefs indexes
     "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker ON research_briefs(ticker)",
     "CREATE INDEX IF NOT EXISTS idx_research_briefs_created ON research_briefs(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker_created ON research_briefs(ticker, created_at DESC)",
-    
+
     # Research metadata indexes
     "CREATE INDEX IF NOT EXISTS idx_metadata_brief ON research_brief_metadata(brief_id)",
     "CREATE INDEX IF NOT EXISTS idx_metadata_created ON research_brief_metadata(created_at DESC)",
-    
+
     # Stock and ratings indexes (for metrics extraction)
     "CREATE INDEX IF NOT EXISTS idx_stocks_ticker ON stocks(ticker)",
     "CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active)",

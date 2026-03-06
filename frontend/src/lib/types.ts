@@ -1,4 +1,3 @@
-```typescript
 // ============================================================
 // TickerPulse AI v3.0 - TypeScript Type Definitions
 // ============================================================
@@ -155,6 +154,27 @@ export interface ResearchBrief {
   model_used?: string;
 }
 
+export interface BriefMetrics {
+  current_price?: number;
+  price_change_24h_pct?: number;
+  rsi?: number;
+  sentiment_label?: string;
+  sentiment_score?: number;
+  technical_score?: number;
+  fundamental_score?: number;
+  news_count_7d?: number;
+  recent_sentiment_avg?: number;
+  metric_sources?: string[];
+}
+
+export interface ResearchBriefDetail extends ResearchBrief {
+  executive_summary?: string;
+  metrics?: BriefMetrics;
+  metric_sources?: string[];
+  pdf_url?: string;
+  pdf_generated_at?: string;
+}
+
 // SSE Event Types
 export type SSEEventType = 'agent_status' | 'alert' | 'job_complete' | 'heartbeat' | 'news' | 'rating_update';
 
@@ -203,8 +223,10 @@ export const RATING_BG_CLASSES: Record<string, string> = {
 
 export const SENTIMENT_COLORS: Record<string, string> = {
   positive: 'bg-emerald-500/20 text-emerald-400',
+  bullish: 'bg-emerald-500/20 text-emerald-400',
   neutral: 'bg-slate-500/20 text-slate-400',
   negative: 'bg-red-500/20 text-red-400',
+  bearish: 'bg-red-500/20 text-red-400',
   mixed: 'bg-amber-500/20 text-amber-400',
 };
 
@@ -214,4 +236,3 @@ export const AGENT_STATUS_COLORS: Record<string, string> = {
   error: 'bg-red-500',
   disabled: 'bg-slate-500',
 };
-```

@@ -1,4 +1,3 @@
-```python
 #!/usr/bin/env python3
 """
 Stock Manager - Handles dynamic stock list management with optimized queries.
@@ -46,11 +45,6 @@ def init_stocks_table():
         )
     ''')
 
-    # Create index
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_stocks_group_order ON stocks(group_id, sort_order)
-    ''')
-
     # Add columns if missing (migration)
     try:
         cursor.execute('ALTER TABLE stocks ADD COLUMN group_id INTEGER REFERENCES watchlist_groups(id) ON DELETE SET NULL')
@@ -59,6 +53,14 @@ def init_stocks_table():
 
     try:
         cursor.execute('ALTER TABLE stocks ADD COLUMN sort_order INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+
+    # Create index after columns exist
+    try:
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_stocks_group_order ON stocks(group_id, sort_order)
+        ''')
     except sqlite3.OperationalError:
         pass
 
@@ -405,6 +407,7 @@ def move_stock_to_group(ticker: str, group_id: Optional[int] = None) -> bool:
     """Move a stock to a group (or remove from group if group_id is None)."""
     try:
         conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
         ticker = ticker.upper()
@@ -464,4 +467,3 @@ if __name__ == '__main__':
     print(f"Search results for 'tesla':")
     for r in results:
         print(f"  {r['ticker']}: {r['name']}")
-```

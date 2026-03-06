@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import Header from '@/components/layout/Header';
 import { useApi } from '@/hooks/useApi';
 import { getResearchBriefs, generateResearchBrief, getStocks } from '@/lib/api';
+import ResearchBriefDetail from '@/components/research/ResearchBriefDetail';
 import type { ResearchBrief, Stock } from '@/lib/types';
 
 function formatDate(dateStr: string): string {
@@ -17,28 +18,6 @@ function formatDate(dateStr: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function MarkdownContent({ content }: { content: string }) {
-  // Simple markdown-to-HTML rendering for common patterns
-  const html = content
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-white mt-4 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-white mt-5 mb-2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-white mt-6 mb-3">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-slate-300 mb-1">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-slate-300 mb-1">$2</li>')
-    .replace(/`(.+?)`/g, '<code class="rounded bg-slate-700 px-1.5 py-0.5 text-xs text-blue-400 font-mono">$1</code>')
-    .replace(/\n\n/g, '</p><p class="text-sm text-slate-300 leading-relaxed mb-3">')
-    .replace(/\n/g, '<br />');
-
-  return (
-    <div
-      className="prose prose-invert max-w-none text-sm text-slate-300 leading-relaxed"
-      dangerouslySetInnerHTML={{ __html: `<p class="text-sm text-slate-300 leading-relaxed mb-3">${html}</p>` }}
-    />
-  );
 }
 
 export default function ResearchPage() {
@@ -198,31 +177,7 @@ export default function ResearchPage() {
           <div className="xl:col-span-2">
             {selectedBrief ? (
               <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
-                <div className="mb-4 border-b border-slate-700/50 pb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-                      {selectedBrief.ticker}
-                    </span>
-                    {selectedBrief.model_used && (
-                      <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
-                        {selectedBrief.model_used}
-                      </span>
-                    )}
-                  </div>
-                  <h2 className="text-lg font-bold text-white">{selectedBrief.title}</h2>
-                  <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Bot className="h-3 w-3" />
-                      {selectedBrief.agent_name}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatDate(selectedBrief.created_at)}
-                    </span>
-                  </div>
-                </div>
-
-                <MarkdownContent content={selectedBrief.content} />
+                <ResearchBriefDetail briefId={selectedBrief.id} />
               </div>
             ) : (
               <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-800/20 p-12">
