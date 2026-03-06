@@ -1,3 +1,4 @@
+```python
 """
 TickerPulse AI v3.0 - Central Configuration
 All settings are driven by environment variables with sensible defaults.
@@ -20,6 +21,7 @@ class Config:
     else:
         BASE_DIR = Path(__file__).parent.parent  # tickerpulse-ai/
     DB_PATH = os.getenv('DB_PATH', str(BASE_DIR / 'stock_news.db'))
+    DB_TYPE = os.getenv('DB_TYPE', 'sqlite')
 
     # -------------------------------------------------------------------------
     # Flask
@@ -75,58 +77,13 @@ class Config:
     }
 
     # -------------------------------------------------------------------------
-    # OpenClaw agent gateway
+    # Database configuration
     # -------------------------------------------------------------------------
-    OPENCLAW_GATEWAY_URL = os.getenv(
-        'OPENCLAW_GATEWAY_URL', 'ws://127.0.0.1:18789'
-    )
-    OPENCLAW_WEBHOOK_TOKEN = os.getenv('OPENCLAW_WEBHOOK_TOKEN', '')
-    OPENCLAW_ENABLED = os.getenv('OPENCLAW_ENABLED', 'false').lower() == 'true'
-
-    # -------------------------------------------------------------------------
-    # Data providers
-    # -------------------------------------------------------------------------
-    POLYGON_API_KEY = os.getenv('POLYGON_API_KEY', '')
-    ALPHA_VANTAGE_KEY = os.getenv('ALPHA_VANTAGE_KEY', '')
-    FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
-    TWELVE_DATA_KEY = os.getenv('TWELVE_DATA_KEY', '')
-
-    # -------------------------------------------------------------------------
-    # Reddit (optional, for PRAW social-media monitoring)
-    # -------------------------------------------------------------------------
-    REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID', '')
-    REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET', '')
-
-    # -------------------------------------------------------------------------
-    # GitHub (for repository analytics)
-    # -------------------------------------------------------------------------
-    GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
-
-    # -------------------------------------------------------------------------
-    # Agent framework
-    # -------------------------------------------------------------------------
-    DEFAULT_AGENT_FRAMEWORK = os.getenv(
-        'DEFAULT_AGENT_FRAMEWORK', 'crewai'
-    )  # 'crewai' or 'openclaw'
-
-    # -------------------------------------------------------------------------
-    # Cost management
-    # -------------------------------------------------------------------------
-    MONTHLY_BUDGET_LIMIT = float(os.getenv('MONTHLY_BUDGET_LIMIT', 1500.0))
-    DAILY_BUDGET_WARNING = float(os.getenv('DAILY_BUDGET_WARNING', 75.0))
-
-    # -------------------------------------------------------------------------
-    # Rate limiting
-    # -------------------------------------------------------------------------
-    RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '60/minute')
-    RATE_LIMIT_AI = os.getenv('RATE_LIMIT_AI', '20/minute')
-    RATE_LIMIT_DATA = os.getenv('RATE_LIMIT_DATA', '30/minute')
-
-    # -------------------------------------------------------------------------
-    # Logging
-    # -------------------------------------------------------------------------
-    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-    LOG_DIR = os.getenv('LOG_DIR', str(BASE_DIR / 'logs'))
-    LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 10_485_760))  # 10 MB
-    LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
+    if DB_TYPE == 'postgresql':
+        SQLALCHEMY_DATABASE_URI = os.getenv(
+            'DATABASE_URL',
+            'postgresql://user:password@localhost:5432/tickerpulse'
+        )
+    else:
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + DB_PATH
+```
