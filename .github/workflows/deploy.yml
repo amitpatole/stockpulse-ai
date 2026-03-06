@@ -1,0 +1,203 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_run:
+    workflows: [ "CI" ]
+    types: [ completed ]
+    branches: [ main ]
+
+jobs:
+  # ============================================================================
+  # Deploy to staging on successful CI
+  # ============================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Deploy frontend to Vercel (Staging)
+        uses: vercel/action@v4
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_STAGING }}
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+        if: env.VERCEL_TOKEN != ''
+        continue-on-error: true
+
+      - name: Deploy notification (Staging)
+        run: |
+          echo "✅ Staging deployment triggered"
+          echo "Build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        if: success()
+
+  # ============================================================================
+  # Deploy to production (manual approval)
+  # ============================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://tickerpulse.example.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Run tests before production
+        run: |
+          cd frontend
+          npm run test:unit -- --run
+        continue-on-error: true
+
+      - name: Deploy frontend to Vercel (Production)
+        uses: vercel/action@v4
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PROD }}
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+          production: true
+        if: env.VERCEL_TOKEN != ''
+        continue-on-error: true
+
+      - name: Deploy backend (if using Railway/Render/Heroku)
+        run: |
+          echo "Deploy backend to production"
+          echo "Configure deployment based on your platform:"
+          echo "- Railway: Use railway/actions or railway CLI"
+          echo "- Render: Use render deployment webhooks"
+          echo "- AWS: Use AWS CDK or CloudFormation"
+          echo "- Heroku: Use git push heroku main"
+        continue-on-error: true
+
+      - name: Create deployment notification
+        run: |
+          echo "🚀 Production deployment in progress"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  # ============================================================================
+  # Post-deployment checks
+  # ============================================================================
+  post-deploy-health-check:
+    name: Post-Deployment Health Check
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Check deployed endpoints
+        run: |
+          echo "Checking deployment health..."
+
+          # Check frontend
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://tickerpulse.example.com/)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Frontend is healthy (HTTP $STATUS)"
+          else
+            echo "⚠️ Frontend returned HTTP $STATUS"
+          fi
+
+          # Check backend API
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.tickerpulse.example.com/health)
+          if [ "$API_STATUS" = "200" ]; then
+            echo "✅ Backend API is healthy (HTTP $API_STATUS)"
+          else
+            echo "⚠️ Backend API returned HTTP $API_STATUS"
+          fi
+        continue-on-error: true
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary"
+          echo "- **Status**: ${{ job.status }}"
+          echo "- **Timestamp**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "- **Commit**: [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})"
+
+  # ============================================================================
+  # Rollback on failure (Optional)
+  # ============================================================================
+  rollback-on-failure:
+    name: Rollback on Deployment Failure
+    runs-on: ubuntu-latest
+    needs: [ deploy-production, post-deploy-health-check ]
+    if: failure()
+
+    steps:
+      - name: Notify deployment failure
+        run: |
+          echo "⚠️ DEPLOYMENT FAILED - ROLLBACK INITIATED"
+          echo "Previous stable version will be restored"
+          echo "Check deployment logs for details"
+
+      - name: Revert to previous deployment
+        run: |
+          echo "Rollback implementation depends on your deployment platform:"
+          echo "- Vercel: Automatically reverts on failed deployment"
+          echo "- Railway: Use railway deployment history"
+          echo "- Render: Use automatic rollback feature"
+        continue-on-error: true

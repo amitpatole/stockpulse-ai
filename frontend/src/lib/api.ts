@@ -1,92 +1,58 @@
-// ============================================================
-// TickerPulse AI v3.0 - API Client
-// ============================================================
+// =====================================================
+import { PriceAlert, PriceAlertsListResponse } from './types';
 
-import type {
-  Stock,
-  StockSearchResult,
-  AIRating,
-  Agent,
-  AgentRun,
-  ScheduledJob,
-  NewsArticle,
-  Alert,
-  CostSummary,
-  AIProvider,
-  HealthCheck,
-  ResearchBrief,
-} from './types';
+// Price Alerts API
+export async function getPriceAlerts(
+  limit = 20,
+  offset = 0,
+  ticker?: string,
+  activeOnly = false,
+): Promise<PriceAlertsListResponse> {
+  const params = new URLSearchParams({
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+  if (ticker) params.append('ticker', ticker);
+  if (activeOnly) params.append('active_only', 'true');
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
+  return request(`/price-alerts?${params.toString()}`);
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${API_BASE}${path}`;
-  try {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      let message = `API error: ${res.status}`;
-      try {
-        const json = JSON.parse(body);
-        message = json.error || json.message || message;
-      } catch {
-        if (body) message = body;
-      }
-      throw new ApiError(message, res.status);
-    }
-
-    const text = await res.text();
-    if (!text) return {} as T;
-    return JSON.parse(text) as T;
-  } catch (err) {
-    if (err instanceof ApiError) throw err;
-    throw new ApiError(
-      `Failed to connect to API: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      0
-    );
-  }
+export async function getPriceAlert(id: number): Promise<PriceAlert> {
+  return request(`/price-alerts/${id}`);
 }
 
-// ---- Stocks ----
-
-export async function getStocks(): Promise<Stock[]> {
-  const data = await request<{ stocks: Stock[] } | Stock[]>('/api/stocks');
-  if (Array.isArray(data)) return data;
-  return data.stocks || [];
-}
-
-export async function searchStocks(query: string): Promise<StockSearchResult[]> {
-  if (!query.trim()) return [];
-  return request<StockSearchResult[]>(`/api/stocks/search?q=${encodeURIComponent(query.trim())}`);
-}
-
-export async function addStock(ticker: string, name?: string): Promise<Stock> {
-  const body: Record<string, string> = { ticker: ticker.toUpperCase() };
-  if (name) body.name = name;
-  return request<Stock>('/api/stocks', {
+export async function createPriceAlert(
+  ticker: string,
+  alertType: string,
+  threshold: number,
+): Promise<PriceAlert> {
+  return request('/price-alerts', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      ticker,
+      alert_type: alertType,
+      threshold,
+    }),
   });
 }
 
-export async function deleteStock(ticker: string): Promise<void> {
-  await request<void>(`/api/stocks/${ticker.toUpperCase()}`, {
+export async function updatePriceAlert(
+  id: number,
+  threshold?: number,
+  isActive?: boolean,
+): Promise<PriceAlert> {
+  return request(`/price-alerts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...(threshold !== undefined && { threshold }),
+      ...(isActive !== undefined && { is_active: isActive }),
+    }),
+  });
+}
+
+export async function deletePriceAlert(id: number): Promise<void> {
+  await request(`/price-alerts/${id}`, {
     method: 'DELETE',
   });
 }
@@ -196,6 +162,38 @@ export async function getHealth(): Promise<HealthCheck> {
   return request<HealthCheck>('/api/health');
 }
 
+// ---- Chart Data ----
+
+export interface ChartDataPoint {
+  timestamp: number;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartResponse {
+  ticker: string;
+  period: string;
+  data: ChartDataPoint[];
+  currency_symbol: string;
+  stats: {
+    current_price: number;
+    open_price: number;
+    high_price: number;
+    low_price: number;
+    price_change: number;
+    price_change_percent: number;
+    total_volume: number;
+  };
+}
+
+export async function getChartData(ticker: string, period = '1mo'): Promise<ChartResponse> {
+  return request<ChartResponse>(`/api/chart/${ticker.toUpperCase()}?period=${period}`);
+}
+
 // ---- Research ----
 
 export async function getResearchBriefs(ticker?: string): Promise<ResearchBrief[]> {
@@ -213,6 +211,39 @@ export async function generateResearchBrief(ticker?: string): Promise<ResearchBr
     method: 'POST',
     body: JSON.stringify(ticker ? { ticker } : {}),
   });
+}
+
+export async function exportBriefPDF(briefId: number, includeMetrics = true): Promise<void> {
+  const url = `${API_BASE}/api/research/briefs/${briefId}/export`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ include_metrics: includeMetrics }),
+    });
+
+    if (!response.ok) {
+      throw new ApiError(`Failed to export PDF: ${response.status}`, response.status);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `brief_${briefId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(
+      `Failed to download PDF: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      0
+    );
+  }
 }
 
 export { ApiError };

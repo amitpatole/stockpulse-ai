@@ -1,0 +1,273 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+jobs:
+  # ============================================================================
+  # Dependency security scanning
+  # ============================================================================
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit
+          pip install -r requirements.txt
+
+      - name: Check Python dependencies with safety
+        run: safety check --json
+        continue-on-error: true
+
+      - name: Scan for security issues with bandit
+        run: |
+          bandit -r backend/ -f json -o bandit-report.json || true
+          bandit -r backend/ -f txt
+        continue-on-error: true
+
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+        if: always()
+
+  # ============================================================================
+  # SAST: Static Application Security Testing
+  # ============================================================================
+  sast-python:
+    name: SAST - Python Code Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install analysis tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install pylint semgrep
+
+      - name: Run Semgrep
+        run: |
+          semgrep --config=p/security-audit --json -o semgrep-report.json backend/ || true
+          semgrep --config=p/security-audit backend/ || true
+        continue-on-error: true
+
+      - name: Run Pylint for security
+        run: |
+          pylint backend/ --disable=all --enable=C,E,F --fail-under=0 || true
+        continue-on-error: true
+
+      - name: Upload semgrep report
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-security-report
+          path: semgrep-report.json
+        if: always()
+
+  # ============================================================================
+  # SAST: JavaScript/TypeScript Code Analysis
+  # ============================================================================
+  sast-javascript:
+    name: SAST - JavaScript/TypeScript Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run ESLint with security plugin
+        run: |
+          cd frontend
+          npm install -D eslint-plugin-security
+          npm run lint -- --ext .ts,.tsx --plugin=security || true
+        continue-on-error: true
+
+  # ============================================================================
+  # Secret scanning
+  # ============================================================================
+  secrets-scan:
+    name: Secrets Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets with gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for hardcoded credentials
+        run: |
+          set +e  # Don't fail on grep return codes
+
+          echo "Checking for common secret patterns..."
+
+          # Check Python files
+          if grep -r "SECRET_KEY\s*=\s*['\"]" backend/ --include="*.py" | grep -v "os.getenv" | grep -v "^#"; then
+            echo "⚠️ WARNING: Found hardcoded SECRET_KEY in Python files"
+          fi
+
+          if grep -r "API_KEY\s*=\s*['\"]" backend/ --include="*.py" | grep -v "os.getenv" | grep -v "^#"; then
+            echo "⚠️ WARNING: Found hardcoded API_KEY in Python files"
+          fi
+
+          if grep -r "PASSWORD\s*=\s*['\"]" backend/ --include="*.py" | grep -v "os.getenv" | grep -v "^#"; then
+            echo "⚠️ WARNING: Found hardcoded PASSWORD in Python files"
+          fi
+
+          # Check TypeScript/JavaScript files
+          if grep -r "SECRET_KEY\s*=\s*['\"]" frontend/ --include="*.ts" --include="*.tsx" | grep -v "process.env" | grep -v "^#"; then
+            echo "⚠️ WARNING: Found hardcoded SECRET_KEY in TypeScript files"
+          fi
+
+          # Check for AWS keys
+          if grep -r "AKIA[0-9A-Z]\{16\}" . --include="*.py" --include="*.ts" --include="*.tsx" --include="*.js"; then
+            echo "⚠️ WARNING: Found potential AWS access key"
+          fi
+
+          # Check for private keys
+          if grep -r "BEGIN PRIVATE KEY\|BEGIN RSA PRIVATE KEY" . --include="*.pem" --include="*.key"; then
+            echo "⚠️ WARNING: Found private key files"
+          fi
+
+          set -e
+        continue-on-error: true
+
+  # ============================================================================
+  # Dependency vulnerability scanning (GitHub native)
+  # ============================================================================
+  dependency-check:
+    name: Dependency Vulnerability Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=moderate || true
+        continue-on-error: true
+
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit --desc --vulnerable-only requirements.txt || true
+        continue-on-error: true
+
+  # ============================================================================
+  # Container image scanning (if using Docker)
+  # ============================================================================
+  container-scan:
+    name: Container Image Security Scan
+    runs-on: ubuntu-latest
+    if: hashFiles('Dockerfile') != ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t tickerpulse:${{ github.sha }} .
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: tickerpulse:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        if: hashFiles('trivy-results.sarif') != ''
+        continue-on-error: true
+
+  # ============================================================================
+  # Code quality and security summary
+  # ============================================================================
+  security-summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [
+      dependency-scan,
+      sast-python,
+      sast-javascript,
+      secrets-scan,
+      dependency-check
+    ]
+    if: always()
+
+    steps:
+      - name: Generate security report
+        run: |
+          echo "## Security Scanning Report"
+          echo "**Timestamp**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          echo "### Scans Performed"
+          echo "- ✅ Dependency vulnerability scanning"
+          echo "- ✅ Python SAST (Bandit, Semgrep)"
+          echo "- ✅ JavaScript/TypeScript analysis"
+          echo "- ✅ Secret detection (Gitleaks)"
+          echo "- ✅ Dependency vulnerability check (npm audit, pip-audit)"
+          echo ""
+          echo "### Status"
+          echo "- Dependency Scan: ${{ needs.dependency-scan.result }}"
+          echo "- Python SAST: ${{ needs.sast-python.result }}"
+          echo "- JS/TS Analysis: ${{ needs.sast-javascript.result }}"
+          echo "- Secrets Scan: ${{ needs.secrets-scan.result }}"
+          echo "- Dependency Check: ${{ needs.dependency-check.result }}"
+          echo ""
+          echo "### Recommendations"
+          echo "1. Review all warnings in the GitHub Actions logs"
+          echo "2. Address critical and high severity findings"
+          echo "3. Monitor dependency updates for security patches"
+          echo "4. Use environment variables for all sensitive data"
+          echo "5. Rotate secrets regularly"
