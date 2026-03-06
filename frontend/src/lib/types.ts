@@ -1,3 +1,4 @@
+```typescript
 // ============================================================
 // TickerPulse AI v3.0 - TypeScript Type Definitions
 // ============================================================
@@ -7,6 +8,7 @@ export interface Stock {
   name?: string;
   active: boolean;
   added_at?: string;
+  group_id?: number;
 }
 
 export interface StockSearchResult {
@@ -30,6 +32,20 @@ export interface AIRating {
   technical_score?: number;
   fundamental_score?: number;
   updated_at?: string;
+}
+
+export interface WatchlistGroup {
+  id: number;
+  name: string;
+  description?: string;
+  color: string;
+  stock_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WatchlistGroupDetail extends WatchlistGroup {
+  stocks: string[];
 }
 
 export interface Agent {
@@ -198,3 +214,4 @@ export const AGENT_STATUS_COLORS: Record<string, string> = {
   error: 'bg-red-500',
   disabled: 'bg-slate-500',
 };
+```

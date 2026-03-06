@@ -16,6 +16,8 @@ import type {
   AIProvider,
   HealthCheck,
   ResearchBrief,
+  WatchlistGroup,
+  WatchlistGroupDetail,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -69,7 +71,6 @@ async function request<T>(path: string, options?: RequestInit & { signal?: Abort
     if (!text) return {} as T;
     return JSON.parse(text) as T;
   } catch (err) {
-    // Handle AbortError gracefully - request was cancelled by user/unmount
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw err;
     }
@@ -92,7 +93,6 @@ export async function getStocks(limit: number = 50, offset: number = 0): Promise
     `/api/stocks?${params.toString()}`
   );
   
-  // Handle both old array format and new paginated format
   if (Array.isArray(data)) return data;
   if ('data' in data) return data.data;
   return [];
@@ -115,6 +115,62 @@ export async function addStock(ticker: string, name?: string): Promise<Stock> {
 export async function deleteStock(ticker: string): Promise<void> {
   await request<void>(`/api/stocks/${ticker.toUpperCase()}`, {
     method: 'DELETE',
+  });
+}
+
+// ---- Watchlist Groups ----
+
+export async function getWatchlistGroups(): Promise<WatchlistGroup[]> {
+  const data = await request<{ data: WatchlistGroup[] }>(
+    '/api/watchlist-groups'
+  );
+  return data.data || [];
+}
+
+export async function getWatchlistGroupDetail(groupId: number): Promise<WatchlistGroupDetail> {
+  return request<WatchlistGroupDetail>(
+    `/api/watchlist-groups/${groupId}`
+  );
+}
+
+export async function createWatchlistGroup(
+  name: string,
+  color: string = '#6366f1',
+  description?: string
+): Promise<WatchlistGroup> {
+  return request<WatchlistGroup>('/api/watchlist-groups', {
+    method: 'POST',
+    body: JSON.stringify({ name, color, description }),
+  });
+}
+
+export async function updateWatchlistGroup(
+  groupId: number,
+  updates: { name?: string; color?: string; description?: string }
+): Promise<WatchlistGroup> {
+  return request<WatchlistGroup>(`/api/watchlist-groups/${groupId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteWatchlistGroup(groupId: number): Promise<void> {
+  await request<void>(`/api/watchlist-groups/${groupId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function moveStockToGroup(ticker: string, groupId?: number): Promise<void> {
+  await request<void>(`/api/stocks/${ticker.toUpperCase()}/group`, {
+    method: 'POST',
+    body: JSON.stringify({ group_id: groupId || null }),
+  });
+}
+
+export async function reorderGroupStocks(groupId: number, tickerOrder: string[]): Promise<void> {
+  await request<void>(`/api/watchlist-groups/${groupId}/stocks`, {
+    method: 'PUT',
+    body: JSON.stringify({ ticker_order: tickerOrder }),
   });
 }
 
@@ -267,7 +323,6 @@ export async function getResearchBriefs(ticker?: string, limit: number = 50, off
     `/api/research/briefs?${params.toString()}`
   );
   
-  // Handle both old array format and new paginated format
   if (Array.isArray(data)) return data;
   if ('data' in data) return data.data;
   return [];
