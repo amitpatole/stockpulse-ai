@@ -1,14 +1,16 @@
+```python
 #!/usr/bin/env python3
 """
-Stock Manager - Handles dynamic stock list management
+Stock Manager - Handles dynamic stock list management with optimized queries.
 """
 
 import sqlite3
 import requests
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 from backend.config import Config
+from backend.database import db_session
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,57 @@ def get_all_stocks() -> List[Dict]:
     return stocks
 
 
+def get_stocks_with_filter(
+    market: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0
+) -> Tuple[List[sqlite3.Row], int]:
+    """
+    Get paginated active stocks with optional market filtering (OPTIMIZED).
+
+    Uses indexed columns (active, market) for fast filtering.
+    Returns both data and total count in single operation with minimal queries.
+
+    Args:
+        market: Optional market filter (e.g., 'US', 'India', None for all)
+        limit: Rows per page (1-100, default 20)
+        offset: Starting row offset
+
+    Returns:
+        Tuple of (stocks as Row objects, total_count of active stocks)
+    """
+    with db_session() as conn:
+        cursor = conn.cursor()
+
+        # Build WHERE clause based on filters
+        where_parts = ["active = 1"]  # Always filter active stocks
+        params: list = []
+
+        if market and market != 'All':
+            where_parts.append("market = ?")
+            params.append(market)
+
+        where_clause = " WHERE " + " AND ".join(where_parts)
+
+        # Query 1: Get total count for pagination metadata
+        count_sql = f"SELECT COUNT(*) as cnt FROM stocks{where_clause}"
+        cursor.execute(count_sql, params)
+        total_count = cursor.fetchone()['cnt']
+
+        # Query 2: Get paginated results (leverages idx_stocks_active_market composite index)
+        data_sql = f"""
+            SELECT ticker, name, market, added_at, active
+            FROM stocks{where_clause}
+            ORDER BY ticker
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+        cursor.execute(data_sql, params)
+        stocks = cursor.fetchall()
+
+    return stocks, total_count
+
+
 def add_stock(ticker: str, name: str, market: str = 'US') -> bool:
     """Add a new stock to monitor"""
     try:
@@ -146,8 +199,8 @@ def remove_stock(ticker: str) -> bool:
 
 def search_stock_ticker(query: str) -> List[Dict]:
     """
-    Search for stock tickers using Yahoo Finance
-    Returns list of matching stocks with ticker and name
+    Search for stock tickers using Yahoo Finance.
+    Returns list of matching stocks with ticker and name.
     """
     try:
         # Use Yahoo Finance search
@@ -197,3 +250,4 @@ if __name__ == '__main__':
     print(f"Search results for 'tesla':")
     for r in results:
         print(f"  {r['ticker']}: {r['name']}")
+```
