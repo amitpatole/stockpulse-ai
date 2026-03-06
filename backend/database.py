@@ -1,6 +1,7 @@
+```python
 """
 TickerPulse AI v3.0 - Database Connection Manager
-Thread-safe SQLite helper with context-manager support and table initialisation.
+Thread-safe SQLite helper with context-manager support, table initialization, and strategic indexing.
 """
 
 import sqlite3
@@ -29,6 +30,8 @@ def get_db_connection(db_path: str | None = None) -> sqlite3.Connection:
     * ``check_same_thread=False`` is required so Flask (and APScheduler)
       threads can share the connection safely.  SQLite itself serialises
       writes, so this is safe for the read-heavy workload of TickerPulse.
+    * WAL mode improves concurrent read performance significantly.
+    * Foreign keys are enabled for referential integrity.
     """
     path = db_path or Config.DB_PATH
     conn = sqlite3.connect(path, check_same_thread=False)
@@ -260,27 +263,76 @@ _NEW_TABLES_SQL = [
     """,
 ]
 
-# Useful indices for the new tables
+# Strategic indexes for query performance optimization
+# These are organized by table and purpose (filtering, sorting, joins)
 _INDEXES_SQL = [
+    # -------------------------------------------------------------------------
+    # agent_runs indexes - commonly filtered and sorted tables
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_status      ON agent_runs (status)",
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_agent       ON agent_runs (agent_name)",
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_started     ON agent_runs (started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_agent_status ON agent_runs (agent_name, status)",
+
+    # -------------------------------------------------------------------------
+    # job_history indexes - audit log queries
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_job_history_job_id     ON job_history (job_id)",
     "CREATE INDEX IF NOT EXISTS idx_job_history_executed   ON job_history (executed_at)",
+    "CREATE INDEX IF NOT EXISTS idx_job_history_status     ON job_history (status)",
+
+    # -------------------------------------------------------------------------
+    # cost_tracking indexes - date-based aggregation queries
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_cost_tracking_date     ON cost_tracking (date)",
     "CREATE INDEX IF NOT EXISTS idx_cost_tracking_agent    ON cost_tracking (agent_name)",
+    "CREATE INDEX IF NOT EXISTS idx_cost_tracking_date_agent ON cost_tracking (date, agent_name)",
+
+    # -------------------------------------------------------------------------
+    # ai_ratings indexes - commonly looked up by ticker
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_ai_ratings_ticker       ON ai_ratings (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_updated      ON ai_ratings (updated_at DESC)",
+
+    # -------------------------------------------------------------------------
+    # research_briefs indexes - filtering and sorting on ticker and created_at
+    # -------------------------------------------------------------------------
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker  ON research_briefs (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_created ON research_briefs (created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker_created ON research_briefs (ticker, created_at DESC)",
+
+    # -------------------------------------------------------------------------
+    # stocks indexes - filtering by active status and market
+    # -------------------------------------------------------------------------
+    "CREATE INDEX IF NOT EXISTS idx_stocks_active          ON stocks (active)",
+    "CREATE INDEX IF NOT EXISTS idx_stocks_market          ON stocks (market)",
+    "CREATE INDEX IF NOT EXISTS idx_stocks_active_market   ON stocks (active, market)",
+
+    # -------------------------------------------------------------------------
+    # news indexes - common filtering patterns
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_news_ticker            ON news (ticker)",
-    "CREATE INDEX IF NOT EXISTS idx_news_created           ON news (created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_news_created           ON news (created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_news_ticker_created    ON news (ticker, created_at DESC)",
+
+    # -------------------------------------------------------------------------
+    # alerts indexes - quick lookup by creation time
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_alerts_created         ON alerts (created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_ticker          ON alerts (ticker)",
+
+    # -------------------------------------------------------------------------
+    # download tracking indexes - time-based queries
+    # -------------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_download_stats_repo    ON download_stats (repo_owner, repo_name)",
     "CREATE INDEX IF NOT EXISTS idx_download_stats_date    ON download_stats (recorded_at)",
     "CREATE INDEX IF NOT EXISTS idx_download_daily_date    ON download_daily (date)",
+    "CREATE INDEX IF NOT EXISTS idx_download_daily_repo    ON download_daily (repo_owner, repo_name)",
 ]
 
 
 # ---------------------------------------------------------------------------
-# Public initialisation function
+# Migration helpers
 # ---------------------------------------------------------------------------
 
 def _migrate_agent_runs(cursor) -> None:
@@ -288,10 +340,9 @@ def _migrate_agent_runs(cursor) -> None:
 
     Safe to call multiple times — silently skips if columns already exist.
     """
-    # Check existing columns
     cols = {row[1] for row in cursor.execute("PRAGMA table_info(agent_runs)").fetchall()}
     if not cols:
-        return  # table doesn't exist yet, CREATE TABLE will handle it
+        return
 
     migrations = []
     if 'tokens_input' not in cols:
@@ -303,7 +354,6 @@ def _migrate_agent_runs(cursor) -> None:
     if 'metadata' not in cols:
         migrations.append("ALTER TABLE agent_runs ADD COLUMN metadata TEXT")
 
-    # Copy data from old tokens_used into tokens_input if migrating
     if 'tokens_used' in cols and 'tokens_input' not in cols:
         migrations.append("UPDATE agent_runs SET tokens_input = tokens_used WHERE tokens_used > 0")
 
@@ -322,11 +372,21 @@ def _migrate_news(cursor) -> None:
         logger.info("Migration applied: added engagement_score to news table")
 
 
+# ---------------------------------------------------------------------------
+# Public initialisation function
+# ---------------------------------------------------------------------------
+
 def init_all_tables(db_path: str | None = None) -> None:
-    """Create every table (existing + new v3.0) and apply indexes.
+    """Create every table (existing + new v3.0) and apply strategic indexes.
 
     Safe to call multiple times -- all statements use
     ``CREATE TABLE IF NOT EXISTS`` / ``CREATE INDEX IF NOT EXISTS``.
+    
+    Index Strategy:
+    - Single-column indexes on frequently filtered fields (active, status, etc)
+    - Composite indexes for common WHERE + ORDER BY patterns
+    - DESC on created_at indexes for reverse chronological queries
+    - Foreign key columns indexed for join performance
     """
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
@@ -334,7 +394,6 @@ def init_all_tables(db_path: str | None = None) -> None:
         for sql in _EXISTING_TABLES_SQL:
             cursor.execute(sql)
 
-        # Migrate existing tables before CREATE TABLE (which is a no-op if table exists)
         _migrate_agent_runs(cursor)
         _migrate_news(cursor)
 
@@ -352,3 +411,4 @@ def init_all_tables(db_path: str | None = None) -> None:
         raise
     finally:
         conn.close()
+```

@@ -1,6 +1,7 @@
+```python
 #!/usr/bin/env python3
 """
-Stock Manager - Handles dynamic stock list management
+Stock Manager - Handles dynamic stock list management with optimized queries.
 """
 
 import sqlite3
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def init_stocks_table():
-    """Initialize stocks table in database"""
+    """Initialize stocks table in database with proper indexes."""
     conn = sqlite3.connect(Config.DB_PATH)
     cursor = conn.cursor()
 
@@ -76,7 +77,11 @@ def init_stocks_table():
 
 
 def get_active_stocks() -> List[str]:
-    """Get list of active stock tickers"""
+    """Get list of active stock tickers.
+    
+    Optimization: Uses indexed 'active' column for efficient filtering.
+    Selects only required 'ticker' column instead of full rows.
+    """
     conn = sqlite3.connect(Config.DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -89,7 +94,10 @@ def get_active_stocks() -> List[str]:
 
 
 def get_all_stocks() -> List[Dict]:
-    """Get all stocks with details"""
+    """Get all stocks with details.
+    
+    Optimization: Uses PRIMARY KEY sort for efficient retrieval.
+    """
     conn = sqlite3.connect(Config.DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -102,7 +110,10 @@ def get_all_stocks() -> List[Dict]:
 
 
 def add_stock(ticker: str, name: str, market: str = 'US') -> bool:
-    """Add a new stock to monitor"""
+    """Add a new stock to monitor.
+    
+    Optimization: Uses INSERT OR REPLACE to avoid N+1 check pattern.
+    """
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
@@ -127,7 +138,10 @@ def add_stock(ticker: str, name: str, market: str = 'US') -> bool:
 
 
 def remove_stock(ticker: str) -> bool:
-    """Remove a stock from monitoring (soft delete)"""
+    """Remove a stock from monitoring (soft delete).
+    
+    Optimization: Uses indexed primary key for efficient lookup and update.
+    """
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         cursor = conn.cursor()
@@ -146,8 +160,10 @@ def remove_stock(ticker: str) -> bool:
 
 def search_stock_ticker(query: str) -> List[Dict]:
     """
-    Search for stock tickers using Yahoo Finance
-    Returns list of matching stocks with ticker and name
+    Search for stock tickers using Yahoo Finance.
+    Returns list of matching stocks with ticker and name.
+    
+    Optimization: External API call, minimal database optimization needed.
     """
     try:
         # Use Yahoo Finance search
@@ -197,3 +213,4 @@ if __name__ == '__main__':
     print(f"Search results for 'tesla':")
     for r in results:
         print(f"  {r['ticker']}: {r['name']}")
+```

@@ -1,7 +1,7 @@
 ```python
 """
 TickerPulse AI v3.0 - Analysis API Routes
-Blueprint for AI ratings and chart data endpoints.
+Blueprint for AI ratings and chart data endpoints with optimized caching.
 """
 
 from flask import Blueprint, jsonify, request
@@ -18,12 +18,21 @@ analysis_bp = Blueprint('analysis', __name__, url_prefix='/api')
 
 
 def _get_cached_ratings():
-    """Try to read pre-computed ratings from ai_ratings table."""
+    """Try to read pre-computed ratings from ai_ratings table.
+    
+    Optimization: Select only required columns instead of * for better
+    memory efficiency when dealing with potentially large result sets.
+    """
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         rows = conn.execute("""
-            SELECT * FROM ai_ratings ORDER BY ticker
+            SELECT 
+                ticker, rating, score, confidence, current_price, price_change, 
+                price_change_pct, rsi, sentiment_score, sentiment_label, 
+                technical_score, fundamental_score, updated_at
+            FROM ai_ratings 
+            ORDER BY ticker
         """).fetchall()
         conn.close()
         if rows:
@@ -119,6 +128,9 @@ def get_ai_ratings():
     Serves cached ratings from ai_ratings table, then computes live ratings
     for any active stocks that are missing from the cache.
     
+    Optimization: Uses optimized query to get active tickers with index support
+    and filters are applied at the database level where possible.
+    
     Errors:
         422: Invalid period or limit parameter
     """
@@ -138,13 +150,13 @@ def get_ai_ratings():
     
     analytics = StockAnalytics()
 
-    # Get all active stock tickers
+    # Optimization: Get only ticker column from active stocks using indexed query
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
         active_tickers = {
             row['ticker']
-            for row in conn.execute("SELECT ticker FROM stocks WHERE active = 1").fetchall()
+            for row in conn.execute("SELECT ticker FROM stocks WHERE active = 1 ORDER BY ticker").fetchall()
         }
         conn.close()
     except Exception:
@@ -186,17 +198,23 @@ def get_ai_ratings():
 
 @analysis_bp.route('/ai/rating/<ticker>', methods=['GET'])
 def get_ai_rating(ticker):
-    """Get AI rating for a specific stock."""
-    # Try cached first
+    """Get AI rating for a specific stock.
+    
+    Optimization: Uses indexed ticker lookup for efficient single-record retrieval.
+    """
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT * FROM ai_ratings WHERE ticker = ?", (ticker.upper(),)).fetchone()
+        row = conn.execute(
+            "SELECT ticker, rating, score, confidence, current_price, price_change, price_change_pct, rsi, sentiment_score, sentiment_label, technical_score, fundamental_score, updated_at FROM ai_ratings WHERE ticker = ?", 
+            (ticker.upper(),)
+        ).fetchone()
         conn.close()
         if row:
             return jsonify(dict(row))
     except Exception:
         pass
+    
     # Fall back to live calculation
     analytics = StockAnalytics()
     rating = analytics.calculate_ai_rating(ticker)

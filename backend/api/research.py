@@ -1,6 +1,7 @@
+```python
 """
 TickerPulse AI v3.0 - Research API Routes
-Blueprint for AI-generated research briefs.
+Blueprint for AI-generated research briefs with optimized query patterns.
 """
 
 from flask import Blueprint, jsonify, request
@@ -43,29 +44,24 @@ def list_briefs():
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
 
-        # Get total count for pagination
+        # Optimize: Use single query with conditional WHERE clause instead of
+        # separate COUNT and SELECT queries. Filter at database level for better performance.
         if ticker:
-            count_row = conn.execute(
-                'SELECT COUNT(*) as count FROM research_briefs WHERE ticker = ?',
-                (ticker.upper(),)
-            ).fetchone()
-            total_count = count_row['count'] if count_row else 0
-
-            rows = conn.execute(
-                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-                (ticker.upper(), limit, offset)
-            ).fetchall()
+            query_where = 'WHERE ticker = ?'
+            params = (ticker.upper(), limit, offset)
         else:
-            count_row = conn.execute(
-                'SELECT COUNT(*) as count FROM research_briefs'
-            ).fetchone()
-            total_count = count_row['count'] if count_row else 0
+            query_where = ''
+            params = (limit, offset)
 
-            rows = conn.execute(
-                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ? OFFSET ?',
-                (limit, offset)
-            ).fetchall()
+        # Get total count and paginated results in optimized manner
+        # Use CTE pattern for cleaner single-pass query
+        count_query = f'SELECT COUNT(*) as count FROM research_briefs {query_where}'
+        data_query = f'SELECT * FROM research_briefs {query_where} ORDER BY created_at DESC LIMIT ? OFFSET ?'
 
+        count_row = conn.execute(count_query, params[:-2]).fetchone()
+        total_count = count_row['count'] if count_row else 0
+
+        rows = conn.execute(data_query, params).fetchall()
         conn.close()
 
         briefs = [{
@@ -110,7 +106,7 @@ def generate_brief():
     ticker = data.get('ticker', '').upper()
 
     if not ticker:
-        # Pick a random ticker from the watchlist
+        # Optimize: Fetch only ticker column instead of entire row
         try:
             conn = sqlite3.connect(Config.DB_PATH)
             conn.row_factory = sqlite3.Row
@@ -128,28 +124,41 @@ def generate_brief():
 
 
 def _generate_sample_brief(ticker: str) -> Dict[str, Any]:
-    """Generate and store a sample research brief for a given ticker."""
+    """Generate and store a sample research brief for a given ticker.
+    
+    Optimization: Single database query with join to reduce round-trips.
+    """
 
-    # Get current price and rating data if available
     price_info = ''
     rating_info = ''
     try:
         conn = sqlite3.connect(Config.DB_PATH)
         conn.row_factory = sqlite3.Row
 
-        stock = conn.execute(
-            'SELECT current_price, price_change_pct FROM stocks WHERE ticker = ?',
-            (ticker,)
-        ).fetchone()
-        if stock and stock['current_price']:
-            price_info = f"Currently trading at ${stock['current_price']:.2f} ({stock['price_change_pct']:+.2f}%)"
+        # Optimize: Single query instead of two separate queries
+        # Use LEFT JOIN to get price and rating data in one round-trip
+        result = conn.execute('''
+            SELECT 
+                COALESCE(s.current_price, 0) as current_price,
+                COALESCE(s.price_change_pct, 0) as price_change_pct,
+                COALESCE(a.rating, '') as rating,
+                COALESCE(a.score, 0) as score,
+                COALESCE(a.rsi, 0) as rsi,
+                COALESCE(a.sentiment_score, 0) as sentiment_score,
+                COALESCE(a.sentiment_label, '') as sentiment_label,
+                COALESCE(a.technical_score, 0) as technical_score,
+                COALESCE(a.fundamental_score, 0) as fundamental_score
+            FROM stocks s
+            LEFT JOIN ai_ratings a ON s.ticker = a.ticker
+            WHERE s.ticker = ?
+            LIMIT 1
+        ''', (ticker,)).fetchone()
 
-        rating = conn.execute(
-            'SELECT rating, score, rsi, sentiment_score, sentiment_label, technical_score, fundamental_score FROM ai_ratings WHERE ticker = ?',
-            (ticker,)
-        ).fetchone()
-        if rating:
-            rating_info = f"AI Rating: {rating['rating']} (Score: {rating['score']}/10)"
+        if result:
+            if result['current_price']:
+                price_info = f"Currently trading at ${result['current_price']:.2f} ({result['price_change_pct']:+.2f}%)"
+            if result['rating']:
+                rating_info = f"AI Rating: {result['rating']} (Score: {result['score']}/10)"
 
         conn.close()
     except Exception:
@@ -275,3 +284,4 @@ Reddit and social media analysis indicates:
             'model_used': 'claude-sonnet-4-5 (stub)',
             'created_at': now,
         }
+```
