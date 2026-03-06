@@ -24,7 +24,27 @@ class Config:
     # -------------------------------------------------------------------------
     # Flask
     # -------------------------------------------------------------------------
-    SECRET_KEY = os.getenv('SECRET_KEY', 'tickerpulse-dev-key-change-in-prod')
+    # TP-C04: SECRET_KEY with production enforcement
+    _SECRET_KEY = os.getenv('SECRET_KEY')
+    ENV = os.getenv('ENV', 'development').lower()
+    
+    if not _SECRET_KEY:
+        if ENV == 'production':
+            raise ValueError(
+                "CRITICAL: SECRET_KEY environment variable not set in production mode. "
+                "Set SECRET_KEY to a secure random value before running in production. "
+                "Example: openssl rand -hex 32"
+            )
+        # Development default (NEVER use in production)
+        _SECRET_KEY = 'tickerpulse-dev-key-change-in-prod'
+        if ENV == 'development':
+            import logging
+            logging.getLogger(__name__).warning(
+                "Using development SECRET_KEY. Change SECRET_KEY environment variable for production."
+            )
+    
+    SECRET_KEY: str = _SECRET_KEY
+    
     FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
     FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
@@ -129,4 +149,25 @@ class Config:
     LOG_DIR = os.getenv('LOG_DIR', str(BASE_DIR / 'logs'))
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 10_485_760))  # 10 MB
-    LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
+
+    # -------------------------------------------------------------------------
+    # WebSocket Configuration
+    # -------------------------------------------------------------------------
+    # Default refresh interval for price updates (in milliseconds)
+    # 0 = event-driven (immediate delivery)
+    # >0 = batch updates every N milliseconds
+    WEBSOCKET_DEFAULT_REFRESH_INTERVAL = int(os.getenv('WEBSOCKET_DEFAULT_REFRESH_INTERVAL', 0))
+
+    # Maximum number of concurrent WebSocket connections
+    WEBSOCKET_MAX_CONNECTIONS = int(os.getenv('WEBSOCKET_MAX_CONNECTIONS', 1000))
+
+    # Maximum tickers per client subscription
+    WEBSOCKET_MAX_SUBSCRIPTIONS_PER_CLIENT = int(
+        os.getenv('WEBSOCKET_MAX_SUBSCRIPTIONS_PER_CLIENT', 50)
+    )
+
+    # Enable automatic reconnection on client disconnect
+    WEBSOCKET_AUTO_RECONNECT = os.getenv('WEBSOCKET_AUTO_RECONNECT', 'true').lower() == 'true'
+
+    # Enable fallback to REST polling if WebSocket unavailable
+    WEBSOCKET_ENABLE_POLLING_FALLBACK = os.getenv('WEBSOCKET_ENABLE_POLLING_FALLBACK', 'true').lower() == 'true'

@@ -1,0 +1,315 @@
+/**
+ * Accessibility styles for WCAG 2.1 AA compliance
+ * Screen reader only content, focus states, and live regions
+ */
+
+/* Screen reader only - hides content visually but keeps it available to screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Show on focus for skip links and other keyboard accessible elements */
+.sr-only:focus-visible,
+.sr-only:focus,
+.focus\:not-sr-only:focus,
+.focus\:not-sr-only:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Focus visible styles - ring outline for keyboard navigation */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Alternative focus styles for elements with custom focus rings */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+  outline: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid currentColor;
+    outline-offset: 3px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Live region styles */
+[role="status"],
+[role="alert"],
+[aria-live] {
+  position: static;
+  visibility: visible;
+}
+
+/* Ensure status messages are announced */
+[role="status"][aria-live="polite"],
+[role="alert"][aria-live="assertive"] {
+  display: block;
+}
+
+/* Skip link visibility on focus */
+a[href="#main"]:focus,
+a[href="#main"]:focus-visible {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  padding: 8px 16px;
+  background-color: #1e40af;
+  color: white;
+  text-decoration: none;
+  border-radius: 0 0 4px 0;
+}
+
+/* Improve button focus indication */
+button:not([data-no-focus-ring]) {
+  transition: outline 0.2s, box-shadow 0.2s;
+}
+
+button:focus-visible:not([data-no-focus-ring]) {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Disabled state clarity */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+a[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Error state visibility */
+[aria-invalid="true"],
+input:invalid {
+  border-color: #dc2626;
+  outline-color: #dc2626;
+}
+
+[aria-invalid="true"]:focus-visible,
+input:invalid:focus-visible {
+  outline: 2px solid #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* Progress bar styles for accessibility */
+[role="progressbar"] {
+  display: block;
+  width: 100%;
+  background-color: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+[role="progressbar"] > div {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Ensure focus visible for all interactive elements */
+[tabindex="0"]:focus-visible,
+[role="button"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Tooltip and aria-description visibility */
+[aria-describedby] {
+  position: relative;
+}
+
+/* Loading state indication */
+[aria-busy="true"] {
+  opacity: 0.8;
+}
+
+/* Visually hidden but accessible alternative text */
+.visually-hidden {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* Print styles - show hidden content for printing */
+@media print {
+  .sr-only,
+  .visually-hidden {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+}
+
+/* Ensure adequate touch target sizes for mobile accessibility */
+@media (pointer: coarse) {
+  button,
+  a,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Reduce brightness of page for light sensitivity */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* High contrast mode overrides */
+@media (prefers-contrast: more) {
+  body {
+    color: #000;
+    background-color: #fff;
+  }
+
+  button:not(:disabled),
+  a,
+  input:not(:disabled) {
+    text-decoration: underline;
+  }
+}
+
+/* Ensure focus management for modals */
+[role="dialog"]:focus-visible,
+[aria-modal="true"]:focus-visible {
+  outline: 2px solid #3b82f6;
+}
+
+/* List accessibility */
+[role="list"] {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+[role="listitem"] {
+  display: list-item;
+  margin-left: 1.25rem;
+}
+
+/* Navigation accessibility */
+nav a:current {
+  font-weight: bold;
+}
+
+/* Ensure proper contrast for form labels */
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+/* Required field indication */
+[aria-required="true"]::after {
+  content: " *";
+  color: #dc2626;
+  font-weight: bold;
+}
+
+/* Error messages styling */
+[role="alert"],
+.error-message,
+[aria-live="assertive"] {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+/* Ensure icon buttons have sufficient contrast */
+button svg {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Ensure tooltips are accessible */
+[title] {
+  cursor: help;
+}
+
+/* Accessible carousel/slider */
+[role="region"][aria-label*="carousel"],
+[role="region"][aria-label*="slider"] {
+  outline: 1px solid transparent;
+}
+
+/* Tab/panel navigation */
+[role="tablist"] {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #d1d5db;
+}
+
+[role="tab"] {
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+[role="tab"][aria-selected="true"] {
+  border-bottom: 2px solid #3b82f6;
+  color: #3b82f6;
+}
+
+[role="tabpanel"] {
+  display: none;
+}
+
+[role="tabpanel"][aria-hidden="false"] {
+  display: block;
+}

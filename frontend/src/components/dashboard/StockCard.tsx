@@ -15,28 +15,39 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
   const isPositive = priceChangePct > 0;
   const isNegative = priceChangePct < 0;
 
-  const ratingClass = RATING_BG_CLASSES[rating.rating] || 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+  const ratingClass = RATING_BG_CLASSES[rating.rating] || 'bg-slate-500/20 text-slate-500 border-slate-500/30';
 
   const sentimentScore = rating.sentiment_score ?? 0;
-  const sentimentPct = Math.round(((sentimentScore + 1) / 2) * 100); // -1 to 1 -> 0% to 100%
+  const sentimentPct = Math.round(((sentimentScore + 1) / 2) * 100);
+
+  const cardId = `stock-card-${rating.ticker}`;
+  const rsiId = `rsi-${rating.ticker}`;
+  const sentimentId = `sentiment-${rating.ticker}`;
 
   return (
-    <div className="group relative rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 transition-all hover:border-slate-600 hover:bg-slate-800">
+    <article
+      className="group relative rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 transition-all hover:border-slate-600 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      role="region"
+      aria-labelledby={cardId}
+    >
       {/* Remove button */}
       {onRemove && (
         <button
           onClick={() => onRemove(rating.ticker)}
-          className="absolute right-2 top-2 rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-300 group-hover:opacity-100"
+          aria-label={`Remove ${rating.ticker} from watchlist`}
+          className="absolute right-2 top-2 rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-300 group-hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       )}
 
       {/* Header: Ticker + Price */}
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-base font-bold text-white">{rating.ticker}</h3>
-          <p className="mt-0.5 text-xl font-bold text-white font-mono">
+          <h3 id={cardId} className="text-base font-bold text-white">
+            {rating.ticker}
+          </h3>
+          <p className="mt-0.5 text-xl font-bold text-white font-mono" aria-label={`Current price: $${rating.current_price?.toFixed(2) ?? 'N/A'}`}>
             ${rating.current_price?.toFixed(2) ?? '—'}
           </p>
         </div>
@@ -47,16 +58,18 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
             isNegative && 'bg-red-500/10 text-red-400',
             !isPositive && !isNegative && 'bg-slate-500/10 text-slate-400'
           )}
+          aria-label={`Price change: ${isPositive ? '+' : ''}${priceChangePct.toFixed(2)}%`}
         >
           {isPositive ? (
-            <TrendingUp className="h-3 w-3" />
+            <TrendingUp className="h-3 w-3" aria-hidden="true" />
           ) : isNegative ? (
-            <TrendingDown className="h-3 w-3" />
+            <TrendingDown className="h-3 w-3" aria-hidden="true" />
           ) : (
-            <Minus className="h-3 w-3" />
+            <Minus className="h-3 w-3" aria-hidden="true" />
           )}
           <span className="font-mono">
-            {isPositive ? '+' : ''}{priceChangePct.toFixed(2)}%
+            {isPositive ? '+' : ''}
+            {priceChangePct.toFixed(2)}%
           </span>
         </div>
       </div>
@@ -68,19 +81,17 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
             'inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold',
             ratingClass
           )}
+          role="status"
+          aria-label={`AI Rating: ${rating.rating?.replace('_', ' ') ?? 'N/A'}${rating.confidence != null ? ` at ${Math.round(rating.confidence * 100)}% confidence` : ''}`}
         >
           {rating.rating?.replace('_', ' ') ?? 'N/A'}
-          {rating.confidence != null && (
-            <span className="ml-1.5 opacity-70">
-              {Math.round(rating.confidence * 100)}%
-            </span>
-          )}
+          {rating.confidence != null && <span className="ml-1.5 opacity-70">{Math.round(rating.confidence * 100)}%</span>}
         </span>
       </div>
 
-      {/* Metrics Row */}
+      {/* Metrics Grid */}
       <div className="mt-3 grid grid-cols-2 gap-3">
-        {/* RSI */}
+        {/* RSI Metric */}
         <div>
           <p className="text-[10px] uppercase tracking-wider text-slate-500">RSI</p>
           <div className="mt-1 flex items-center gap-2">
@@ -89,22 +100,31 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
                 'text-sm font-bold font-mono',
                 rating.rsi > 70 ? 'text-red-400' : rating.rsi < 30 ? 'text-emerald-400' : 'text-slate-300'
               )}
+              id={rsiId}
             >
               {rating.rsi?.toFixed(1) ?? '—'}
             </span>
-            <div className="h-1.5 flex-1 rounded-full bg-slate-700">
+            <div
+              className="h-1.5 flex-1 rounded-full bg-slate-700"
+              role="progressbar"
+              aria-labelledby={rsiId}
+              aria-valuenow={Math.round(rating.rsi ?? 0)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
                 className={clsx(
                   'h-full rounded-full',
                   rating.rsi > 70 ? 'bg-red-500' : rating.rsi < 30 ? 'bg-emerald-500' : 'bg-blue-500'
                 )}
-                style={{ width: `${Math.min(100, (rating.rsi ?? 0))}%` }}
+                style={{ width: `${Math.min(100, rating.rsi ?? 0)}%` }}
+                aria-hidden="true"
               />
             </div>
           </div>
         </div>
 
-        {/* Sentiment */}
+        {/* Sentiment Metric */}
         <div>
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Sentiment</p>
           <div className="mt-1 flex items-center gap-2">
@@ -113,16 +133,26 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
                 'text-sm font-bold font-mono',
                 sentimentScore > 0.2 ? 'text-emerald-400' : sentimentScore < -0.2 ? 'text-red-400' : 'text-slate-300'
               )}
+              id={sentimentId}
             >
-              {sentimentScore > 0 ? '+' : ''}{sentimentScore.toFixed(2)}
+              {sentimentScore > 0 ? '+' : ''}
+              {sentimentScore.toFixed(2)}
             </span>
-            <div className="h-1.5 flex-1 rounded-full bg-slate-700">
+            <div
+              className="h-1.5 flex-1 rounded-full bg-slate-700"
+              role="progressbar"
+              aria-labelledby={sentimentId}
+              aria-valuenow={sentimentPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
                 className={clsx(
                   'h-full rounded-full',
                   sentimentScore > 0.2 ? 'bg-emerald-500' : sentimentScore < -0.2 ? 'bg-red-500' : 'bg-amber-500'
                 )}
                 style={{ width: `${sentimentPct}%` }}
+                aria-hidden="true"
               />
             </div>
           </div>
@@ -133,9 +163,15 @@ export default function StockCard({ rating, onRemove }: StockCardProps) {
       {rating.score != null && (
         <div className="mt-3 flex items-center justify-between border-t border-slate-700/50 pt-3">
           <span className="text-[10px] uppercase tracking-wider text-slate-500">AI Score</span>
-          <span className="text-sm font-bold font-mono text-white">{rating.score.toFixed(1)}/10</span>
+          <span
+            className="text-sm font-bold font-mono text-white"
+            role="status"
+            aria-label={`AI Score: ${rating.score.toFixed(1)} out of 10`}
+          >
+            {rating.score.toFixed(1)}/10
+          </span>
         </div>
       )}
-    </div>
+    </article>
   );
 }

@@ -1,6 +1,6 @@
 """
 TickerPulse AI v3.0 - Flask Application Factory
-Creates and configures the Flask app, registers blueprints, sets up SSE,
+Creates and configures the Flask app, registers blueprints, sets up SSE/WebSocket,
 initialises the database and scheduler.
 """
 
@@ -8,16 +8,51 @@ import json
 import queue
 import logging
 import threading
+import secrets
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, send_from_directory
+from flask import Flask, Response, jsonify, send_from_directory, request, session
 
 from backend.config import Config
-from backend.database import init_all_tables
+from backend.database import init_all_tables, get_db_connection
+from backend.core.query_profiler import verify_hot_path_indexes, list_all_indexes
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket infrastructure
+# ---------------------------------------------------------------------------
+
+socketio = None
+websocket_subscriptions: dict[str, set[str]] = {}  # {ticker: {sid1, sid2, ...}}
+websocket_lock = threading.Lock()
+
+
+def broadcast_price_update(ticker: str, price_data: dict) -> None:
+    """Broadcast a price update to all clients subscribed to a ticker.
+    
+    Args:
+        ticker: Stock ticker symbol
+        price_data: Price update data (e.g. {'price': 125.50, 'timestamp': '...'})
+    """
+    if not socketio:
+        return
+    
+    with websocket_lock:
+        if ticker in websocket_subscriptions:
+            room = f"ticker_{ticker}"
+            socketio.emit(
+                'price_update',
+                {
+                    'ticker': ticker,
+                    **price_data
+                },
+                room=room,
+                namespace='/prices'
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +78,33 @@ def send_sse_event(event_type: str, data: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# CSRF Token Management (TP-C05)
+# ---------------------------------------------------------------------------
+
+CSRF_TOKEN_LENGTH = 32
+CSRF_HEADER_NAME = 'X-CSRF-Token'
+CSRF_PARAM_NAME = '_csrf_token'
+CSRF_SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS', 'TRACE'}
+
+
+def _get_csrf_token() -> str:
+    """Get or create CSRF token in session."""
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_urlsafe(CSRF_TOKEN_LENGTH)
+    return session['_csrf_token']
+
+
+def _validate_csrf_token(token: str | None) -> bool:
+    """Validate CSRF token from request."""
+    if token is None:
+        return False
+    expected = session.get('_csrf_token')
+    if expected is None:
+        return False
+    return secrets.compare_digest(token, expected)
+
+
+# ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
 
@@ -57,6 +119,9 @@ def create_app() -> Flask:
 
     # -- Core Flask config ---------------------------------------------------
     app.config['SECRET_KEY'] = Config.SECRET_KEY
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
     # -- Logging -------------------------------------------------------------
     _setup_logging(app)
@@ -75,9 +140,109 @@ def create_app() -> Flask:
     with app.app_context():
         init_all_tables()
         logger.info("Database tables initialised")
+        
+        # Verify hot-path query optimization on startup
+        try:
+            conn = get_db_connection()
+            verification = verify_hot_path_indexes(conn)
+            if verification.get('all_optimized'):
+                logger.info("✓ All hot-path queries verified as optimized")
+            else:
+                for query_result in verification.get('verified_queries', []):
+                    query_name = query_result.get('query', 'unknown')
+                    index = query_result.get('index', 'none')
+                    full_scan = query_result.get('full_scan', False)
+                    status = "⚠ FULL SCAN" if full_scan else f"✓ INDEX: {index}"
+                    logger.info(f"  {query_name}: {status}")
+            
+            # Log all active indexes
+            indexes = list_all_indexes(conn)
+            logger.debug(f"Database has {len(indexes)} active indexes")
+            conn.close()
+        except Exception as exc:
+            logger.warning(f"Could not verify hot-path indexes: {exc}")
+
+    # -- WebSocket/SocketIO --------------------------------------------------
+    global socketio
+    try:
+        from flask_socketio import SocketIO
+        from backend.websocket.blueprint import register_websocket_events
+
+        socketio = SocketIO(
+            app,
+            cors_allowed_origins=Config.CORS_ORIGINS,
+            async_mode='threading',
+            ping_timeout=60,
+            ping_interval=25,
+        )
+
+        # Register WebSocket event handlers for /prices namespace
+        register_websocket_events(socketio)
+
+        logger.info("SocketIO initialised for WebSocket support")
+    except Exception as exc:
+        logger.warning("Could not initialise SocketIO: %s. WebSocket disabled.", exc)
+        socketio = None
+
+    # -- CSRF Protection Middleware (TP-C05) ---------------------------------
+    @app.before_request
+    def csrf_protection():
+        """Validate CSRF tokens for state-changing operations."""
+        if request.method not in CSRF_SAFE_METHODS:
+            token = request.headers.get(CSRF_HEADER_NAME) or request.form.get(CSRF_PARAM_NAME)
+            if not _validate_csrf_token(token):
+                logger.warning(f"CSRF validation failed for {request.method} {request.path}")
+                return jsonify({
+                    'error': 'CSRF token validation failed',
+                    'message': 'Missing or invalid CSRF token'
+                }), 403
 
     # -- Register API blueprints ---------------------------------------------
     _register_blueprints(app)
+
+    # -- CSRF Token Endpoint (TP-C05) ----------------------------------------
+    @app.route('/api/csrf-token', methods=['GET', 'POST'])
+    def get_csrf_token():
+        """Get CSRF token for form submissions and state-changing operations.
+        
+        Returns:
+            JSON object with 'csrf_token' field
+            
+        Security:
+            - Token stored in secure, httponly session cookie
+            - Token is unique per session
+            - Required for all POST/PUT/DELETE operations
+        """
+        token = _get_csrf_token()
+        return jsonify({'csrf_token': token})
+
+    # -- Database monitoring endpoint -----------------------------------------
+    @app.route('/api/db/indexes', methods=['GET'])
+    def get_database_indexes():
+        """Get current database indexes and hot-path verification.
+        
+        Returns:
+            JSON object with index list and hot-path optimization status
+            
+        Security:
+            - Admin endpoint for monitoring only
+            - Should be restricted in production
+        """
+        try:
+            conn = get_db_connection()
+            indexes = list_all_indexes(conn)
+            verification = verify_hot_path_indexes(conn)
+            conn.close()
+            
+            return jsonify({
+                'indexes': indexes,
+                'hot_paths': verification.get('verified_queries', []),
+                'all_optimized': verification.get('all_optimized', False),
+                'timestamp': datetime.utcnow().isoformat() + 'Z',
+            })
+        except Exception as exc:
+            logger.error(f"Failed to get database indexes: {exc}")
+            return jsonify({'error': str(exc)}), 500
 
     # -- SSE endpoint --------------------------------------------------------
     @app.route('/api/stream')
@@ -205,6 +370,7 @@ def _register_blueprints(app: Flask) -> None:
         'backend.api.settings':         'settings_bp',
         'backend.api.scheduler_routes': 'scheduler_bp',
         'backend.api.downloads':        'bp',
+        'backend.api.prices':           'prices_bp',
     }
 
     for module_path, bp_name in blueprint_map.items():
@@ -266,8 +432,17 @@ def _init_scheduler(app: Flask) -> None:
 
 if __name__ == '__main__':
     application = create_app()
-    application.run(
-        host='0.0.0.0',
-        port=Config.FLASK_PORT,
-        debug=Config.FLASK_DEBUG,
-    )
+    if socketio:
+        socketio.run(
+            application,
+            host='0.0.0.0',
+            port=Config.FLASK_PORT,
+            debug=Config.FLASK_DEBUG,
+            allow_unsafe_werkzeug=True,
+        )
+    else:
+        application.run(
+            host='0.0.0.0',
+            port=Config.FLASK_PORT,
+            debug=Config.FLASK_DEBUG,
+        )
