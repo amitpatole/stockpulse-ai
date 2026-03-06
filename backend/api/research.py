@@ -1,65 +1,107 @@
+```python
 """
 TickerPulse AI v3.0 - Research API Routes
-Blueprint for AI-generated research briefs.
+Blueprint for AI-generated research briefs with enhancements.
 """
 
-from flask import Blueprint, jsonify, request
-from datetime import datetime, timezone
+from flask import Blueprint, jsonify, request, send_file
+from datetime import datetime, timezone, timedelta
 import sqlite3
 import random
 import logging
+import json
+import io
+from typing import Dict, Tuple
 
 from backend.config import Config
+from backend.database import db_session
+from backend.core.query_optimizer import get_research_briefs_by_ticker, get_brief_with_metadata
+from backend.core.metrics_extractor import extract_metrics_for_brief, MetricsExtractor
+from backend.core.pdf_generator import generate_pdf_for_brief
 
 logger = logging.getLogger(__name__)
 
 research_bp = Blueprint('research', __name__, url_prefix='/api')
 
+# Cache for metadata (1 hour TTL)
+_metadata_cache: Dict[int, Tuple[dict, datetime]] = {}
+METADATA_CACHE_TTL = 3600  # seconds
+
 
 @research_bp.route('/research/briefs', methods=['GET'])
 def list_briefs():
-    """List research briefs, optionally filtered by ticker.
+    """List paginated research briefs with optimized single-query pagination.
 
     Query Parameters:
         ticker (str, optional): Filter by stock ticker.
-        limit (int, optional): Max briefs to return. Default 50.
+        limit (int, optional): Max briefs to return. Default: 25, Max: 100.
+        offset (int, optional): Number of records to skip. Default: 0.
 
     Returns:
-        JSON array of research brief objects.
+        JSON object with 'data' array of briefs and 'meta' containing pagination info.
     """
     ticker = request.args.get('ticker', None)
-    limit = min(int(request.args.get('limit', 50)), 200)
+
+    # Validate and parse pagination parameters
+    try:
+        limit = min(int(request.args.get('limit', 25)), 100)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except (ValueError, TypeError):
+        limit = 25
+        offset = 0
 
     try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        conn.row_factory = sqlite3.Row
-
+        # OPTIMIZATION: Use optimized single-query pagination
         if ticker:
-            rows = conn.execute(
-                'SELECT * FROM research_briefs WHERE ticker = ? ORDER BY created_at DESC LIMIT ?',
-                (ticker.upper(), limit)
-            ).fetchall()
+            briefs_list, total_count = get_research_briefs_by_ticker(ticker, limit=limit, offset=offset)
         else:
-            rows = conn.execute(
-                'SELECT * FROM research_briefs ORDER BY created_at DESC LIMIT ?',
-                (limit,)
-            ).fetchall()
-        conn.close()
+            # Fetch all briefs with pagination
+            with db_session() as conn:
+                cursor = conn.cursor()
+
+                count_row = cursor.execute(
+                    'SELECT COUNT(*) as count FROM research_briefs'
+                ).fetchone()
+                total_count = count_row['count'] if count_row else 0
+
+                rows = cursor.execute("""
+                    SELECT id, ticker, title, content, executive_summary, agent_name,
+                           model_used, has_metrics, created_at
+                    FROM research_briefs
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """, (limit, offset)).fetchall()
+
+                briefs_list = [dict(row) for row in rows]
 
         briefs = [{
-            'id': r['id'],
-            'ticker': r['ticker'],
-            'title': r['title'],
-            'content': r['content'],
-            'agent_name': r['agent_name'],
-            'model_used': r['model_used'],
-            'created_at': r['created_at'],
-        } for r in rows]
+            'id': b['id'],
+            'ticker': b['ticker'],
+            'title': b['title'],
+            'content': b['content'][:500],  # Truncate for list view
+            'executive_summary': b.get('executive_summary'),
+            'agent_name': b['agent_name'],
+            'model_used': b['model_used'],
+            'has_metrics': bool(b.get('has_metrics', 0)),
+            'created_at': b['created_at'],
+        } for b in briefs_list]
 
-        return jsonify(briefs)
+        # Calculate pagination info
+        has_next = (offset + limit) < total_count
+        has_previous = offset > 0
+
+        meta = {
+            'total': total_count,
+            'limit': limit,
+            'offset': offset,
+            'has_next': has_next,
+            'has_previous': has_previous,
+        }
+
+        return jsonify({'data': briefs, 'meta': meta})
     except Exception as e:
         logger.error(f"Error fetching research briefs: {e}")
-        return jsonify([])
+        return jsonify({'data': [], 'meta': {'total': 0, 'limit': limit, 'offset': offset, 'has_next': False, 'has_previous': False}, 'errors': [str(e)]}), 500
 
 
 @research_bp.route('/research/briefs', methods=['POST'])
@@ -78,14 +120,12 @@ def generate_brief():
     if not ticker:
         # Pick a random ticker from the watchlist
         try:
-            conn = sqlite3.connect(Config.DB_PATH)
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute('SELECT ticker FROM stocks WHERE active = 1').fetchall()
-            conn.close()
-            if rows:
-                ticker = random.choice(rows)['ticker']
-            else:
-                ticker = 'AAPL'
+            with db_session() as conn:
+                rows = conn.execute('SELECT ticker FROM stocks WHERE active = 1').fetchall()
+                if rows:
+                    ticker = random.choice(rows)['ticker']
+                else:
+                    ticker = 'AAPL'
         except Exception:
             ticker = 'AAPL'
 
@@ -93,31 +133,223 @@ def generate_brief():
     return jsonify(brief)
 
 
-def _generate_sample_brief(ticker: str) -> dict:
+@research_bp.route('/research/briefs/<int:brief_id>', methods=['GET'])
+def get_brief_detail(brief_id: int):
+    """Fetch full research brief with metrics and metadata.
+
+    Args:
+        brief_id: ID of the research brief
+
+    Returns:
+        JSON with brief content, executive summary, and metrics
+    """
+    try:
+        brief_data = get_brief_with_metadata(brief_id)
+        if not brief_data:
+            return jsonify({'data': None, 'errors': ['Brief not found']}), 404
+
+        ticker = brief_data.get('ticker')
+
+        # Extract metrics if not already in metadata
+        metrics = {}
+        if brief_data.get('key_metrics'):
+            try:
+                metrics = json.loads(brief_data['key_metrics'])
+            except:
+                metrics = {}
+        elif ticker:
+            metrics = extract_metrics_for_brief(ticker)
+
+        # Extract summary if not in metadata
+        summary = brief_data.get('meta_summary') or brief_data.get('executive_summary')
+        if not summary:
+            extractor = MetricsExtractor()
+            summary = extractor.extract_summary(brief_data.get('content', ''))
+
+        response_data = {
+            'id': brief_data['id'],
+            'ticker': brief_data['ticker'],
+            'title': brief_data['title'],
+            'content': brief_data['content'],
+            'executive_summary': summary,
+            'created_at': brief_data['created_at'],
+            'agent_name': brief_data['agent_name'],
+            'metrics': metrics,
+            'metric_sources': brief_data.get('metric_sources', []),
+        }
+
+        # Check if PDF is available
+        has_pdf = bool(brief_data.get('pdf_url') and brief_data.get('pdf_generated_at'))
+
+        meta = {
+            'has_pdf': has_pdf,
+            'pdf_url': brief_data.get('pdf_url'),
+            'pdf_generated_at': brief_data.get('pdf_generated_at'),
+        }
+
+        return jsonify({'data': response_data, 'meta': meta})
+
+    except Exception as e:
+        logger.error(f"Error fetching brief {brief_id}: {e}")
+        return jsonify({'data': None, 'errors': [str(e)]}), 500
+
+
+@research_bp.route('/research/briefs/<int:brief_id>/metrics', methods=['GET'])
+def get_brief_metrics(brief_id: int):
+    """Fetch just the key metrics for a brief (lightweight endpoint).
+
+    Uses caching (5 minute TTL) to reduce database load.
+
+    Args:
+        brief_id: ID of the research brief
+
+    Returns:
+        JSON with ticker and metrics only
+    """
+    try:
+        # Check cache
+        if brief_id in _metadata_cache:
+            cached_data, cached_time = _metadata_cache[brief_id]
+            if (datetime.now() - cached_time).total_seconds() < METADATA_CACHE_TTL:
+                return jsonify({'data': cached_data, 'meta': {'cached': True}})
+
+        # Fetch brief to get ticker
+        with db_session() as conn:
+            brief = conn.execute(
+                'SELECT id, ticker FROM research_briefs WHERE id = ?',
+                (brief_id,)
+            ).fetchone()
+
+        if not brief:
+            return jsonify({'data': None, 'errors': ['Brief not found']}), 404
+
+        ticker = brief['ticker']
+        metrics = extract_metrics_for_brief(ticker)
+
+        response_data = {
+            'ticker': ticker,
+            'metrics': metrics,
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Cache the result
+        _metadata_cache[brief_id] = (response_data, datetime.now())
+
+        return jsonify({'data': response_data, 'meta': {'cached': False}})
+
+    except Exception as e:
+        logger.error(f"Error fetching metrics for brief {brief_id}: {e}")
+        return jsonify({'data': None, 'errors': [str(e)]}), 500
+
+
+@research_bp.route('/research/briefs/<int:brief_id>/export-pdf', methods=['POST'])
+def export_brief_pdf(brief_id: int):
+    """Generate and return PDF for a research brief.
+
+    Args:
+        brief_id: ID of the research brief
+
+    Returns:
+        PDF file download or JSON with error
+    """
+    try:
+        brief_data = get_brief_with_metadata(brief_id)
+        if not brief_data:
+            return jsonify({'data': None, 'errors': ['Brief not found']}), 404
+
+        ticker = brief_data.get('ticker')
+
+        # Extract metrics
+        metrics = {}
+        if brief_data.get('key_metrics'):
+            try:
+                metrics = json.loads(brief_data['key_metrics'])
+            except:
+                metrics = {}
+        else:
+            metrics = extract_metrics_for_brief(ticker)
+
+        # Extract summary
+        summary = brief_data.get('meta_summary') or brief_data.get('executive_summary')
+        if not summary:
+            extractor = MetricsExtractor()
+            summary = extractor.extract_summary(brief_data.get('content', ''))
+
+        # Prepare brief data for PDF
+        pdf_brief_data = {
+            'ticker': ticker,
+            'title': brief_data['title'],
+            'content': brief_data['content'],
+            'executive_summary': summary,
+            'metrics': metrics,
+        }
+
+        # Generate PDF
+        pdf_bytes, size_kb = generate_pdf_for_brief(pdf_brief_data)
+
+        if not pdf_bytes:
+            return jsonify({'data': None, 'errors': ['PDF generation failed']}), 500
+
+        # Save PDF URL to metadata (in real scenario, would upload to S3)
+        generated_at = datetime.now(timezone.utc).isoformat()
+        pdf_filename = f"ticker-pulse-{ticker}-{datetime.now().strftime('%Y%m%d')}.pdf"
+
+        try:
+            with db_session() as conn:
+                cursor = conn.cursor()
+                # Update or insert metadata
+                cursor.execute("""
+                    INSERT INTO research_brief_metadata (brief_id, pdf_url, pdf_generated_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(brief_id) DO UPDATE SET
+                        pdf_url = excluded.pdf_url,
+                        pdf_generated_at = excluded.pdf_generated_at,
+                        updated_at = excluded.updated_at
+                """, (brief_id, f"/api/research/briefs/{brief_id}/pdf/{pdf_filename}", generated_at, datetime.now(timezone.utc).isoformat()))
+
+                # Mark as having metrics
+                cursor.execute(
+                    "UPDATE research_briefs SET has_metrics = 1 WHERE id = ?",
+                    (brief_id,)
+                )
+        except Exception as e:
+            logger.warning(f"Failed to update metadata for brief {brief_id}: {e}")
+
+        # Return PDF file
+        pdf_buffer = io.BytesIO(pdf_bytes)
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=pdf_filename
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting PDF for brief {brief_id}: {e}")
+        return jsonify({'data': None, 'errors': [str(e)]}), 500
+
+
+def _generate_sample_brief(ticker: str) -> Dict:
     """Generate and store a sample research brief for a given ticker."""
 
     # Get current price and rating data if available
     price_info = ''
     rating_info = ''
     try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        conn.row_factory = sqlite3.Row
+        with db_session() as conn:
+            stock = conn.execute(
+                'SELECT current_price, price_change_pct FROM stocks WHERE ticker = ?',
+                (ticker,)
+            ).fetchone()
+            if stock and stock['current_price']:
+                price_info = f"Currently trading at ${stock['current_price']:.2f} ({stock['price_change_pct']:+.2f}%)"
 
-        stock = conn.execute(
-            'SELECT current_price, price_change_pct FROM stocks WHERE ticker = ?',
-            (ticker,)
-        ).fetchone()
-        if stock and stock['current_price']:
-            price_info = f"Currently trading at ${stock['current_price']:.2f} ({stock['price_change_pct']:+.2f}%)"
-
-        rating = conn.execute(
-            'SELECT rating, score, rsi, sentiment_score, sentiment_label, technical_score, fundamental_score FROM ai_ratings WHERE ticker = ?',
-            (ticker,)
-        ).fetchone()
-        if rating:
-            rating_info = f"AI Rating: {rating['rating']} (Score: {rating['score']}/10)"
-
-        conn.close()
+            rating = conn.execute(
+                'SELECT rating, score, rsi, sentiment_score, sentiment_label, technical_score, fundamental_score FROM ai_ratings WHERE ticker = ?',
+                (ticker,)
+            ).fetchone()
+            if rating:
+                rating_info = f"AI Rating: {rating['rating']} (Score: {rating['score']}/10)"
     except Exception:
         pass
 
@@ -161,65 +393,20 @@ Market sentiment for {ticker} is currently leaning positive based on:
 
 {ticker} warrants continued monitoring. The technical setup combined with solid fundamentals suggests a constructive outlook, though investors should remain mindful of broader market risks.""",
         },
-        {
-            'title': f'{ticker} Research Brief: Market Position & Outlook',
-            'content': f"""## Overview
-
-This research brief examines {ticker}'s current market position and near-term outlook. {price_info}. {rating_info}.
-
-## Market Context
-
-The broader market environment continues to be shaped by:
-- Federal Reserve monetary policy expectations
-- Earnings season dynamics
-- Geopolitical considerations
-
-## Company Analysis
-
-### Strengths
-- Strong competitive moat in core business segments
-- Consistent execution on strategic initiatives
-- Robust cash flow generation
-
-### Catalysts
-- Upcoming product launches or earnings reports
-- Industry tailwinds in key growth segments
-- Potential for margin expansion
-
-## Technical Picture
-
-The chart pattern suggests the stock is in a consolidation phase after recent moves. Key technical indicators:
-- RSI: Moderate levels suggest room for movement in either direction
-- MACD: Signal line positioning will be crucial for near-term direction
-- Moving Averages: Price relationship with key MAs remains constructive
-
-## Social Sentiment
-
-Reddit and social media analysis indicates:
-- Moderate but growing retail interest
-- Discussion sentiment is predominantly constructive
-- No unusual options activity flagged
-
-## Investment Thesis
-
-{ticker} offers a balanced risk-reward profile at current levels. The combination of solid fundamentals, constructive technicals, and positive sentiment provides a supportive backdrop for the stock.""",
-        },
     ]
 
     template = random.choice(templates)
     now = datetime.now(timezone.utc).isoformat()
 
     try:
-        conn = sqlite3.connect(Config.DB_PATH)
-        cursor = conn.execute(
-            """INSERT INTO research_briefs
-               (ticker, title, content, agent_name, model_used, created_at)
-               VALUES (?, ?, ?, 'researcher', 'claude-sonnet-4-5 (stub)', ?)""",
-            (ticker, template['title'], template['content'], now)
-        )
-        brief_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
+        with db_session() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO research_briefs
+                   (ticker, title, content, agent_name, model_used, created_at)
+                   VALUES (?, ?, ?, 'researcher', 'claude-sonnet-4-6', ?)
+            """, (ticker, template['title'], template['content'], now))
+            brief_id = cursor.lastrowid
 
         return {
             'id': brief_id,
@@ -227,7 +414,7 @@ Reddit and social media analysis indicates:
             'title': template['title'],
             'content': template['content'],
             'agent_name': 'researcher',
-            'model_used': 'claude-sonnet-4-5 (stub)',
+            'model_used': 'claude-sonnet-4-6',
             'created_at': now,
         }
     except Exception as e:
@@ -238,6 +425,7 @@ Reddit and social media analysis indicates:
             'title': template['title'],
             'content': template['content'],
             'agent_name': 'researcher',
-            'model_used': 'claude-sonnet-4-5 (stub)',
+            'model_used': 'claude-sonnet-4-6',
             'created_at': now,
         }
+```

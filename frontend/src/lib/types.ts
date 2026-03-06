@@ -1,66 +1,36 @@
-```typescript
-// ============================================================
-// TickerPulse AI v3.0 - TypeScript Type Definitions
-// ============================================================
-
-export interface Stock {
+// =====================================================
+export interface PriceAlert {
+  id: number;
   ticker: string;
-  name?: string;
-  active: boolean;
-  added_at?: string;
+  alert_type: 'above' | 'below' | 'change_percent_up' | 'change_percent_down';
+  threshold: number;
+  is_active: boolean;
+  triggered_count: number;
+  last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface StockSearchResult {
+export interface PriceAlertTriggerEvent {
+  alert_id: number;
   ticker: string;
-  name: string;
-  exchange: string;
-  type: string;
-}
-
-export interface AIRating {
-  ticker: string;
-  rating: string;
-  score: number;
-  confidence: number;
+  alert_type: string;
+  threshold: number;
   current_price: number;
-  price_change?: number;
-  price_change_pct?: number;
-  rsi: number;
-  sentiment_score?: number;
-  sentiment_label?: string;
-  technical_score?: number;
-  fundamental_score?: number;
-  updated_at?: string;
+  timestamp: string;
 }
 
-export interface Agent {
-  name: string;
-  display_name?: string;
-  description?: string;
-  role?: string;
-  model?: string;
-  status: string;
-  enabled: boolean;
-  run_count?: number;
-  total_runs?: number;
-  total_cost?: number;
-  category?: string;
-  schedule?: string;
-  avg_duration_seconds?: number | null;
-  last_run?: AgentRun | null;
+export interface PaginationMeta {
+  total: number;
+  limit: number;
+  offset: number;
+  has_next: boolean;
+  has_previous: boolean;
 }
 
-export interface AgentRun {
-  id?: number;
-  agent_name: string;
-  status: string;
-  output?: string;
-  duration_ms: number;
-  tokens_used?: number;
-  estimated_cost: number;
-  started_at: string;
-  completed_at?: string;
-  error?: string;
+export interface PriceAlertsListResponse {
+  alerts: PriceAlert[];
+  meta: PaginationMeta;
 }
 
 export interface ScheduledJob {
@@ -212,4 +182,3 @@ export const AGENT_STATUS_COLORS: Record<string, string> = {
   error: 'bg-red-500',
   disabled: 'bg-slate-500',
 };
-```

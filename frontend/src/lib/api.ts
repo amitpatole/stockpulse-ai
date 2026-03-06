@@ -1,93 +1,58 @@
-```typescript
-// ============================================================
-// TickerPulse AI v3.0 - API Client
-// ============================================================
+// =====================================================
+import { PriceAlert, PriceAlertsListResponse } from './types';
 
-import type {
-  Stock,
-  StockSearchResult,
-  AIRating,
-  Agent,
-  AgentRun,
-  ScheduledJob,
-  NewsArticle,
-  Alert,
-  CostSummary,
-  AIProvider,
-  HealthCheck,
-  ResearchBrief,
-} from './types';
+// Price Alerts API
+export async function getPriceAlerts(
+  limit = 20,
+  offset = 0,
+  ticker?: string,
+  activeOnly = false,
+): Promise<PriceAlertsListResponse> {
+  const params = new URLSearchParams({
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+  if (ticker) params.append('ticker', ticker);
+  if (activeOnly) params.append('active_only', 'true');
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
+  return request(`/price-alerts?${params.toString()}`);
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${API_BASE}${path}`;
-  try {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      let message = `API error: ${res.status}`;
-      try {
-        const json = JSON.parse(body);
-        message = json.error || json.message || message;
-      } catch {
-        if (body) message = body;
-      }
-      throw new ApiError(message, res.status);
-    }
-
-    const text = await res.text();
-    if (!text) return {} as T;
-    return JSON.parse(text) as T;
-  } catch (err) {
-    if (err instanceof ApiError) throw err;
-    throw new ApiError(
-      `Failed to connect to API: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      0
-    );
-  }
+export async function getPriceAlert(id: number): Promise<PriceAlert> {
+  return request(`/price-alerts/${id}`);
 }
 
-// ---- Stocks ----
-
-export async function getStocks(): Promise<Stock[]> {
-  const data = await request<{ stocks: Stock[] } | Stock[]>('/api/stocks');
-  if (Array.isArray(data)) return data;
-  return data.stocks || [];
-}
-
-export async function searchStocks(query: string): Promise<StockSearchResult[]> {
-  if (!query.trim()) return [];
-  return request<StockSearchResult[]>(`/api/stocks/search?q=${encodeURIComponent(query.trim())}`);
-}
-
-export async function addStock(ticker: string, name?: string): Promise<Stock> {
-  const body: Record<string, string> = { ticker: ticker.toUpperCase() };
-  if (name) body.name = name;
-  return request<Stock>('/api/stocks', {
+export async function createPriceAlert(
+  ticker: string,
+  alertType: string,
+  threshold: number,
+): Promise<PriceAlert> {
+  return request('/price-alerts', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      ticker,
+      alert_type: alertType,
+      threshold,
+    }),
   });
 }
 
-export async function deleteStock(ticker: string): Promise<void> {
-  await request<void>(`/api/stocks/${ticker.toUpperCase()}`, {
+export async function updatePriceAlert(
+  id: number,
+  threshold?: number,
+  isActive?: boolean,
+): Promise<PriceAlert> {
+  return request(`/price-alerts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...(threshold !== undefined && { threshold }),
+      ...(isActive !== undefined && { is_active: isActive }),
+    }),
+  });
+}
+
+export async function deletePriceAlert(id: number): Promise<void> {
+  await request(`/price-alerts/${id}`, {
     method: 'DELETE',
   });
 }
@@ -282,4 +247,3 @@ export async function exportBriefPDF(briefId: number, includeMetrics = true): Pr
 }
 
 export { ApiError };
-```
