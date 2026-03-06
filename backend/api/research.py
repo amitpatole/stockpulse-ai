@@ -58,17 +58,17 @@ def list_briefs():
             # Fetch all briefs with pagination
             with db_session() as conn:
                 cursor = conn.cursor()
-                
+
                 count_row = cursor.execute(
                     'SELECT COUNT(*) as count FROM research_briefs'
                 ).fetchone()
                 total_count = count_row['count'] if count_row else 0
 
                 rows = cursor.execute("""
-                    SELECT id, ticker, title, content, executive_summary, agent_name, 
-                           model_used, has_metrics, created_at 
-                    FROM research_briefs 
-                    ORDER BY created_at DESC 
+                    SELECT id, ticker, title, content, executive_summary, agent_name,
+                           model_used, has_metrics, created_at
+                    FROM research_briefs
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """, (limit, offset)).fetchall()
 
@@ -149,7 +149,7 @@ def get_brief_detail(brief_id: int):
             return jsonify({'data': None, 'errors': ['Brief not found']}), 404
 
         ticker = brief_data.get('ticker')
-        
+
         # Extract metrics if not already in metadata
         metrics = {}
         if brief_data.get('key_metrics'):
@@ -157,7 +157,7 @@ def get_brief_detail(brief_id: int):
                 metrics = json.loads(brief_data['key_metrics'])
             except:
                 metrics = {}
-        else:
+        elif ticker:
             metrics = extract_metrics_for_brief(ticker)
 
         # Extract summary if not in metadata
@@ -258,7 +258,7 @@ def export_brief_pdf(brief_id: int):
             return jsonify({'data': None, 'errors': ['Brief not found']}), 404
 
         ticker = brief_data.get('ticker')
-        
+
         # Extract metrics
         metrics = {}
         if brief_data.get('key_metrics'):
@@ -293,7 +293,7 @@ def export_brief_pdf(brief_id: int):
         # Save PDF URL to metadata (in real scenario, would upload to S3)
         generated_at = datetime.now(timezone.utc).isoformat()
         pdf_filename = f"ticker-pulse-{ticker}-{datetime.now().strftime('%Y%m%d')}.pdf"
-        
+
         try:
             with db_session() as conn:
                 cursor = conn.cursor()
@@ -301,12 +301,12 @@ def export_brief_pdf(brief_id: int):
                 cursor.execute("""
                     INSERT INTO research_brief_metadata (brief_id, pdf_url, pdf_generated_at, updated_at)
                     VALUES (?, ?, ?, ?)
-                    ON CONFLICT(brief_id) DO UPDATE SET 
+                    ON CONFLICT(brief_id) DO UPDATE SET
                         pdf_url = excluded.pdf_url,
                         pdf_generated_at = excluded.pdf_generated_at,
                         updated_at = excluded.updated_at
                 """, (brief_id, f"/api/research/briefs/{brief_id}/pdf/{pdf_filename}", generated_at, datetime.now(timezone.utc).isoformat()))
-                
+
                 # Mark as having metrics
                 cursor.execute(
                     "UPDATE research_briefs SET has_metrics = 1 WHERE id = ?",
@@ -428,3 +428,4 @@ Market sentiment for {ticker} is currently leaning positive based on:
             'model_used': 'claude-sonnet-4-6',
             'created_at': now,
         }
+```

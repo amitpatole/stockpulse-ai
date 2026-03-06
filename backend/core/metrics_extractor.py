@@ -79,7 +79,7 @@ class MetricsExtractor:
                 "SELECT current_price, price_change_pct FROM stocks WHERE ticker = ?",
                 (ticker,)
             ).fetchone()
-            
+
             if row:
                 return {
                     "current_price": float(row[0]) if row[0] else None,
@@ -87,7 +87,7 @@ class MetricsExtractor:
                 }
         except Exception as e:
             logger.warning(f"Error getting price data for {ticker}: {e}")
-        
+
         return None
 
     def _get_technical_data(self, conn: sqlite3.Connection, ticker: str) -> Optional[Dict[str, Any]]:
@@ -98,7 +98,7 @@ class MetricsExtractor:
                    FROM ai_ratings WHERE ticker = ? ORDER BY updated_at DESC LIMIT 1""",
                 (ticker,)
             ).fetchone()
-            
+
             if row:
                 return {
                     "rsi": float(row[0]) if row[0] else None,
@@ -109,7 +109,7 @@ class MetricsExtractor:
                 }
         except Exception as e:
             logger.warning(f"Error getting technical data for {ticker}: {e}")
-        
+
         return None
 
     def _get_sentiment_data(self, conn: sqlite3.Connection, ticker: str) -> Optional[Dict[str, Any]]:
@@ -119,17 +119,17 @@ class MetricsExtractor:
 
             # Get recent news count
             count_row = conn.execute(
-                """SELECT COUNT(*) as cnt FROM news 
+                """SELECT COUNT(*) as cnt FROM news
                    WHERE ticker = ? AND created_at >= ?""",
                 (ticker, seven_days_ago)
             ).fetchone()
-            
+
             news_count_7d = count_row[0] if count_row else 0
 
             # Get average sentiment from recent news
             sentiment_row = conn.execute(
                 """SELECT AVG(
-                    CASE 
+                    CASE
                         WHEN sentiment_label = 'bullish' THEN 1.0
                         WHEN sentiment_label = 'neutral' THEN 0.5
                         WHEN sentiment_label = 'bearish' THEN 0.0
@@ -139,7 +139,7 @@ class MetricsExtractor:
                 FROM news WHERE ticker = ? AND created_at >= ?""",
                 (ticker, seven_days_ago)
             ).fetchone()
-            
+
             avg_sentiment = sentiment_row[0] if sentiment_row and sentiment_row[0] else None
 
             return {
@@ -148,7 +148,7 @@ class MetricsExtractor:
             }
         except Exception as e:
             logger.warning(f"Error getting sentiment data for {ticker}: {e}")
-        
+
         return None
 
     def extract_key_insights(self, ticker: str, content: str, metrics: Dict[str, Any]) -> List[str]:
@@ -228,3 +228,4 @@ def extract_metrics_for_brief(ticker: str, db_path: Optional[str] = None) -> Dic
     """Convenience function to extract metrics for a brief."""
     extractor = MetricsExtractor(db_path)
     return extractor.extract_brief_metrics(ticker)
+```

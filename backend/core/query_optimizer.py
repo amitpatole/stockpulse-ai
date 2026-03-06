@@ -150,7 +150,7 @@ def get_filtered_with_pagination(
         # Get paginated data
         order_clause = f" ORDER BY {order_by}" if order_by else ""
         data_sql = f"SELECT {columns_str} FROM {table}{where_clause}{order_clause} LIMIT ? OFFSET ?"
-        
+
         try:
             cursor.execute(data_sql, params + [limit, offset])
             rows = [dict(row) for row in cursor.fetchall()]
@@ -204,7 +204,7 @@ def get_brief_with_metadata(brief_id: int) -> Optional[Dict[str, Any]]:
         try:
             # Join research_briefs with metadata
             row = cursor.execute("""
-                SELECT 
+                SELECT
                     rb.id, rb.ticker, rb.title, rb.content, rb.executive_summary,
                     rb.agent_name, rb.model_used, rb.has_metrics, rb.created_at, rb.updated_at,
                     rbm.executive_summary as meta_summary, rbm.key_insights, rbm.key_metrics,
@@ -220,3 +220,4 @@ def get_brief_with_metadata(brief_id: int) -> Optional[Dict[str, Any]]:
             logger.error(f"Error fetching brief with metadata: {e}")
 
     return None
+```

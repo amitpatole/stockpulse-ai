@@ -89,11 +89,11 @@ export async function getStocks(limit: number = 50, offset: number = 0): Promise
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   params.set('offset', String(offset));
-  
+
   const data = await request<PaginatedResponse<Stock> | Stock[]>(
     `/api/stocks?${params.toString()}`
   );
-  
+
   if (Array.isArray(data)) return data;
   if ('data' in data) return data.data;
   return [];
@@ -319,11 +319,11 @@ export async function getResearchBriefs(ticker?: string, limit: number = 50, off
   if (ticker) params.set('ticker', ticker);
   params.set('limit', String(limit));
   params.set('offset', String(offset));
-  
+
   const data = await request<PaginatedResponse<ResearchBrief> | ResearchBrief[]>(
     `/api/research/briefs?${params.toString()}`
   );
-  
+
   if (Array.isArray(data)) return data;
   if ('data' in data) return data.data;
   return [];
