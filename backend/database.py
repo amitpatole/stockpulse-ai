@@ -288,20 +288,24 @@ _INDEXES_SQL = [
     # --- ai_ratings indexes ---
     "CREATE INDEX IF NOT EXISTS idx_ai_ratings_ticker       ON ai_ratings (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_ai_ratings_updated      ON ai_ratings (updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_ai_ratings_ticker_updated ON ai_ratings (ticker, updated_at DESC)",
     
     # --- research_briefs indexes (ADDED) ---
     "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker  ON research_briefs (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_research_briefs_created ON research_briefs (created_at)",
     "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker_created ON research_briefs (ticker, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_research_briefs_ticker_agent ON research_briefs (ticker, agent_name, created_at DESC)",
     
     # --- news indexes ---
     "CREATE INDEX IF NOT EXISTS idx_news_ticker            ON news (ticker)",
     "CREATE INDEX IF NOT EXISTS idx_news_created           ON news (created_at)",
     "CREATE INDEX IF NOT EXISTS idx_news_ticker_created    ON news (ticker, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_news_ticker_sentiment_date ON news (ticker, sentiment_label, created_at DESC)",
     
     # --- alerts indexes ---
     "CREATE INDEX IF NOT EXISTS idx_alerts_created         ON alerts (created_at)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_ticker          ON alerts (ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_ticker_created  ON alerts (ticker, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_news_id         ON alerts (news_id)",
     
     # --- ai_providers indexes (ADDED) ---
