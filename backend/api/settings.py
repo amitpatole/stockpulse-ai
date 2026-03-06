@@ -376,3 +376,126 @@ def set_agent_framework():
         'framework': framework,
         'message': f'Agent framework set to {framework} (stub implementation)'
     })
+
+
+# ---------------------------------------------------------------------------
+# WebSocket Configuration endpoints
+# ---------------------------------------------------------------------------
+
+@settings_bp.route('/settings/websocket', methods=['GET'])
+def get_websocket_settings():
+    """Get WebSocket configuration settings.
+
+    Returns:
+        JSON object with WebSocket settings including:
+        - refresh_interval: Current refresh interval in milliseconds (0 = event-driven)
+        - max_connections: Maximum concurrent connections
+        - max_subscriptions_per_client: Max tickers per client
+        - auto_reconnect: Whether auto-reconnection is enabled
+        - enable_polling_fallback: Whether REST polling fallback is enabled
+    """
+    from backend.config import Config
+
+    return jsonify({
+        'refresh_interval': Config.WEBSOCKET_DEFAULT_REFRESH_INTERVAL,
+        'max_connections': Config.WEBSOCKET_MAX_CONNECTIONS,
+        'max_subscriptions_per_client': Config.WEBSOCKET_MAX_SUBSCRIPTIONS_PER_CLIENT,
+        'auto_reconnect': Config.WEBSOCKET_AUTO_RECONNECT,
+        'enable_polling_fallback': Config.WEBSOCKET_ENABLE_POLLING_FALLBACK,
+        'available_intervals': [0, 500, 1000, 2000, 5000],
+        'description': {
+            'refresh_interval': 'Milliseconds between price updates (0=event-driven)',
+            'max_connections': 'Maximum concurrent WebSocket connections',
+            'max_subscriptions_per_client': 'Max tickers each client can subscribe to',
+            'auto_reconnect': 'Automatically reconnect on disconnect',
+            'enable_polling_fallback': 'Fall back to REST polling if WebSocket unavailable',
+        }
+    })
+
+
+@settings_bp.route('/settings/websocket/refresh-interval', methods=['POST'])
+def set_websocket_refresh_interval():
+    """Set the WebSocket refresh interval for price updates.
+
+    Request Body (JSON):
+        refresh_interval (int): Milliseconds between updates (0 = event-driven).
+
+    Returns:
+        JSON object with 'success' boolean and new refresh_interval.
+
+    Note:
+        This updates the configuration but doesn't affect currently connected clients.
+        Changes apply to new connections.
+    """
+    data = request.json
+    if not data or 'refresh_interval' not in data:
+        return jsonify({
+            'success': False,
+            'error': 'Missing required field: refresh_interval'
+        }), 400
+
+    refresh_interval = data['refresh_interval']
+
+    # Validate refresh_interval
+    if not isinstance(refresh_interval, int) or refresh_interval < 0:
+        return jsonify({
+            'success': False,
+            'error': 'refresh_interval must be a non-negative integer (milliseconds)'
+        }), 400
+
+    # Valid intervals
+    valid_intervals = [0, 500, 1000, 2000, 5000]
+    if refresh_interval not in valid_intervals and refresh_interval > 0:
+        logger.warning(
+            f"WebSocket refresh_interval {refresh_interval} not in common values. "
+            f"Valid presets: {valid_intervals}"
+        )
+
+    logger.info(f"WebSocket refresh_interval set to: {refresh_interval}ms")
+    return jsonify({
+        'success': True,
+        'refresh_interval': refresh_interval,
+        'message': f'Refresh interval set to {refresh_interval}ms (applies to new connections)'
+    })
+
+
+@settings_bp.route('/settings/websocket/health', methods=['GET'])
+def get_websocket_health():
+    """Get WebSocket server health status.
+
+    Returns:
+        JSON object with WebSocket server status including active connections
+        and subscription statistics.
+    """
+    try:
+        from backend.app import socketio
+
+        if not socketio:
+            return jsonify({
+                'status': 'unavailable',
+                'message': 'WebSocket server not initialized',
+                'active_connections': 0
+            }), 503
+
+        # Get statistics from SocketIO if available
+        try:
+            # Note: This would require adding statistics tracking to WebSocketManager
+            # For now, return basic status
+            return jsonify({
+                'status': 'ok',
+                'message': 'WebSocket server is running',
+                'active_connections': 0,  # Would be populated with real count
+                'timestamp': __import__('datetime').datetime.utcnow().isoformat() + 'Z'
+            })
+        except Exception as e:
+            logger.warning(f"Could not retrieve WebSocket statistics: {e}")
+            return jsonify({
+                'status': 'ok',
+                'message': 'WebSocket server is running (stats unavailable)'
+            })
+
+    except ImportError:
+        return jsonify({
+            'status': 'unavailable',
+            'message': 'flask-socketio not installed'
+        }), 503

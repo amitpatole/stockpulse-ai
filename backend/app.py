@@ -167,6 +167,8 @@ def create_app() -> Flask:
     global socketio
     try:
         from flask_socketio import SocketIO
+        from backend.websocket.blueprint import register_websocket_events
+
         socketio = SocketIO(
             app,
             cors_allowed_origins=Config.CORS_ORIGINS,
@@ -174,6 +176,10 @@ def create_app() -> Flask:
             ping_timeout=60,
             ping_interval=25,
         )
+
+        # Register WebSocket event handlers for /prices namespace
+        register_websocket_events(socketio)
+
         logger.info("SocketIO initialised for WebSocket support")
     except Exception as exc:
         logger.warning("Could not initialise SocketIO: %s. WebSocket disabled.", exc)

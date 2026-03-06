@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Central Configuration
 All settings are driven by environment variables with sensible defaults.
@@ -150,4 +149,25 @@ class Config:
     LOG_DIR = os.getenv('LOG_DIR', str(BASE_DIR / 'logs'))
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 10_485_760))  # 10 MB
-    LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
+
+    # -------------------------------------------------------------------------
+    # WebSocket Configuration
+    # -------------------------------------------------------------------------
+    # Default refresh interval for price updates (in milliseconds)
+    # 0 = event-driven (immediate delivery)
+    # >0 = batch updates every N milliseconds
+    WEBSOCKET_DEFAULT_REFRESH_INTERVAL = int(os.getenv('WEBSOCKET_DEFAULT_REFRESH_INTERVAL', 0))
+
+    # Maximum number of concurrent WebSocket connections
+    WEBSOCKET_MAX_CONNECTIONS = int(os.getenv('WEBSOCKET_MAX_CONNECTIONS', 1000))
+
+    # Maximum tickers per client subscription
+    WEBSOCKET_MAX_SUBSCRIPTIONS_PER_CLIENT = int(
+        os.getenv('WEBSOCKET_MAX_SUBSCRIPTIONS_PER_CLIENT', 50)
+    )
+
+    # Enable automatic reconnection on client disconnect
+    WEBSOCKET_AUTO_RECONNECT = os.getenv('WEBSOCKET_AUTO_RECONNECT', 'true').lower() == 'true'
+
+    # Enable fallback to REST polling if WebSocket unavailable
+    WEBSOCKET_ENABLE_POLLING_FALLBACK = os.getenv('WEBSOCKET_ENABLE_POLLING_FALLBACK', 'true').lower() == 'true'
