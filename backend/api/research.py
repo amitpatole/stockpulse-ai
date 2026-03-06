@@ -1,4 +1,3 @@
-```python
 """
 TickerPulse AI v3.0 - Research API Routes
 Blueprint for AI-generated research briefs with enhancements.
@@ -118,7 +117,7 @@ def generate_brief():
     ticker = data.get('ticker', '').upper()
 
     if not ticker:
-        # Pick a random ticker from the watchlist
+        # Optimize: Fetch only ticker column instead of entire row
         try:
             with db_session() as conn:
                 rows = conn.execute('SELECT ticker FROM stocks WHERE active = 1').fetchall()
@@ -332,7 +331,6 @@ def export_brief_pdf(brief_id: int):
 def _generate_sample_brief(ticker: str) -> Dict:
     """Generate and store a sample research brief for a given ticker."""
 
-    # Get current price and rating data if available
     price_info = ''
     rating_info = ''
     try:
@@ -428,4 +426,3 @@ Market sentiment for {ticker} is currently leaning positive based on:
             'model_used': 'claude-sonnet-4-6',
             'created_at': now,
         }
-```
