@@ -1,0 +1,27 @@
+```graphql
+query GetWebhooks {
+  webhooks {
+    id
+    webhook_url
+    event_type
+    status
+    last_delivery_status
+  }
+}
+
+mutation DeleteWebhook($id: ID!) {
+  deleteWebhook(id: $id) {
+    status
+  }
+}
+
+mutation UpdateWebhook($id: ID!, $input: WebhookInput!) {
+  updateWebhook(id: $id, input: $input) {
+    id
+    webhook_url
+    event_type
+    status
+    last_delivery_status
+  }
+}
+```
