@@ -8,22 +8,16 @@ from backend.config import Config
 logger = logging.getLogger(__name__)
 
 # New tables
-_CREATE_CRYPTO_TICKERS_TABLE = """
-CREATE TABLE IF NOT EXISTS crypto_tickers (
+_CREATE_INSIDER_TRADING_TABLE = """
+CREATE TABLE IF NOT EXISTS insider_trading (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT NOT NULL,
+    ticker TEXT NOT NULL,
     name TEXT NOT NULL,
+    transaction_date TEXT NOT NULL,
+    transaction_type TEXT NOT NULL,
+    shares INTEGER NOT NULL,
+    value REAL NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-"""
-
-_CREATE_CRYPTO_PRICES_TABLE = """
-CREATE TABLE IF NOT EXISTS crypto_prices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticker_id INTEGER,
-    price REAL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (ticker_id) REFERENCES crypto_tickers (id)
 )
 """
 
@@ -63,7 +57,9 @@ _EXISTING_TABLES_SQL = [
         id          INTEGER PRIMARY KEY,
         last_check  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-    """
+    """,
+    # --- insider_trading ---
+    _CREATE_INSIDER_TRADING_TABLE
 ]
 
 def get_db_connection(db_path: str | None = None) -> sqlite3.Connection:
@@ -101,24 +97,6 @@ def db_session(db_path: str | None = None):
     conn = get_db_connection(db_path)
     try:
         yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
     finally:
         conn.close()
-
-# New tables
-def init_crypto_tables():
-    with db_session() as conn:
-        cursor = conn.cursor()
-        cursor.executescript(_CREATE_CRYPTO_TICKERS_TABLE + _CREATE_CRYPTO_PRICES_TABLE)
-        conn.commit()
-
-# Existing table initialisation
-def init_tables():
-    with db_session() as conn:
-        cursor = conn.cursor()
-        cursor.executescript(_EXISTING_TABLES_SQL)
-        conn.commit()
 ```

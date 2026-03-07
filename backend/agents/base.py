@@ -1,14 +1,8 @@
 ```python
-"""
-TickerPulse AI v3.0 - Agent Base Layer
-Agent registry, base classes, and result tracking.
-"""
-
 import time
 import json
 import sqlite3
 import logging
-import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -16,7 +10,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-
 
 class AgentStatus(str, Enum):
     IDLE = 'idle'
@@ -115,12 +108,10 @@ class BaseAgent(ABC):
                 tokens_input=0,
                 tokens_output=0,
                 estimated_cost=0.0,
-                duration_ms=int(time.time() * 1000) - int(started_at * 1000),
+                duration_ms=0,
                 started_at=started_at,
                 completed_at=datetime.utcnow().isoformat(),
-                error=str(e),
-                metadata={}
+                error=e
             )
-            self._status = AgentStatus.ERROR
-            raise e
+            return self._last_result
 ```
