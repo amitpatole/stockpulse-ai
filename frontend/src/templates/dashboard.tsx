@@ -1,7 +1,8 @@
 ```javascript
+import React from 'react';
 import { useTranslation } from 'next-i18next';
 
-export default function DashboardPage() {
+const Dashboard = () => {
   const { t } = useTranslation();
 
   return (
@@ -36,5 +37,7 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-}
+};
+
+export default Dashboard;
 ```
