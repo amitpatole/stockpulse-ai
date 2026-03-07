@@ -1,8 +1,7 @@
 ```json
 {
-  "common": {
-    "welcome": "तिकटर प्लस एआई में स्वागत",
-    "settings": "सेटिंग्स"
+  "settings": {
+    "language": "भाषा"
   }
 }
 ```

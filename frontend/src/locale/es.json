@@ -1,8 +1,7 @@
 ```json
 {
-  "common": {
-    "welcome": "Bienvenido a TickerPulse AI",
-    "settings": "Configuración"
+  "settings": {
+    "language": "Idioma"
   }
 }
 ```
