@@ -2,9 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchCryptoData } from '../redux/actions/cryptoActions';
-import CryptoOverview from './CryptoOverview';
 
-const MarketOverview = () => {
+const CryptoOverview = () => {
     const dispatch = useDispatch();
     const { cryptocurrencies } = useSelector(state => state.crypto);
 
@@ -14,11 +13,17 @@ const MarketOverview = () => {
 
     return (
         <div>
-            <h1>Market Overview</h1>
-            <CryptoOverview />
+            <h2>Crypto Overview</h2>
+            <ul>
+                {cryptocurrencies.map(crypto => (
+                    <li key={crypto.id}>
+                        {crypto.name} ({crypto.symbol}): ${crypto.price_usd}
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 };
 
-export default MarketOverview;
+export default CryptoOverview;
 ```
