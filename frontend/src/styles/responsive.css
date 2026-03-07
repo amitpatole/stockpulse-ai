@@ -1,0 +1,45 @@
+/* Responsive styles for mobile and tablet */
+
+.market-overview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+.market-overview__content {
+    width: 100%;
+    max-width: 800px;
+    margin: 20px auto;
+}
+
+.market-overview__stats {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+}
+
+.market-overview__stat {
+    margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+    .market-overview__content {
+        padding: 10px;
+    }
+
+    .market-overview__stats {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .market-overview__content {
+        padding: 10px;
+    }
+
+    .market-overview__stats {
+        flex-direction: column;
+        align-items: center;
+    }
+}

@@ -1,132 +1,78 @@
-"""
-TickerPulse AI v3.0 - Central Configuration
-All settings are driven by environment variables with sensible defaults.
-"""
-
+```python
+from typing import Any
 import os
-import sys
-from pathlib import Path
+from dotenv import load_dotenv
 
+load_dotenv()
 
-class Config:
-    """Application configuration with environment variable overrides."""
+DB_TYPE = os.getenv("DB_TYPE", "sqlite")
+DB_URL = os.getenv("DB_URL", "sqlite:///tickerpulse.db")
 
-    # -------------------------------------------------------------------------
-    # Base paths
-    # -------------------------------------------------------------------------
-    if getattr(sys, 'frozen', False):
-        # PyInstaller bundle: resolve from executable location
-        BASE_DIR = Path(sys.executable).parent.parent
-    else:
-        BASE_DIR = Path(__file__).parent.parent  # tickerpulse-ai/
-    DB_PATH = os.getenv('DB_PATH', str(BASE_DIR / 'stock_news.db'))
+def get_db_url() -> str:
+    return DB_URL
 
-    # -------------------------------------------------------------------------
-    # Flask
-    # -------------------------------------------------------------------------
-    SECRET_KEY = os.getenv('SECRET_KEY', 'tickerpulse-dev-key-change-in-prod')
-    FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
-    FLASK_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+def get_db_type() -> str:
+    return DB_TYPE
+```
 
-    # -------------------------------------------------------------------------
-    # CORS
-    # -------------------------------------------------------------------------
-    CORS_ORIGINS = os.getenv(
-        'CORS_ORIGINS',
-        'http://localhost:3000,http://localhost:5000'
-    ).split(',')
+--- FILE: backend/database.py ---
+```python
+from typing import Any, AsyncContextManager, AsyncGenerator, Optional
+from contextlib import asynccontextmanager
+import sqlite3
+import aiopg
 
-    # -------------------------------------------------------------------------
-    # Market hours (24h format, timezone-aware)
-    # -------------------------------------------------------------------------
-    MARKET_TIMEZONE = os.getenv('MARKET_TIMEZONE', 'US/Eastern')
+from .config import get_db_url, get_db_type
 
-    # US market hours
-    US_MARKET_OPEN = '09:30'
-    US_MARKET_CLOSE = '16:00'
+class Database:
+    def __init__(self, db_url: str, db_type: str):
+        self.db_url = db_url
+        self.db_type = db_type
 
-    # India market hours (IST / Asia/Kolkata)
-    INDIA_MARKET_OPEN = '09:15'
-    INDIA_MARKET_CLOSE = '15:30'
-    INDIA_MARKET_TIMEZONE = 'Asia/Kolkata'
+    async def connect(self) -> AsyncContextManager[sqlite3.Connection]:
+        if self.db_type == "sqlite":
+            conn = await sqlite3.connect(self.db_url, isolation_level=None, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            return conn
+        elif self.db_type == "postgresql":
+            conn = await aiopg.create_pool(self.db_url)
+            return conn
+        else:
+            raise ValueError(f"Unsupported database type: {self.db_type}")
 
-    # -------------------------------------------------------------------------
-    # Monitoring / Scheduler
-    # -------------------------------------------------------------------------
-    CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 300))  # seconds (5 min)
+    async def execute(self, query: str, params: Optional[tuple] = None) -> AsyncGenerator[sqlite3.Row, None]:
+        async with self.connect() as conn:
+            cursor = await conn.cursor()
+            await cursor.execute(query, params)
+            yield cursor
+            await cursor.close()
 
-    SCHEDULER_API_ENABLED = False  # Disabled -- we use our own scheduler_routes blueprint
-    SCHEDULER_API_PREFIX = '/api/scheduler'
+    async def fetch_all(self, query: str, params: Optional[tuple] = None) -> list[sqlite3.Row]:
+        async for row in self.execute(query, params):
+            yield row
 
-    # -------------------------------------------------------------------------
-    # AI Providers (can also be configured via the Settings UI)
-    # -------------------------------------------------------------------------
-    ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-    GOOGLE_AI_KEY = os.getenv('GOOGLE_AI_KEY', '')
-    XAI_API_KEY = os.getenv('XAI_API_KEY', '')
+    async def fetch_one(self, query: str, params: Optional[tuple] = None) -> Optional[sqlite3.Row]:
+        async for row in self.execute(query, params):
+            return row
+        return None
 
-    # Default AI model per provider (used when no model is specified in DB)
-    DEFAULT_MODELS = {
-        'anthropic': 'claude-sonnet-4-20250514',
-        'openai': 'gpt-4o',
-        'google': 'gemini-2.0-flash',
-        'xai': 'grok-3',
-    }
+    async def fetch_val(self, query: str, params: Optional[tuple] = None) -> Optional[Any]:
+        row = await self.fetch_one(query, params)
+        return row[0] if row else None
+```
 
-    # -------------------------------------------------------------------------
-    # OpenClaw agent gateway
-    # -------------------------------------------------------------------------
-    OPENCLAW_GATEWAY_URL = os.getenv(
-        'OPENCLAW_GATEWAY_URL', 'ws://127.0.0.1:18789'
-    )
-    OPENCLAW_WEBHOOK_TOKEN = os.getenv('OPENCLAW_WEBHOOK_TOKEN', '')
-    OPENCLAW_ENABLED = os.getenv('OPENCLAW_ENABLED', 'false').lower() == 'true'
+--- FILE: backend/migrations.py ---
+```python
+from typing import Any
+import os
+from alembic.config import Config
+from alembic import command
 
-    # -------------------------------------------------------------------------
-    # Data providers
-    # -------------------------------------------------------------------------
-    POLYGON_API_KEY = os.getenv('POLYGON_API_KEY', '')
-    ALPHA_VANTAGE_KEY = os.getenv('ALPHA_VANTAGE_KEY', '')
-    FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
-    TWELVE_DATA_KEY = os.getenv('TWELVE_DATA_KEY', '')
+from .config import get_db_url
 
-    # -------------------------------------------------------------------------
-    # Reddit (optional, for PRAW social-media monitoring)
-    # -------------------------------------------------------------------------
-    REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID', '')
-    REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET', '')
-
-    # -------------------------------------------------------------------------
-    # GitHub (for repository analytics)
-    # -------------------------------------------------------------------------
-    GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
-
-    # -------------------------------------------------------------------------
-    # Agent framework
-    # -------------------------------------------------------------------------
-    DEFAULT_AGENT_FRAMEWORK = os.getenv(
-        'DEFAULT_AGENT_FRAMEWORK', 'crewai'
-    )  # 'crewai' or 'openclaw'
-
-    # -------------------------------------------------------------------------
-    # Cost management
-    # -------------------------------------------------------------------------
-    MONTHLY_BUDGET_LIMIT = float(os.getenv('MONTHLY_BUDGET_LIMIT', 1500.0))
-    DAILY_BUDGET_WARNING = float(os.getenv('DAILY_BUDGET_WARNING', 75.0))
-
-    # -------------------------------------------------------------------------
-    # Rate limiting
-    # -------------------------------------------------------------------------
-    RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '60/minute')
-    RATE_LIMIT_AI = os.getenv('RATE_LIMIT_AI', '20/minute')
-    RATE_LIMIT_DATA = os.getenv('RATE_LIMIT_DATA', '30/minute')
-
-    # -------------------------------------------------------------------------
-    # Logging
-    # -------------------------------------------------------------------------
-    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-    LOG_DIR = os.getenv('LOG_DIR', str(BASE_DIR / 'logs'))
-    LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 10_485_760))  # 10 MB
-    LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
+def migrate_database() -> None:
+    db_url = get_db_url()
+    alembic_cfg = Config("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+    command.upgrade(alembic_cfg, "head")
+```
