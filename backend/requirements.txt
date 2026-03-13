@@ -23,7 +23,8 @@ praw==7.7.1
 yfinance==0.2.33
 
 # Agent Framework - CrewAI (MIT licensed, free)
-crewai[anthropic,tools]>=0.100.0
+# Pinned to 1.9.3 — later versions cause pip resolution-too-deep on Windows CI
+crewai[anthropic,tools]==1.9.3
 
 # OpenClaw bridge (WebSocket client)
 websocket-client>=1.7.0
